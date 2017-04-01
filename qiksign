@@ -16,8 +16,7 @@ main() {
     make_dom_cakey
     make_cakey
 
-    openssl x509 -noout -subject -in "$CAKEY"
-    [ -f certs/ca.crt ] || openssl x509 -in "$CAKEY" -out certs/ca.crt
+    [ -s certs/ca.crt ] || openssl x509 -in "$CAKEY" -out certs/ca.crt
 
     for host
     do
@@ -41,7 +40,7 @@ main() {
 	# Sign it
 	openssl x509 -req -days 3652 -set_serial 0x$(openssl rand -hex 16) \
 	    -in "$fname".csr -out "$fname".crt \
-	    -CA "$CAKEY" \
+	    -CA "$CAKEY" -issuer \
 	    -extfile <(choose_cert_type "$CTYPE")
 
 	# Windows
