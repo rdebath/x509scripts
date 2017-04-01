@@ -128,8 +128,6 @@ main() {
 	-extensions dyn_ext \
 	-policy policy_anything \
 	-noemailDN \
-	-cert "$CACERT" \
-	-keyfile "$CAKEY" \
 	-startdate $STRDATE -enddate $ENDDATE \
 	-in certs/"$F".csr \
 	-out certs/"$F".crt \
