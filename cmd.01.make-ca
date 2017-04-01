@@ -14,7 +14,7 @@ if [ -f openssl.cnf ] ; then CONF='-config openssl.cnf'; else CONF= ; fi
 # Create a key and cert request
 openssl req $CONF -new -nodes -newkey rsa:2048 \
 	-keyout demoCA/private/cakey.pem -out demoCA/private/ca.csr \
-	${1:+-subj /CN="$1"/}
+	${*:+-subj /CN="$*"/}
 
 # Choose a serial number for it
 openssl rand -hex 16 > demoCA/serial
