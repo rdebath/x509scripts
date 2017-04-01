@@ -4,18 +4,10 @@ if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 main() {
     CAKEY=demoCA/private/cakey.pem
     CACERT=demoCA/cacert.pem
+    CATAG=''
 
     TMP=_ssl_.tmp
     trap "rm -f $TMP.*" 0 1 2
-
-    if [ -f openssl.cnf ]
-    then cat openssl.cnf > "$TMP".cnf
-    elif [ "$OPENSSL_CONF" != "" -a -s "$OPENSSL_CONF" ]
-    then cat "$OPENSSL_CONF" > "$TMP".cnf
-    else cat $(openssl version -d | cut -d\" -f2)/openssl.cnf > "$TMP".cnf
-    fi
-    CONF='-config '"$TMP"'.cnf'
-    CATAG=''
 
     if [ "$#" -gt 0 ]
     then
@@ -40,7 +32,17 @@ main() {
 
     F=$(echo "$F" | tr -c '[a-zA-Z0-9\.\-\012]' _)
 
-    echo '[SANLIST]' >> "$TMP".cnf
+    if [ -f openssl.cnf ]
+    then cat openssl.cnf > "$TMP".cnf
+    elif [ "$OPENSSL_CONF" != "" -a -s "$OPENSSL_CONF" ]
+    then cat "$OPENSSL_CONF" > "$TMP".cnf
+    else cat $(openssl version -d | cut -d\" -f2)/openssl.cnf > "$TMP".cnf
+    fi
+    CONF='-config '"$TMP"'.cnf'
+    echo  >> "$TMP".cnf
+
+    # Should use a section for the san list in the req
+    echo '[ SANLIST ]' >> "$TMP".cnf
     SANLIST=
     if [ "$#" -gt 0 ]
     then
@@ -63,12 +65,23 @@ main() {
 	echo "$SANLIST" >> "$TMP".cnf
     fi
 
+    # Note the san list in the request is NOT copied to the cert
     echo '[ dyn_ext ]' >> "$TMP".cnf
-
+    echo "$SANLIST" >> "$TMP".cnf
     choose_cert_type "$CATAG" >> "$TMP".cnf
 
-    echo "$SANLIST" >> "$TMP".cnf
+    # This would setup the copy, but from the ca* section
+    # echo copy_extensions=subjectAltName >> "$TMP".cnf
 
+    fix_demoCA
+
+    create_cert
+    # create_self_signed_cert
+
+    create_extras
+}
+
+fix_demoCA() {
     # Make sure the basics exist in the demoCA directory
     mkdir -p certs demoCA demoCA/private demoCA/newcerts
     [ -f demoCA/index.txt ] || touch demoCA/index.txt
@@ -96,7 +109,9 @@ main() {
 	    openssl rsa -check -modulus -in "$CAKEY"
 	} > certs/ca.pem
     }
+}
 
+create_cert() {
     if [ ! -s certs/"$F".key ]
     then
 	# Create a request on a new key.
@@ -137,7 +152,9 @@ main() {
 
     # Don't need csr
     rm certs/"$F".csr
+}
 
+create_extras() {
     # This seems to be how you make a combined PEM
     # Note: I'm including the CA-cert even though it's not strictly required
     # as some applications find it useful.
@@ -230,11 +247,12 @@ conv_pfx_to_pem() {
     openssl pkcs12 -passin pass: -in "$1".pfx -out "$1".pfx.pem -nodes
 }
 
-self_signed_certs() {
-    for host
-    do  openssl req -new -x509 -days 3652 -nodes -extensions usr_cert \
-	    -keyout certs/"$host".key -out certs/"$host".crt -subj /CN="$host"
-    done
+create_self_signed_cert() {
+    openssl req $CONF -new -x509 -days 3652 -nodes \
+	-extensions dyn_ext \
+	-set_serial 0x$(openssl rand -hex 16) \
+	-keyout certs/"$F".key -out certs/"$F".crt \
+	${CN:+-subj /CN="$CN"/}
 }
 
 main "$@"
