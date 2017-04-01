@@ -10,6 +10,8 @@ main() {
 
     if [ -f openssl.cnf ]
     then cat openssl.cnf > "$TMP".cnf
+    elif [ "$OPENSSL_CONF" != "" -a -s "$OPENSSL_CONF" ]
+    then cat "$OPENSSL_CONF" > "$TMP".cnf
     else cat $(openssl version -d | cut -d\" -f2)/openssl.cnf > "$TMP".cnf
     fi
     CONF='-config '"$TMP"'.cnf'
@@ -90,8 +92,8 @@ main() {
     [ -s "$CACERT" -a -s "$CAKEY" ] && {
 	[ -s certs/ca.crt ] || openssl x509 -in "$CACERT" -out certs/ca.crt
 	[ -s certs/ca.pem ] || {
-	    openssl x509 -text -certopt ca_default,no_sigdump -in "$CACERT"
-	    openssl rsa -check -in "$CAKEY"
+	    openssl x509 -text -modulus -certopt ca_default,no_sigdump -in "$CACERT"
+	    openssl rsa -check -modulus -in "$CAKEY"
 	} > certs/ca.pem
     }
 
@@ -133,13 +135,16 @@ main() {
 	-out certs/"$F".crt \
 	|| exit
 
+    # Don't need csr
+    rm certs/"$F".csr
+
     # This seems to be how you make a combined PEM
     # Note: I'm including the CA-cert even though it's not strictly required
     # as some applications find it useful.
     {
-       openssl x509 -text -certopt ca_default,no_sigdump -in certs/"$F".crt 
+       openssl x509 -text -modulus -certopt ca_default,no_sigdump -in certs/"$F".crt
        openssl x509 -text -certopt ca_default,no_sigdump -in "$CACERT"
-       openssl rsa -check -in certs/"$F".key 
+       openssl rsa -check -modulus -in certs/"$F".key
     } > certs/"$F".pem
 
     # Make a p12 or Windows pfx file (with a blank password!)
