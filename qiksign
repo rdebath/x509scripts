@@ -36,10 +36,10 @@ main() {
 
 	# Make key
 	openssl req -new -nodes \
-	    -keyout "$fname".key -out "$fname".csr -subj=/CN="$cname"
+	    -keyout "$fname".key -out "$fname".csr -subj /CN="$cname"
 
 	# Sign it
-	openssl x509 -req -days 3652 -set_serial 0x01$(openssl rand -hex 16) \
+	openssl x509 -req -days 3652 -set_serial 0x$(openssl rand -hex 16) \
 	    -in "$fname".csr -out "$fname".crt \
 	    -CA "$CAKEY" \
 	    -extfile <(choose_cert_type "$CTYPE")

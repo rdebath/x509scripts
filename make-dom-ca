@@ -4,8 +4,19 @@ if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 rm -rf demoCA certs
 mkdir demoCA demoCA/private
 
+# Default insecurity
+case "$1" in
+*.pfx )
+    PFX="$1"
+    shift
+    ;;
+* ) PFX=domain-key.pfx
+    PASS=0000
+    ;;
+esac
+
 # Copy CA key
-openssl pkcs12 -nodes -passin pass:0000 -in domain-key.pfx |
+openssl pkcs12 -nodes ${PASS:+-passin pass:$PASS} -in "$PFX" |
 tee >(openssl rsa -out demoCA/private/cakey.pem) |
 tee >(openssl x509 -out demoCA/cacert.pem) |
 openssl x509 -noout -serial -subject -dates -fingerprint
