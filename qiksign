@@ -12,19 +12,31 @@ main() {
     mkdir -p certs
     CAKEY=certs/ca.pem
     CTYPE=v3
+    CERT_DAYS=${CERT_DAYS:-3652}
+    SANS=
 
     make_cakey
 
     for host
     do
 	cname="$host"
+	# Add a ":server" for the type of certificate
         case "$cname" in
 	*:* )   CTYPE="${cname##*:}"
 		cname="${cname%:*}"
 		;;
 	esac
 
+	# Use comma seperated names for the SANs
+	case "$cname" in
+	*,* )
+	    SANS="${cname#*,}"
+	    cname="${cname%%,*}"
+	    ;;
+	esac
+
 	fname="$cname"
+	# Trim any "*." from the start of the filename.
 	case "$fname" in
 	\*.* ) fname=${fname#??} ;;
 	esac
@@ -35,7 +47,7 @@ main() {
 	    -keyout "$fname".key -out "$fname".csr -subj /CN="$cname"
 
 	# Sign it
-	openssl x509 -req -days 3652 -set_serial 0x$(openssl rand -hex 16) \
+	openssl x509 -req -days "$CERT_DAYS" -set_serial 0x$(openssl rand -hex 16) \
 	    -in "$fname".csr -out "$fname".crt \
 	    -CA "$CAKEY" -issuer \
 	    -extfile <(choose_cert_type "$CTYPE")
@@ -49,13 +61,17 @@ main() {
 
 make_cakey() {
     [ -s "$CAKEY" ] ||
-	openssl req -nodes -new -x509 -days 3652 -subj '/CN=Private CA/' \
+	openssl req -nodes -new -x509 -days "$CERT_DAYS" -subj '/CN=Private CA/' \
 	    -keyout "$CAKEY" -out "$CAKEY"
 
     [ -s certs/ca.crt ] || openssl x509 -in "$CAKEY" -out certs/ca.crt
 }
 
 choose_cert_type() {
+
+    [ "$SANS" != "" ] &&
+	echo "subjectAltName=DNS:$cname,DNS:${SANS//,/,DNS:/}"
+
     case "$1" in
     client )
 	echo basicConstraints = CA:false
@@ -112,13 +128,6 @@ choose_cert_type() {
 	;;
 
     esac
-}
-
-self_signed_certs() {
-    for host
-    do  openssl req -new -x509 -days 3652 -nodes -extensions usr_cert \
-            -keyout certs/"$host".key -out certs/"$host".crt -subj /CN="$host"
-    done
 }
 
 main "$@"
