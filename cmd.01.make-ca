@@ -1,0 +1,62 @@
+#!/bin/bash
+if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
+
+if [ "$#" -le 0 ]
+then CA=
+else
+   case "$1" in
+   *:* ) CA="Private CA" ;;
+   \*.* ) CA="Private CA" ;;
+   "" ) CA="Private CA" ; shift ;;
+   * ) CA="$1" ; shift ;;
+   esac
+fi
+
+rm -rf demoCA certs
+mkdir demoCA demoCA/private demoCA/newcerts
+
+touch demoCA/index.txt
+echo 01 > demoCA/serial
+echo unique_subject = no > demoCA/index.txt.attr
+echo 00 > demoCA/crlnumber
+
+if [ -f openssl.cnf ] ; then CONF='-config openssl.cnf'; else CONF= ; fi
+
+simple_mode() {
+# Create a (self-)signed certificate and key for the CA.
+openssl req $CONF -nodes -new -x509 -days 3652 \
+	    -keyout demoCA/private/cakey.pem -out demoCA/cacert.pem \
+	    ${CA:+-subj /CN="$CA"/}
+}
+
+# Create a key and cert request
+openssl req $CONF -new -nodes -newkey rsa:2048 \
+	-keyout demoCA/private/cakey.pem -out demoCA/private/ca.csr \
+	${CA:+-subj /CN="$CA"/} \
+
+
+# Choose a serial number for it
+openssl rand -hex 16 > demoCA/serial
+
+YEAR=`date +%Y`
+ENDY=$((YEAR+20))
+
+# Self-sign the CA-certificate
+openssl ca $CONF -batch \
+	-policy policy_anything \
+	-selfsign -keyfile demoCA/private/cakey.pem \
+	-noemailDN \
+	-in demoCA/private/ca.csr -out demoCA/cacert.pem \
+	-extensions v3_ca \
+	-startdate ${YEAR}0102000000Z -enddate ${ENDY}0115000000Z \
+
+# Don't need the csr
+rm demoCA/private/ca.csr
+
+# Are there more names for other certificates?
+if [ "$#" -gt 0 ]
+then
+    for host
+    do sh cmd.02.make-crt ${host//,/ } || break
+    done
+fi

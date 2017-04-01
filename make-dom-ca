@@ -1,0 +1,18 @@
+#!/bin/bash
+if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
+
+rm -rf demoCA certs
+mkdir demoCA demoCA/private
+
+# Copy CA key
+openssl pkcs12 -nodes -passin pass:0000 -in domain-key.pfx |
+tee >(openssl rsa -out demoCA/private/cakey.pem) |
+tee >(openssl x509 -out demoCA/cacert.pem) |
+openssl x509 -noout -serial -subject -dates -fingerprint
+
+if [ "$#" -gt 0 ]
+then
+    for host
+    do sh cmd.02.make-crt ${host//,/ } || break
+    done
+fi

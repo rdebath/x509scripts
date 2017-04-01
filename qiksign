@@ -1,0 +1,132 @@
+#!/bin/bash -
+if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
+
+# This uses the x509 option of openssl to sign certificates.
+# It cannot make CRLs (neither can the crl option)
+# It can only issue certificates from the current time for N days.
+# It requires an additional config file (from a pipe is OK though)
+# It does not require special setup in the standard config
+
+main() {
+
+    mkdir -p certs
+    CAKEY=certs/ca.pem
+    CTYPE=v3
+
+    make_dom_cakey
+    make_cakey
+
+    openssl x509 -noout -subject -in "$CAKEY"
+    [ -f certs/ca.crt ] || openssl x509 -in "$CAKEY" -out certs/ca.crt
+
+    for host
+    do
+	cname="$host"
+        case "$cname" in
+	*:* )   CTYPE="${cname##*:}"
+		cname="${cname%:*}"
+		;;
+	esac
+
+	fname="$cname"
+	case "$fname" in
+	\*.* ) fname=${fname#??} ;;
+	esac
+	fname="certs/$fname"
+
+	# Make key
+	openssl req -new -nodes \
+	    -keyout "$fname".key -out "$fname".csr -subj=/CN="$cname"
+
+	# Sign it
+	openssl x509 -req -days 3652 -set_serial 0x01$(openssl rand -hex 16) \
+	    -in "$fname".csr -out "$fname".crt \
+	    -CA "$CAKEY" \
+	    -extfile <(choose_cert_type "$CTYPE")
+
+	# Windows
+	openssl pkcs12 -export -passout pass: -out "$fname".pfx \
+		-name "$cname `date`" \
+		-inkey "$fname".key -in "$fname".crt
+    done
+}
+
+choose_cert_type() {
+    case "$1" in
+    client )
+	echo basicConstraints = CA:false
+	echo keyUsage = digitalSignature
+	echo extendedKeyUsage = clientAuth
+	echo subjectKeyIdentifier=hash
+	echo authorityKeyIdentifier=keyid,issuer:always
+	;;
+
+    server )
+	echo basicConstraints = CA:false
+	echo keyUsage = keyEncipherment
+	echo extendedKeyUsage = serverAuth
+	echo subjectKeyIdentifier=hash
+	echo authorityKeyIdentifier=keyid,issuer:always
+	;;
+
+    all )
+	echo basicConstraints = CA:false
+	echo keyUsage = keyEncipherment,digitalSignature,nonRepudiation
+	echo extendedKeyUsage = serverAuth,clientAuth,codeSigning,emailProtection
+	echo subjectKeyIdentifier=hash
+	echo authorityKeyIdentifier=keyid,issuer:always
+	;;
+
+    std )
+	echo keyUsage = critical,keyEncipherment,digitalSignature
+	echo extendedKeyUsage = serverAuth,clientAuth
+	echo basicConstraints = critical,CA:false
+	echo subjectKeyIdentifier=hash
+	echo authorityKeyIdentifier=keyid,issuer
+	;;
+
+    min )
+	;;
+
+    openvpn_s )
+	echo basicConstraints = CA:false
+	echo subjectKeyIdentifier=hash
+	echo authorityKeyIdentifier=keyid,issuer:always
+	echo nsCertType = server
+	;;
+
+    v3|openvpn)
+	echo basicConstraints = CA:false
+	echo subjectKeyIdentifier=hash
+	echo authorityKeyIdentifier=keyid,issuer:always
+	;;
+
+    *)
+	echo basicConstraints = CA:false
+	echo subjectKeyIdentifier=hash
+	echo authorityKeyIdentifier=keyid,issuer
+	;;
+
+    esac
+}
+
+make_cakey() {
+    [ ! -f "$CAKEY" ] &&
+	openssl req -nodes -new -x509 -days 3652 -subj '/CN=Private CA/' \
+	    -keyout "$CAKEY" -out "$CAKEY"
+}
+
+make_dom_cakey() {
+    [ ! -f "$CAKEY" -a -f domain-key.pfx ] &&
+	openssl pkcs12 -nodes -passin pass:0000 -in domain-key.pfx -out "$CAKEY.tmp" &&
+	    mv "$CAKEY.tmp" "$CAKEY"
+}
+
+self_signed_certs() {
+    for host
+    do  openssl req -new -x509 -days 3652 -nodes -extensions usr_cert \
+            -keyout certs/"$host".key -out certs/"$host".crt -subj /CN="$host"
+    done
+}
+
+main "$@"

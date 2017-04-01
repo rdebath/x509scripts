@@ -1,0 +1,224 @@
+#!/bin/bash
+if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
+
+main() {
+    CAKEY=demoCA/private/cakey.pem
+    CACERT=demoCA/cacert.pem
+
+    TMP=_ssl_.tmp
+    trap "rm -f $TMP.*" 0 1 2
+
+    if [ -f openssl.cnf ]
+    then cat openssl.cnf > "$TMP".cnf
+    else cat $(openssl version -d | cut -d\" -f2)/openssl.cnf > "$TMP".cnf
+    fi
+    CONF='-config '"$TMP"'.cnf'
+    CATAG=''
+
+    if [ "$#" -gt 0 ]
+    then
+	F="$1"
+	shift
+	case "$F" in 
+	*: )
+	    CN="${F%:}"
+	    F="$CN"
+	    ;;
+	*:* )
+	    CN="${F%:*}"
+	    CATAG="${F##*:}"
+	    F="$CN"
+	   ;;
+	* ) CN="$F" ;;
+	esac
+    else
+	F=cert
+	unset CN
+    fi
+
+    F=$(echo "$F" | tr -c '[a-zA-Z0-9\.\-\012]' _)
+
+    echo '[SANLIST]' >> "$TMP".cnf
+    SANLIST=
+    if [ "$#" -gt 0 ]
+    then
+	SANLIST="subjectAltName=DNS:$CN"
+	for san in "$@"
+	do
+	    [ "$san" = "$CN" ] && continue
+	    case "$san" in
+	    [0-9]* )
+		    SANLIST="$SANLIST,IP:$san"
+		    ;;
+	    *@* )
+		    SANLIST="$SANLIST,email:$san"
+		    ;;
+	    * )
+		    SANLIST="$SANLIST,DNS:$san"
+		    ;;
+	    esac
+	done
+	echo "$SANLIST" >> "$TMP".cnf
+    fi
+
+    echo '[ dyn_ext ]' >> "$TMP".cnf
+
+    choose_cert_type "$CATAG" >> "$TMP".cnf
+
+    echo "$SANLIST" >> "$TMP".cnf
+
+    # Make sure the basics exist in the demoCA directory
+    mkdir -p certs demoCA demoCA/private demoCA/newcerts
+    [ -f demoCA/index.txt ] || touch demoCA/index.txt
+    [ -f demoCA/index.txt.attr ] || echo unique_subject = no > demoCA/index.txt.attr
+    [ -f demoCA/crlnumber ] || echo 00 > demoCA/crlnumber
+
+    # Recover an existing CA key from the certs directory
+    [ ! -f "$CAKEY" -a -f certs/ca.pem ] && {
+	openssl rsa -in certs/ca.pem -out "$CAKEY" &&
+	openssl x509 -in certs/ca.pem -out "$CACERT"
+    }
+
+    # No CA around, just make up something.
+    [ -f "$CAKEY" ] || {
+        # CAKEY=certs/"$F"-ca.key
+        # CACERT=certs/"$F"-ca.crt
+
+        # Create a CA key and cert.
+	openssl req $CONF -nodes -new -x509 -days 3652 -subj '/CN=Private CA/' \
+	    -keyout "$CAKEY" -out "$CACERT"
+    }
+
+    # Save an existing CA in a new certs directory
+    [ -f "$CACERT" -a -f "$CAKEY" ] && {
+	[ -f certs/ca.crt ] || openssl x509 -in "$CACERT" -out certs/ca.crt
+	[ -f certs/ca.pem ] || {
+	    openssl x509 -text -certopt ca_default,no_sigdump -in "$CACERT"
+	    openssl rsa -check -in "$CAKEY"
+	} > certs/ca.pem
+    }
+
+    # Create a request on a new key.
+    openssl req $CONF -nodes -new \
+	  ${CN:+-subj /CN="$CN"/} \
+	  -reqexts SANLIST \
+	  -keyout certs/"$F".key -out certs/"$F".csr
+
+    # Generate a random serial number.
+    openssl rand -hex 16 > demoCA/serial
+
+    # Extract the start and end date from the CA key.
+    STRDATE=$(TZ=UTC date +%Y%m%d%H%M%SZ --date="$(openssl x509 -noout -in "$CACERT" -startdate | sed 's/.*=//')")
+    ENDDATE=$(TZ=UTC date +%Y%m%d%H%M%SZ --date="$(openssl x509 -noout -in "$CACERT" -enddate | sed 's/.*=//')")
+
+    # 32bit unix time trapper.
+    [ "$STRDATE" = "" ] && STRDATE=20000101000000Z
+    [ "$ENDDATE" = "" ] && ENDDATE=20380119031400Z
+
+    # Sign the request with the CA key.
+    openssl ca \
+	-batch \
+	$CONF \
+	-extensions dyn_ext \
+	-policy policy_anything \
+	-noemailDN \
+	-cert "$CACERT" \
+	-keyfile "$CAKEY" \
+	-startdate $STRDATE -enddate $ENDDATE \
+	-in certs/"$F".csr \
+	> certs/"$F".crt \
+	|| exit
+
+    # This seems to be how you make a combined PEM
+    # Note: I'm including the CA-cert even though it's not strictly required
+    # as some applications find it useful.
+    {
+       openssl x509 -text -certopt ca_default,no_sigdump -in certs/"$F".crt 
+       openssl x509 -text -certopt ca_default,no_sigdump -in "$CACERT"
+       openssl rsa -check -in certs/"$F".key 
+    } > certs/"$F".pem
+
+    # Make a p12 or Windows pfx file (with a blank password!)
+    if grep -q 'DC=local.*DC=tvt' <(openssl x509 -issuer -in "$CACERT" -noout)
+    then 
+	# For tvt.local don't include the CA certificate
+	openssl pkcs12 \
+	    -export -passout pass: -out certs/"$F".pfx \
+	    -name "PFX $CN `date`" \
+	    -inkey certs/"$F".key -in certs/"$F".crt
+
+    else
+	# It's not strictly correct to include the CA certificate; but it seems 
+	# to work nicely when importing into the machine store.
+	openssl pkcs12 \
+	    -export -passout pass: -out certs/"$F".pfx \
+	    -name "PFX $CN `date`" \
+	    -inkey certs/"$F".key -in certs/"$F".crt \
+	    -caname "Private CA" -certfile "$CACERT"
+    fi
+}
+
+choose_cert_type() {
+    case "$1" in
+    client )
+	echo basicConstraints = CA:false
+	echo keyUsage = digitalSignature
+	echo extendedKeyUsage = clientAuth
+	echo subjectKeyIdentifier=hash
+	echo authorityKeyIdentifier=keyid,issuer:always
+	;;
+
+    server )
+	echo basicConstraints = CA:false
+	echo keyUsage = keyEncipherment
+	echo extendedKeyUsage = serverAuth
+	echo subjectKeyIdentifier=hash
+	echo authorityKeyIdentifier=keyid,issuer:always
+	;;
+
+    all )
+	echo basicConstraints = CA:false
+	echo keyUsage = keyEncipherment,digitalSignature,nonRepudiation
+	echo extendedKeyUsage = serverAuth,clientAuth,codeSigning,emailProtection
+	echo subjectKeyIdentifier=hash
+	echo authorityKeyIdentifier=keyid,issuer:always
+	;;
+
+    std )
+	echo keyUsage = critical,keyEncipherment,digitalSignature
+	echo extendedKeyUsage = serverAuth,clientAuth
+	echo basicConstraints = critical,CA:false
+	echo subjectKeyIdentifier=hash
+	echo authorityKeyIdentifier=keyid,issuer
+	;;
+
+    min )
+	;;
+
+    openvpn_s )
+	echo basicConstraints = CA:false
+	echo subjectKeyIdentifier=hash
+	echo authorityKeyIdentifier=keyid,issuer:always
+	echo nsCertType = server
+	;;
+
+    v3|openvpn)
+	echo basicConstraints = CA:false
+	echo subjectKeyIdentifier=hash
+	echo authorityKeyIdentifier=keyid,issuer:always
+	;;
+
+    *)
+	echo basicConstraints = CA:false
+	echo subjectKeyIdentifier=hash
+	echo authorityKeyIdentifier=keyid,issuer
+	;;
+
+    esac
+}
+
+conv_pfx_to_pem() {
+    openssl pkcs12 -passin pass: -in "$1".pfx -out "$1".pfx.pem -nodes
+}
+
+main "$@"

@@ -1,0 +1,57 @@
+
+[ca]
+default_ca      = CA_default            # The default ca section
+
+[CA_default]
+dir             = ./demoCA              # Where everything is kept
+new_certs_dir   = $dir/newcerts         # default place for new certs.
+database        = $dir/index.txt        # database index file.
+
+default_md      = default               # use public key default MD
+
+serial          = $dir/serial           # The current serial number
+
+default_days    = 1                     # how long to certify for
+
+name_opt        = ca_default            # Subject Name options
+cert_opt        = ca_default            # Certificate field options
+
+x509_extensions = usr_cert              # The extentions to add to the cert
+
+[ usr_cert ]
+basicConstraints=CA:FALSE
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid,issuer
+
+[v3_ca]
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid:always,issuer
+basicConstraints = CA:true
+
+[policy_anything]
+countryName             = optional
+stateOrProvinceName     = optional
+localityName            = optional
+organizationName        = optional
+organizationalUnitName  = optional
+commonName              = supplied
+emailAddress            = optional
+
+[req]
+default_bits            = 2048
+distinguished_name	= req_distinguished_name
+
+[ req_distinguished_name ]
+countryName                     = Country Name (2 letter code)
+countryName_min                 = 2
+countryName_max                 = 2
+stateOrProvinceName             = State or Province Name (full name)
+localityName                    = Locality Name (eg, city)
+0.organizationName              = Organization Name (eg, company)
+organizationalUnitName          =
+commonName                      = Common Name (e.g. server FQDN or YOUR name)
+commonName_max                  = 64
+commonName_default		= Private Host
+emailAddress                    = Email Address
+emailAddress_max                = 64
+
