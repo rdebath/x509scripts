@@ -6,6 +6,9 @@ if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 # It can only issue certificates from the current time for N days.
 # It requires an additional config file (from a pipe is OK though)
 # It does not require special setup in the standard config
+#
+# I recommend that new CA's are created for small numbers of related hosts
+# in the event of a compromise the CA should be replaced.
 
 main() {
 
@@ -47,7 +50,8 @@ main() {
 	    -keyout "$fname".key -out "$fname".csr -subj /CN="$cname"
 
 	# Sign it
-	openssl x509 -req -days "$CERT_DAYS" -set_serial 0x$(openssl rand -hex 16) \
+	openssl x509 -req -days "$CERT_DAYS" \
+	    -set_serial 0x$(openssl rand -hex 16) \
 	    -in "$fname".csr -out "$fname".crt \
 	    -CA "$CAKEY" -issuer \
 	    -extfile <(choose_cert_type "$CTYPE")
@@ -61,7 +65,8 @@ main() {
 
 make_cakey() {
     [ -s "$CAKEY" ] ||
-	openssl req -nodes -new -x509 -days "$CERT_DAYS" -subj '/CN=Private CA/' \
+	openssl req -nodes -new -x509 -days "$CERT_DAYS" \
+	    -subj '/CN=Private CA/' \
 	    -keyout "$CAKEY" -out "$CAKEY"
 
     [ -s certs/ca.crt ] || openssl x509 -in "$CAKEY" -out certs/ca.crt
