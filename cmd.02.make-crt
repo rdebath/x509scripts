@@ -227,4 +227,11 @@ conv_pfx_to_pem() {
     openssl pkcs12 -passin pass: -in "$1".pfx -out "$1".pfx.pem -nodes
 }
 
+self_signed_certs() {
+    for host
+    do  openssl req -new -x509 -days 3652 -nodes -extensions usr_cert \
+	    -keyout certs/"$host".key -out certs/"$host".crt -subj /CN="$host"
+    done
+}
+
 main "$@"

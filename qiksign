@@ -13,10 +13,7 @@ main() {
     CAKEY=certs/ca.pem
     CTYPE=v3
 
-    make_dom_cakey
     make_cakey
-
-    [ -s certs/ca.crt ] || openssl x509 -in "$CAKEY" -out certs/ca.crt
 
     for host
     do
@@ -48,6 +45,14 @@ main() {
 		-name "$cname `date`" \
 		-inkey "$fname".key -in "$fname".crt
     done
+}
+
+make_cakey() {
+    [ -s "$CAKEY" ] ||
+	openssl req -nodes -new -x509 -days 3652 -subj '/CN=Private CA/' \
+	    -keyout "$CAKEY" -out "$CAKEY"
+
+    [ -s certs/ca.crt ] || openssl x509 -in "$CAKEY" -out certs/ca.crt
 }
 
 choose_cert_type() {
@@ -107,18 +112,6 @@ choose_cert_type() {
 	;;
 
     esac
-}
-
-make_cakey() {
-    [ ! -f "$CAKEY" ] &&
-	openssl req -nodes -new -x509 -days 3652 -subj '/CN=Private CA/' \
-	    -keyout "$CAKEY" -out "$CAKEY"
-}
-
-make_dom_cakey() {
-    [ ! -f "$CAKEY" -a -f domain-key.pfx ] &&
-	openssl pkcs12 -nodes -passin pass:0000 -in domain-key.pfx -out "$CAKEY.tmp" &&
-	    mv "$CAKEY.tmp" "$CAKEY"
 }
 
 self_signed_certs() {
