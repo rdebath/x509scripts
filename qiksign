@@ -43,16 +43,21 @@ main() {
 	case "$fname" in
 	\*.* ) fname=${fname#??} ;;
 	esac
-	fname="certs/$fname"
+	fname="certs/${fname:-qik}"
+
+	# Match the CA bitsize
+	RSABITS=$(openssl rsa -text -noout -in "$CAKEY" 2>&1 |
+		awk '/^Private.Key: .*bit/{gsub("[^0-9]","",$2); print $2;}')
 
 	# Make key
-	openssl req -new -nodes \
-	    -keyout "$fname".key -out "$fname".csr -subj /CN="$cname"
+	openssl req -new -nodes ${RSABITS:+-newkey rsa:$RSABITS} \
+	    ${cname:+-subj /CN="$cname"} \
+	    -keyout "$fname".key |
 
 	# Sign it
 	openssl x509 -req -days "$CERT_DAYS" \
 	    -set_serial 0x$(openssl rand -hex 16) \
-	    -in "$fname".csr -out "$fname".crt \
+	    -out "$fname".crt \
 	    -CA "$CAKEY" -issuer \
 	    -extfile <(choose_cert_type "$CTYPE")
 
@@ -69,7 +74,15 @@ make_cakey() {
 	    -subj '/CN=Private CA/' \
 	    -keyout "$CAKEY" -out "$CAKEY"
 
+    if [ "$(openssl pkey -in "$CAKEY" -pubout | openssl dgst)" != \
+	 "$(openssl x509 -in "$CAKEY" -noout -pubkey | openssl dgst)" ]
+    then
+	echo "The private key and certificate key in $CAKEY do NOT match." >&2
+	exit 99
+    fi
+
     [ -s certs/ca.crt ] || openssl x509 -in "$CAKEY" -out certs/ca.crt
+
 }
 
 choose_cert_type() {
@@ -126,7 +139,7 @@ choose_cert_type() {
 	echo authorityKeyIdentifier=keyid,issuer:always
 	;;
 
-    default )
+    default|"" )
 	echo basicConstraints = CA:false
 	echo subjectKeyIdentifier=hash
 	echo authorityKeyIdentifier=keyid,issuer
