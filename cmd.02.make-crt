@@ -200,8 +200,11 @@ create_cert() {
 	      -key certs/"$F".key -out demoCA/certs/"$F".csr
     fi
 
-    # Generate a random serial number.
-    openssl rand -hex 16 > demoCA/serial
+    # # Generate a random serial number.
+    # openssl rand -hex 16 > demoCA/serial
+
+    # Generate a pseudo random serial number.
+    openssl pkey -pubout -in certs/"$F".key | openssl dgst | sed 's/.* //' > demoCA/serial
 
     # Extract the start and end date from the CA key.
     STRDATE=$(TZ=UTC date +%Y%m%d%H%M%SZ --date="$(openssl x509 -noout -in "$CACERT" -startdate | sed 's/.*=//')")
@@ -241,14 +244,14 @@ create_extras() {
 	# For tvt.local don't include the CA certificate as it will be there.
 	openssl pkcs12 \
 	    -export -passout pass: -out certs/"$F".pfx \
-	    -name "PFX $CN `date`" \
+	    -name "PFX $CN $(openssl x509 -noout -enddate -in certs/"$F".crt | sed 's/notAfter=/until /')" \
 	    -inkey certs/"$F".key -in certs/"$F".crt
 
     else
 	# It's not strictly correct to include the CA certificate.
 	openssl pkcs12 \
 	    -export -passout pass: -out certs/"$F".pfx \
-	    -name "PFX $CN `date`" \
+	    -name "PFX $CN $(openssl x509 -noout -enddate -in certs/"$F".crt | sed 's/notAfter=/until /')" \
 	    -inkey certs/"$F".key -in certs/"$F".crt \
 	    -caname "Private CA" -certfile "$CACERT"
     fi
