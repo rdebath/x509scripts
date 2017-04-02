@@ -14,7 +14,7 @@ main() {
 
     mkdir -p certs
     CAKEY=certs/ca.pem
-    CTYPE=v3
+    CTYPE=default
     CERT_DAYS=${CERT_DAYS:-3652}
     SANS=
 
@@ -75,9 +75,12 @@ make_cakey() {
 choose_cert_type() {
 
     [ "$SANS" != "" ] &&
-	echo "subjectAltName=DNS:$cname,DNS:${SANS//,/,DNS:/}"
+	echo "subjectAltName=DNS:$cname,DNS:${SANS//,/,DNS:}"
 
     case "$1" in
+    none )
+	;;
+
     client )
 	echo basicConstraints = CA:false
 	echo keyUsage = digitalSignature
@@ -110,9 +113,6 @@ choose_cert_type() {
 	echo authorityKeyIdentifier=keyid,issuer
 	;;
 
-    min )
-	;;
-
     openvpn_s )
 	echo basicConstraints = CA:false
 	echo subjectKeyIdentifier=hash
@@ -126,7 +126,7 @@ choose_cert_type() {
 	echo authorityKeyIdentifier=keyid,issuer:always
 	;;
 
-    *)
+    default )
 	echo basicConstraints = CA:false
 	echo subjectKeyIdentifier=hash
 	echo authorityKeyIdentifier=keyid,issuer

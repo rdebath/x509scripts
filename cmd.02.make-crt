@@ -4,7 +4,7 @@ if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 main() {
     CAKEY=demoCA/private/cakey.pem
     CACERT=demoCA/cacert.pem
-    CATAG=''
+    CATAG=default
 
     TMP=_ssl_.tmp
     trap "rm -f $TMP.*" 0 1 2
@@ -27,7 +27,7 @@ main() {
 	esac
     else
 	F=cert
-	unset CN
+	unset CN CATAG
     fi
 
     F=$(echo "$F" | tr -c '[a-zA-Z0-9\.\-\012]' _)
@@ -112,6 +112,10 @@ fix_demoCA() {
 }
 
 create_cert() {
+    # If there's no CN openssl/req prompts without properly saving the key.
+    [ ! -s certs/"$F".key -a "$CN" = "" ] &&
+	openssl genrsa -out certs/"$F".key
+
     if [ ! -s certs/"$F".key ]
     then
 	# Create a request on a new key.
@@ -142,7 +146,8 @@ create_cert() {
     openssl ca \
 	-batch \
 	$CONF \
-	-extensions dyn_ext \
+	${CN:+-subj /CN="$CN"/} \
+	${CATAG:+-extensions dyn_ext} \
 	-policy policy_anything \
 	-noemailDN \
 	-startdate $STRDATE -enddate $ENDDATE \
@@ -156,26 +161,23 @@ create_cert() {
 
 create_extras() {
     # This seems to be how you make a combined PEM
-    # Note: I'm including the CA-cert even though it's not strictly required
-    # as some applications find it useful.
     {
        openssl x509 -text -modulus -certopt ca_default,no_sigdump -in certs/"$F".crt
-       openssl x509 -text -certopt ca_default,no_sigdump -in "$CACERT"
+    #  openssl x509 -text -certopt ca_default,no_sigdump -in "$CACERT"
        openssl rsa -check -modulus -in certs/"$F".key
     } > certs/"$F".pem
 
     # Make a p12 or Windows pfx file (with a blank password!)
     if grep -q 'DC=local.*DC=tvt' <(openssl x509 -issuer -in "$CACERT" -noout)
     then 
-	# For tvt.local don't include the CA certificate
+	# For tvt.local don't include the CA certificate as it will be there.
 	openssl pkcs12 \
 	    -export -passout pass: -out certs/"$F".pfx \
 	    -name "PFX $CN `date`" \
 	    -inkey certs/"$F".key -in certs/"$F".crt
 
     else
-	# It's not strictly correct to include the CA certificate; but it seems 
-	# to work nicely when importing into the machine store.
+	# It's not strictly correct to include the CA certificate.
 	openssl pkcs12 \
 	    -export -passout pass: -out certs/"$F".pfx \
 	    -name "PFX $CN `date`" \
@@ -186,6 +188,9 @@ create_extras() {
 
 choose_cert_type() {
     case "$1" in
+    none )
+	;;
+
     client )
 	echo basicConstraints = CA:false
 	echo keyUsage = digitalSignature
@@ -218,9 +223,6 @@ choose_cert_type() {
 	echo authorityKeyIdentifier=keyid,issuer
 	;;
 
-    min )
-	;;
-
     openvpn_s )
 	echo basicConstraints = CA:false
 	echo subjectKeyIdentifier=hash
@@ -234,7 +236,7 @@ choose_cert_type() {
 	echo authorityKeyIdentifier=keyid,issuer:always
 	;;
 
-    *)
+    default )
 	echo basicConstraints = CA:false
 	echo subjectKeyIdentifier=hash
 	echo authorityKeyIdentifier=keyid,issuer
