@@ -84,6 +84,47 @@ main() {
 fix_demoCA() {
     # Make sure the basics exist in the demoCA directory
     mkdir -p certs demoCA demoCA/private demoCA/newcerts
+
+    # Recover an existing CA cert & key from the certs directory
+    [ ! -s "$CAKEY" -a -s certs/ca.pem ] && {
+	openssl pkey -in certs/ca.pem -out "$CAKEY" &&
+	openssl x509 -in certs/ca.pem -out "$CACERT"
+    }
+
+    # Recover an existing CA key from the certs directory
+    [ ! -s "$CAKEY" -a -s certs/ca.key ] && {
+	openssl pkey -in certs/ca.key -out "$CAKEY" &&
+	openssl req $CONF -nodes -new -x509 -days 3652 -subj '/CN=Private CA/' \
+	    -key "$CAKEY" -out "$CACERT"
+    }
+
+    # No CA around, just make up something.
+    [ -s "$CAKEY" ] || {
+        # Create a CA key and cert.
+	openssl req $CONF -nodes -new -x509 -days 3652 -subj '/CN=Private CA/' \
+	    -keyout "$CAKEY" -out "$CACERT"
+    }
+
+    # Check the files we've found match.
+    PRVKEYID=$(openssl pkey -in "$CAKEY" -pubout | openssl dgst)
+    PUBKEYID=$(openssl x509 -in "$CACERT" -noout -pubkey | openssl dgst)
+
+    if [ "$PRVKEYID" != "$PUBKEYID" ]
+    then
+	echo "The public keys in the CA key and CA certificate do NOT match" >&2
+	exit 99
+    fi
+
+    # Save an existing CA in a new certs directory
+    [ -s "$CACERT" -a -s "$CAKEY" ] && {
+	[ -s certs/ca.crt ] || openssl x509 -in "$CACERT" -out certs/ca.crt
+	[ -s certs/ca.pem ] || {
+	    openssl x509 -text -certopt ca_default,no_sigdump -in "$CACERT"
+	    openssl pkey -text -in "$CAKEY"
+	} > certs/ca.pem
+    }
+
+    # Now add the other files.
     [ -f demoCA/index.txt ] || {
 	touch demoCA/index.txt
 
@@ -109,44 +150,6 @@ fix_demoCA() {
 
     [ -f demoCA/index.txt.attr ] || echo unique_subject = no > demoCA/index.txt.attr
     [ -f demoCA/crlnumber ] || echo 00 > demoCA/crlnumber
-
-    # Recover an existing CA cert & key from the certs directory
-    [ ! -s "$CAKEY" -a -s certs/ca.pem ] && {
-	openssl pkey -in certs/ca.pem -out "$CAKEY" &&
-	openssl x509 -in certs/ca.pem -out "$CACERT"
-    }
-
-    # Recover an existing CA key from the certs directory
-    [ ! -s "$CAKEY" -a -s certs/ca.key ] && {
-	openssl pkey -in certs/ca.key -out "$CAKEY" &&
-	openssl req $CONF -nodes -new -x509 -days 3652 -subj '/CN=Private CA/' \
-	    -key "$CAKEY" -out "$CACERT"
-    }
-
-    # No CA around, just make up something.
-    [ -s "$CAKEY" ] || {
-        # Create a CA key and cert.
-	openssl req $CONF -nodes -new -x509 -days 3652 -subj '/CN=Private CA/' \
-	    -keyout "$CAKEY" -out "$CACERT"
-    }
-
-    # Save an existing CA in a new certs directory
-    [ -s "$CACERT" -a -s "$CAKEY" ] && {
-	[ -s certs/ca.crt ] || openssl x509 -in "$CACERT" -out certs/ca.crt
-	[ -s certs/ca.pem ] || {
-	    openssl x509 -text -certopt ca_default,no_sigdump -in "$CACERT"
-	    openssl pkey -text -in "$CAKEY"
-	} > certs/ca.pem
-    }
-
-    PRVKEYID=$(openssl pkey -in "$CAKEY" -pubout | openssl dgst)
-    PUBKEYID=$(openssl x509 -in "$CACERT" -noout -pubkey | openssl dgst)
-
-    if [ "$PRVKEYID" != "$PUBKEYID" ]
-    then
-	echo "The public keys in the CA key and CA certificate do NOT match" >&2
-	exit 99
-    fi
 }
 
 create_cert() {
@@ -154,7 +157,7 @@ create_cert() {
     RSABITS=$(openssl rsa -text -noout -in "$CAKEY" 2>&1 |
 	awk '/^Private.Key: .*bit/{gsub("[^0-9]","",$2); print $2;}')
 
-    # Or match the EC type
+    # Or match the EC type. Recommend: secp256k1 approx 2^128 strength.
     ECTYPE=$(openssl ec -in "$CAKEY" -noout -text 2>&1 |
 	awk '/^ASN1 OID:/ {print $3;}')
 
