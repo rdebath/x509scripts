@@ -83,20 +83,18 @@ main() {
 
 fix_demoCA() {
     # Make sure the basics exist in the demoCA directory
-    mkdir -p certs demoCA demoCA/private demoCA/newcerts
+    mkdir -p certs demoCA demoCA/private demoCA/newcerts demoCA/certs
 
     # Recover an existing CA cert & key from the certs directory
     [ ! -s "$CAKEY" -a -s certs/ca.pem ] && {
 	openssl pkey -in certs/ca.pem -out "$CAKEY" &&
-	openssl x509 -in certs/ca.pem -out "$CACERT"
+	openssl x509 -in certs/ca.pem -out "$CACERT" 2>/dev/null
     }
 
-    # Recover an existing CA key from the certs directory
-    [ ! -s "$CAKEY" -a -s certs/ca.key ] && {
-	openssl pkey -in certs/ca.key -out "$CAKEY" &&
+    # We've got a key, but no cert ... okay
+    [ -s "$CAKEY" -a ! -s "$CACERT" ] &&
 	openssl req $CONF -nodes -new -x509 -days 3652 -subj '/CN=Private CA/' \
 	    -key "$CAKEY" -out "$CACERT"
-    }
 
     # No CA around, just make up something.
     [ -s "$CAKEY" ] || {
@@ -117,6 +115,22 @@ fix_demoCA() {
 
     # Save an existing CA in a new certs directory
     [ -s "$CACERT" -a -s "$CAKEY" ] && {
+
+	# Checking ...
+	if [ "$(openssl x509 -in "$CACERT" 2>&1 | openssl dgst)" != \
+	     "$(openssl x509 -in certs/ca.crt 2>&1 | openssl dgst)" ]
+	then rm -f certs/ca.crt ||:
+	fi
+	if [ "$(openssl x509 -in "$CACERT" 2>&1 | openssl dgst)" != \
+	     "$(openssl x509 -in certs/ca.pem 2>&1 | openssl dgst)" ]
+	then rm -f certs/ca.pem ||:
+	fi
+	if [ "$(openssl pkey -in "$CAKEY" 2>&1 | openssl dgst)" != \
+	     "$(openssl pkey -in certs/ca.pem 2>&1 | openssl dgst)" ]
+	then rm -f certs/ca.pem ||:
+	fi
+
+	# Recreating.
 	[ -s certs/ca.crt ] || openssl x509 -in "$CACERT" -out certs/ca.crt
 	[ -s certs/ca.pem ] || {
 	    openssl x509 -text -certopt ca_default,no_sigdump -in "$CACERT"
@@ -169,6 +183,7 @@ create_cert() {
     [ ! -s certs/"$F".key -a "$CN" = "" ] &&
 	openssl genrsa -out certs/"$F".key $RSABITS
 
+    # Make the CSR
     if [ ! -s certs/"$F".key ]
     then
 	# Create a request on a new key.
@@ -176,13 +191,13 @@ create_cert() {
 	      ${RSABITS:+-newkey rsa:$RSABITS} \
 	      ${CN:+-subj /CN="$CN"/} \
 	      -reqexts SANLIST \
-	      -keyout certs/"$F".key -out certs/"$F".csr
+	      -keyout certs/"$F".key -out demoCA/certs/"$F".csr
     else
 	# Create a request on an existing key.
 	openssl req $CONF -nodes -new \
 	      ${CN:+-subj /CN="$CN"/} \
 	      -reqexts SANLIST \
-	      -key certs/"$F".key -out certs/"$F".csr
+	      -key certs/"$F".key -out demoCA/certs/"$F".csr
     fi
 
     # Generate a random serial number.
@@ -205,12 +220,11 @@ create_cert() {
 	-policy policy_anything \
 	-noemailDN \
 	-startdate $STRDATE -enddate $ENDDATE \
-	-in certs/"$F".csr \
-	-out certs/"$F".crt \
+	-in demoCA/certs/"$F".csr \
+	-out demoCA/certs/"$F".crt \
 	|| exit
 
-    # Don't need csr
-    rm certs/"$F".csr
+    cp -p demoCA/certs/"$F".crt certs/"$F".crt
 }
 
 create_extras() {
