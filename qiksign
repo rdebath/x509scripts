@@ -20,6 +20,11 @@ main() {
 
     make_cakey
 
+    ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in "$CAKEY" | sed 's/^[^=]*=//')")"
+    TODAY="$(date +%s)"
+    [ "$ENDDAY" != "" ] &&
+	CERT_DAYS=$(echo $ENDDAY/86400 - $TODAY/86400 | bc)
+
     for host
     do
 	cname="$host"

@@ -179,6 +179,10 @@ create_cert() {
     [ ! -s certs/"$F".key -a "$ECTYPE" != "" ] &&
 	openssl ecparam -name "$ECTYPE" -genkey -out certs/"$F".key
 
+    # Do we have a DSA bit size ?
+    [ ! -s certs/"$F".key -a "$DSABITS" != "" ] &&
+	openssl dsaparam -genkey -out certs/"$F".key $DSABITS
+
     # If there's no CN openssl/req prompts without properly saving the key.
     [ ! -s certs/"$F".key -a "$CN" = "" ] &&
 	openssl genrsa -out certs/"$F".key $RSABITS
@@ -190,13 +194,13 @@ create_cert() {
 	openssl req $CONF -nodes -new \
 	      ${RSABITS:+-newkey rsa:$RSABITS} \
 	      ${CN:+-subj /CN="$CN"/} \
-	      -reqexts SANLIST \
+	      ${SANLIST:+-reqexts SANLIST} \
 	      -keyout certs/"$F".key -out demoCA/certs/"$F".csr
     else
 	# Create a request on an existing key.
 	openssl req $CONF -nodes -new \
 	      ${CN:+-subj /CN="$CN"/} \
-	      -reqexts SANLIST \
+	      ${SANLIST:+-reqexts SANLIST} \
 	      -key certs/"$F".key -out demoCA/certs/"$F".csr
     fi
 
