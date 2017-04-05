@@ -45,8 +45,8 @@ main() {
 	fname="certs/${fname:-qik}"
 
 	# Match the CA bitsize
-	RSABITS=$(openssl rsa -text -noout -in "$CAKEY" 2>&1 |
-		awk '/^Private.Key: .*bit/{gsub("[^0-9]","",$2); print $2;}')
+	RSABITS=${RSABITS:-$(openssl rsa -text -noout -in "$CAKEY" 2>&1 |
+		awk '/^Private.Key: .*bit/{gsub("[^0-9]","",$2); print $2;}')}
 
 	# Make key
 	openssl req -new -nodes ${RSABITS:+-newkey rsa:$RSABITS} \
@@ -69,7 +69,9 @@ main() {
 
 make_cakey() {
     [ -s "$CAKEY" ] || {
-	openssl req -nodes -new -x509 -days 3652 \
+	openssl req -new -nodes -x509 \
+	    ${RSABITS:+-newkey rsa:$RSABITS} \
+	    -days ${CERT_DAYS:-7300} \
 	    -subj '/CN=Private CA/' \
 	    -keyout "$CAKEY" -out "$CAKEY"
     }
