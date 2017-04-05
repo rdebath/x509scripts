@@ -15,15 +15,9 @@ main() {
     mkdir -p certs
     CAKEY=certs/ca.pem
     CTYPE=default
-    CERT_DAYS=${CERT_DAYS:-3652}
     SANS=
 
     make_cakey
-
-    ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in "$CAKEY" | sed 's/^[^=]*=//')")"
-    TODAY="$(date +%s)"
-    [ "$ENDDAY" != "" ] &&
-	CERT_DAYS=$(echo $ENDDAY/86400 - $TODAY/86400 | bc)
 
     for host
     do
@@ -74,10 +68,20 @@ main() {
 }
 
 make_cakey() {
-    [ -s "$CAKEY" ] ||
-	openssl req -nodes -new -x509 -days "$CERT_DAYS" \
+    [ -s "$CAKEY" ] || {
+	openssl req -nodes -new -x509 -days 3652 \
 	    -subj '/CN=Private CA/' \
 	    -keyout "$CAKEY" -out "$CAKEY"
+    }
+
+    [ "$CERT_DAYS" = "" ] && {
+	ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in "$CAKEY" | sed 's/^[^=]*=//')")"
+	TODAY="$(date +%s)"
+	[ "$ENDDAY" != "" ] &&
+	    CERT_DAYS=$(echo $ENDDAY/86400 - $TODAY/86400 | bc)
+    }
+
+    CERT_DAYS=${CERT_DAYS:-30}
 
     if [ "$(openssl pkey -in "$CAKEY" -pubout | openssl dgst)" != \
 	 "$(openssl x509 -in "$CAKEY" -noout -pubkey | openssl dgst)" ]
@@ -87,7 +91,6 @@ make_cakey() {
     fi
 
     [ -s certs/ca.crt ] || openssl x509 -in "$CAKEY" -out certs/ca.crt
-
 }
 
 choose_cert_type() {

@@ -168,12 +168,14 @@ fix_demoCA() {
 
 create_cert() {
     # Match the RSA bitsize of the CA
-    RSABITS=$(openssl rsa -text -noout -in "$CAKEY" 2>&1 |
-	awk '/^Private.Key: .*bit/{gsub("[^0-9]","",$2); print $2;}')
+    [ "$ECTYPE$RSABITS$DSABITS" = "" ] &&
+	RSABITS=$(openssl rsa -text -noout -in "$CAKEY" 2>&1 |
+	    awk '/^Private.Key: .*bit/{gsub("[^0-9]","",$2); print $2;}')
 
-    # Or match the EC type. Recommend: secp256k1 approx 2^128 strength.
-    ECTYPE=$(openssl ec -in "$CAKEY" -noout -text 2>&1 |
-	awk '/^ASN1 OID:/ {print $3;}')
+    # Or match the EC type. Recommend: secp256k1 approx 2^128 brute force.
+    [ "$ECTYPE$RSABITS$DSABITS" = "" ] &&
+	ECTYPE=$(openssl ec -in "$CAKEY" -noout -text 2>&1 |
+	    awk '/^ASN1 OID:/ {print $3;}')
 
     # Do we have an EC curve type ?
     [ ! -s certs/"$F".key -a "$ECTYPE" != "" ] &&
@@ -208,7 +210,7 @@ create_cert() {
     # openssl rand -hex 16 > demoCA/serial
 
     # Generate a pseudo random serial number.
-    openssl pkey -pubout -in certs/"$F".key | openssl dgst | sed 's/.* //' > demoCA/serial
+    openssl pkey -pubout -in certs/"$F".key | openssl md5 | sed 's/.* //' > demoCA/serial
 
     # Extract the start and end date from the CA key.
     STRDATE=$(TZ=UTC date +%Y%m%d%H%M%SZ --date="$(openssl x509 -noout -in "$CACERT" -startdate | sed 's/.*=//')")

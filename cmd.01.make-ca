@@ -17,7 +17,7 @@ openssl req $CONF -new -nodes -newkey rsa:2048 \
 	${*:+-subj /CN="$*"/}
 
 # Choose a serial number for it
-openssl rand -hex 16 > demoCA/serial
+openssl pkey -pubout -in demoCA/private/cakey.pem | openssl md5 | sed 's/.* //' > demoCA/serial
 
 YEAR=`date +%Y`
 ENDY=$((YEAR+20))
