@@ -18,12 +18,14 @@ esac
 # Copy CA key
 openssl pkcs12 -nodes ${PASS:+-passin pass:$PASS} -in "$PFX" -out certs/ca.pem
 if [ "$PASS" != "" ]
-then openssl pkcs12 -nodes ${PASS:+-passin pass:$PASS} -in "$PFX" -out certs/ca.crt -nokeys
+then openssl pkcs12 -nodes -passin pass:$PASS -in "$PFX" -out certs/ca.crt -nokeys
 else openssl x509 -in certs/ca.pem -out certs/ca.crt
 fi
 
 if [ "$#" -gt 0 ]
 then
+    export CRLURL=http://tvtdc00.tvt.local/CertEnroll/TVision%20Domain.crl
+
     for host
     do sh cmd.02.make-crt ${host//,/ } || break
     done

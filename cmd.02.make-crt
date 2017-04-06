@@ -68,6 +68,9 @@ main() {
     # Note the san list in the request is NOT copied to the cert
     echo '[ dyn_ext ]' >> "$TMP".cnf
     echo "$SANLIST" >> "$TMP".cnf
+    [ "$CRLURL" != "" ] && {
+	echo "crlDistributionPoints=URI:$CRLURL" >> "$TMP".cnf
+    }
     choose_cert_type "$CATAG" >> "$TMP".cnf
 
     # This would setup the copy, but from the ca* section
@@ -144,6 +147,8 @@ fix_demoCA() {
 
 	if [ -s certs/ca.crt ]
 	then
+	    > demoCA/crl.txt
+	    [ -s certs/ca.crl ] && openssl crl -in certs/ca.crl -noout -text > demoCA/crl.txt
 	    for i in certs/*.crt
 	    do
 		SUBJECT=$(openssl x509 -subject -noout -in "$i" | sed 's:^[^/]*= *::')
@@ -153,6 +158,16 @@ fix_demoCA() {
 
 		# 32bit workaround.
 		[ "$ENDDATE" = "" ] && ENDDATE=20380119031400Z
+
+		RDATE="$(awk -v serial=$SERIAL '
+		    /Serial Number:/ { enabled = ( $3 == serial ); }
+		    enabled && /Revocation Date:/ {
+			$1=""; $2=""; print
+		    }
+		    ' demoCA/crl.txt)"
+
+		[ "$RDATE" != "" ] &&
+		    REVOKED="$(TZ=UTC date +%y%m%d%H%M%SZ --date="$RDATE")"
 
 		if [ "$REVOKED" = "" ]
 		then echo -e "V\t$ENDDATE\t\t$SERIAL\tunknown\t$SUBJECT"
@@ -164,6 +179,21 @@ fix_demoCA() {
 
     [ -f demoCA/index.txt.attr ] || echo unique_subject = no > demoCA/index.txt.attr
     [ -f demoCA/crlnumber ] || echo 00 > demoCA/crlnumber
+
+    if [ -f certs/ca.crl ]
+    then cp certs/ca.crl demoCA/crl.pem
+    else
+
+	[ "$CERT_DAYS" = "" ] && {
+	    ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in "$CACERT" | sed 's/^[^=]*=//')")"
+	    TODAY="$(date +%s)"
+	    [ "$ENDDAY" != "" ] &&
+		CERT_DAYS=$(echo $ENDDAY/86400 - $TODAY/86400 | bc)
+	}
+
+	openssl ca -gencrl ${CERT_DAYS:+-crldays $CERT_DAYS} -out demoCA/crl.pem
+	cp demoCA/crl.pem certs/ca.crl
+    fi
 }
 
 create_cert() {
