@@ -172,7 +172,11 @@ create_cert() {
 	RSABITS=$(openssl rsa -text -noout -in "$CAKEY" 2>&1 |
 	    awk '/^Private.Key: .*bit/{gsub("[^0-9]","",$2); print $2;}')
 
-    # Or match the EC type. Recommend: secp256k1 approx 2^128 brute force.
+    # Or match the EC type.
+    # Recommend:
+    #   secp256k1 fast with approx 2^128 brute force.
+    #   secp256r1, secp384r1, secp521r1  Supported by Windows 2008 R2.
+
     [ "$ECTYPE$RSABITS$DSABITS" = "" ] &&
 	ECTYPE=$(openssl ec -in "$CAKEY" -noout -text 2>&1 |
 	    awk '/^ASN1 OID:/ {print $3;}')
@@ -245,22 +249,22 @@ create_extras() {
     } > certs/"$F".pem
 
     # Make a p12 or Windows pfx file (with a blank password!)
-    if grep -q 'DC=local.*DC=tvt' <(openssl x509 -issuer -in "$CACERT" -noout)
-    then 
-	# For tvt.local don't include the CA certificate as it will be there.
-	openssl pkcs12 \
-	    -export -passout pass: -out certs/"$F".pfx \
-	    -name "PFX $CN $(openssl x509 -noout -enddate -in certs/"$F".crt | sed 's/notAfter=/until /')" \
-	    -inkey certs/"$F".key -in certs/"$F".crt
 
-    else
-	# It's not strictly correct to include the CA certificate.
-	openssl pkcs12 \
-	    -export -passout pass: -out certs/"$F".pfx \
-	    -name "PFX $CN $(openssl x509 -noout -enddate -in certs/"$F".crt | sed 's/notAfter=/until /')" \
-	    -inkey certs/"$F".key -in certs/"$F".crt \
-	    -caname "Private CA" -certfile "$CACERT"
-    fi
+    # If the CA certificate is already installed don't include it in the PFX
+    openssl pkcs12 \
+	-export -passout pass: -out certs/"$F".pfx \
+	-name "PFX $CN $(openssl x509 -noout -enddate -in certs/"$F".crt | sed 's/notAfter=/until /')" \
+	-inkey certs/"$F".key -in certs/"$F".crt
+
+    # It's not strictly correct to include the CA certificate in the PFX.
+    # But Windows will load it into the trusted store when the PFX is
+    # loaded into Machine store.
+    openssl pkcs12 \
+	-export -passout pass: -out certs/"$F".plus-ca.pfx \
+	-name "PFX $CN $(openssl x509 -noout -enddate -in certs/"$F".crt | sed 's/notAfter=/until /')" \
+	-inkey certs/"$F".key -in certs/"$F".crt \
+	-caname "Private CA" -certfile "$CACERT"
+
 }
 
 choose_cert_type() {
