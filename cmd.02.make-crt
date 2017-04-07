@@ -174,6 +174,7 @@ fix_demoCA() {
 		else echo -e "R\t$ENDDATE\t$REVOKED\t$SERIAL\tunknown\t$SUBJECT"
 		fi
 	    done > demoCA/index.txt
+	    rm demoCA/crl.txt
 	fi
     }
 
@@ -191,7 +192,7 @@ fix_demoCA() {
 		CERT_DAYS=$(echo $ENDDAY/86400 - $TODAY/86400 | bc)
 	}
 
-	openssl ca -gencrl ${CERT_DAYS:+-crldays $CERT_DAYS} -out demoCA/crl.pem
+	openssl ca $CONF -gencrl ${CERT_DAYS:+-crldays $CERT_DAYS} -out demoCA/crl.pem
 	cp demoCA/crl.pem certs/ca.crl
     fi
 }
@@ -293,8 +294,8 @@ create_extras() {
 	-export -passout pass: -out certs/"$F".plus-ca.pfx \
 	-name "PFX $CN $(openssl x509 -noout -enddate -in certs/"$F".crt | sed 's/notAfter=/until /')" \
 	-inkey certs/"$F".key -in certs/"$F".crt \
-	-caname "Private CA" -certfile "$CACERT"
-
+	-certfile "$CACERT" \
+	-caname "$(openssl x509 -noout -in certs/ca.crt -subject | sed -n '/^subject/s/^.*CN[ \t]*=[ \t]*//p')"
 }
 
 choose_cert_type() {

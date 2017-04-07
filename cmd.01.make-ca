@@ -11,8 +11,8 @@ echo 00 > demoCA/crlnumber
 
 if [ -f openssl.cnf ] ; then CONF='-config openssl.cnf'; else CONF= ; fi
 
-# Create a key and cert request
-openssl req $CONF -new -nodes -newkey rsa:2048 \
+# Create a default format key and cert request
+openssl req $CONF -new -nodes \
 	-keyout demoCA/private/cakey.pem -out demoCA/private/ca.csr \
 	${*:+-subj /CN="$*"/}
 
