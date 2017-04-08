@@ -96,14 +96,18 @@ fix_demoCA() {
 
     # We've got a key, but no cert ... okay
     [ -s "$CAKEY" -a ! -s "$CACERT" ] &&
-	openssl req $CONF -nodes -new -x509 -days 3652 -subj '/CN=Private CA/' \
+	openssl req $CONF -nodes -new -x509 -days 3652 \
+	    -subj "/OU=Private CA/CN=${CN:-localhost}/" \
 	    -key "$CAKEY" -out "$CACERT"
 
     # No CA around, just make up something.
     [ -s "$CAKEY" ] || {
         # Create a CA key and cert.
-	openssl req $CONF -nodes -new -x509 -days 3652 -subj '/CN=Private CA/' \
-	    -keyout "$CAKEY" -out "$CACERT"
+	make_a_key "$CAKEY"
+
+	openssl req $CONF -nodes -new -x509 -days 3652 \
+	    -subj "/OU=Private CA/CN=${CN:-localhost}/" \
+	    -key "$CAKEY" -out "$CACERT"
     }
 
     # Check the files we've found match.
@@ -197,9 +201,11 @@ fix_demoCA() {
     fi
 }
 
-create_cert() {
+make_a_key() {
+    KEYF="$1"
+
     # Match the RSA bitsize of the CA
-    [ "$ECTYPE$RSABITS$DSABITS" = "" ] &&
+    [ "$ECTYPE$RSABITS$DSABITS" = "" -a -s "$CAKEY" ] &&
 	RSABITS=$(openssl rsa -text -noout -in "$CAKEY" 2>&1 |
 	    awk '/^Private.Key: .*bit/{gsub("[^0-9]","",$2); print $2;}')
 
@@ -208,44 +214,42 @@ create_cert() {
     #   secp256k1 fast with approx 2^128 brute force.
     #   secp256r1, secp384r1, secp521r1  Supported by Windows 2008 R2.
 
-    [ "$ECTYPE$RSABITS$DSABITS" = "" ] &&
+    [ "$ECTYPE$RSABITS$DSABITS" = "" -a -s "$CAKEY" ] &&
 	ECTYPE=$(openssl ec -in "$CAKEY" -noout -text 2>&1 |
 	    awk '/^ASN1 OID:/ {print $3;}')
 
     # Do we have an EC curve type ?
-    [ ! -s certs/"$F".key -a "$ECTYPE" != "" ] &&
-	openssl ecparam -name "$ECTYPE" -genkey -out certs/"$F".key
+    [ ! -s "$KEYF" -a "$ECTYPE" != "" ] &&
+	openssl ecparam -name "$ECTYPE" -genkey -out "$KEYF"
 
     # Do we have a DSA bit size ?
-    [ ! -s certs/"$F".key -a "$DSABITS" != "" ] &&
-	openssl dsaparam -genkey -out certs/"$F".key $DSABITS
+    [ ! -s "$KEYF" -a "$DSABITS" != "" ] &&
+	openssl dsaparam -genkey -out "$KEYF" $DSABITS
 
     # If there's no CN openssl/req prompts without properly saving the key.
-    [ ! -s certs/"$F".key -a "$CN" = "" ] &&
-	openssl genrsa -out certs/"$F".key $RSABITS
+    [ ! -s "$KEYF" ] &&
+	openssl genrsa -out "$KEYF" $RSABITS
+}
 
-    # Make the CSR
-    if [ ! -s certs/"$F".key ]
+create_cert() {
+    make_a_key certs/"$F".key
+
+    # Create a request on the key.
+    openssl req $CONF -nodes -new \
+	  ${CN:+-subj /CN="$CN"/} \
+	  ${SANLIST:+-reqexts SANLIST} \
+	  -key certs/"$F".key -out demoCA/certs/"$F".csr
+
+    NEWF="$(openssl req -noout -in demoCA/certs/"$F".csr -subject | \
+	    sed -n '/^subject/s/^.*CN[ \t]*=[ \t]*//p' | \
+	    tr -c '[a-zA-Z0-9\.\-\012]' _)"
+
+    if [ "$F" != "$NEWF" -a "$NEWF" != "" ]
     then
-	# Create a request on a new key.
-	openssl req $CONF -nodes -new \
-	      ${RSABITS:+-newkey rsa:$RSABITS} \
-	      ${CN:+-subj /CN="$CN"/} \
-	      ${SANLIST:+-reqexts SANLIST} \
-	      -keyout certs/"$F".key -out demoCA/certs/"$F".csr
-    else
-	# Create a request on an existing key.
-	openssl req $CONF -nodes -new \
-	      ${CN:+-subj /CN="$CN"/} \
-	      ${SANLIST:+-reqexts SANLIST} \
-	      -key certs/"$F".key -out demoCA/certs/"$F".csr
+	    mv certs/"$F".key certs/"$NEWF".key
+	    mv demoCA/certs/"$F".csr demoCA/certs/"$NEWF".csr
+	    F="$NEWF"
     fi
-
-    # # Generate a random serial number.
-    # openssl rand -hex 16 > demoCA/serial
-
-    # Generate a pseudo random serial number.
-    openssl pkey -pubout -in certs/"$F".key | openssl md5 | sed 's/.* //' > demoCA/serial
 
     # Extract the start and end date from the CA key.
     STRDATE=$(TZ=UTC date +%Y%m%d%H%M%SZ --date="$(openssl x509 -noout -in "$CACERT" -startdate | sed 's/.*=//')")
@@ -254,6 +258,19 @@ create_cert() {
     # 32bit unix time trapper.
     [ "$STRDATE" = "" ] && STRDATE=20000101000000Z
     [ "$ENDDATE" = "" ] && ENDDATE=20380119031400Z
+
+    [ -f demoCA/serial ] && mv demoCA/serial demoCA/serial.tmp
+
+    if [ "$CERTSERIAL" != "" ]
+    then
+	echo "$CERTSERIAL" > demoCA/serial
+    else
+	# # Generate a random serial number.
+	# openssl rand -hex 16 > demoCA/serial
+
+	# Generate a pseudo random serial number.
+	openssl pkey -pubout -in certs/"$F".key | openssl md5 | sed 's/.* //' > demoCA/serial
+    fi
 
     # Sign the request with the CA key.
     openssl ca \
@@ -265,8 +282,11 @@ create_cert() {
 	-noemailDN \
 	-startdate $STRDATE -enddate $ENDDATE \
 	-in demoCA/certs/"$F".csr \
-	-out demoCA/certs/"$F".crt \
-	|| exit
+	-out demoCA/certs/"$F".crt
+    RV=$?
+
+    [ -f demoCA/serial.tmp ] && mv demoCA/serial.tmp demoCA/serial
+    [ "$RV" -ne 0 ] && exit $RV
 
     cp -p demoCA/certs/"$F".crt certs/"$F".crt
 }

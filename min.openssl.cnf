@@ -50,7 +50,7 @@ localityName                    = Locality Name (eg, city)
 organizationalUnitName          = Organizational Unit Name (eg, section)
 commonName                      = Common Name (e.g. server FQDN or YOUR name)
 commonName_max                  = 64
-commonName_default		= Private Host
+commonName_default		= www.example.com
 emailAddress                    = Email Address
 emailAddress_max                = 64
 
