@@ -226,20 +226,35 @@ make_a_key() {
     [ ! -s "$KEYF" -a "$DSABITS" != "" ] &&
 	openssl dsaparam -genkey -out "$KEYF" $DSABITS
 
-    # If there's no CN openssl/req prompts without properly saving the key.
     [ ! -s "$KEYF" ] &&
 	openssl genrsa -out "$KEYF" $RSABITS
 }
 
 create_cert() {
-    make_a_key certs/"$F".key
 
-    # Create a request on the key.
-    openssl req $CONF -nodes -new \
-	  ${CN:+-subj /CN="$CN"/} \
-	  ${SANLIST:+-reqexts SANLIST} \
-	  -key certs/"$F".key -out demoCA/certs/"$F".csr
+    # If the keytype has been defined use that.
+    # If there's no CN openssl/req prompts without properly saving the key.
+    [ "$ECTYPE$RSABITS$DSABITS" != "" -o "$CN" = "" ] &&
+	make_a_key certs/"$F".key
 
+    # Make the CSR
+    if [ ! -s certs/"$F".key ]
+    then
+       # Create a request on a new key (like the CA).
+       openssl req $CONF -nodes -new \
+             -newkey param:"$CACERT" \
+             ${CN:+-subj /CN="$CN"/} \
+             ${SANLIST:+-reqexts SANLIST} \
+             -keyout certs/"$F".key -out demoCA/certs/"$F".csr || exit
+    else
+       # Create a request on an existing key.
+       openssl req $CONF -nodes -new \
+             ${CN:+-subj /CN="$CN"/} \
+             ${SANLIST:+-reqexts SANLIST} \
+             -key certs/"$F".key -out demoCA/certs/"$F".csr || exit
+    fi
+
+    # If the CN has been reset rename the files.
     NEWF="$(openssl req -noout -in demoCA/certs/"$F".csr -subject | \
 	    sed -n '/^subject/s/^.*CN[ \t]*=[ \t]*//p' | \
 	    tr -c '[a-zA-Z0-9\.\-\012]' _)"

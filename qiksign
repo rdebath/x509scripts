@@ -44,12 +44,9 @@ main() {
 	esac
 	fname="certs/${fname:-qik}"
 
-	# Match the CA bitsize
-	RSABITS=${RSABITS:-$(openssl rsa -text -noout -in "$CAKEY" 2>&1 |
-		awk '/^Private.Key: .*bit/{gsub("[^0-9]","",$2); print $2;}')}
-
-	# Make key
-	openssl req -new -nodes ${RSABITS:+-newkey rsa:$RSABITS} \
+	# Make key, matching the CA
+	openssl req -new -nodes \
+	    -newkey param:"$CAKEY" \
 	    ${cname:+-subj /CN="$cname"} \
 	    -keyout "$fname".key |
 
@@ -79,8 +76,8 @@ make_cakey() {
     [ "$CERT_DAYS" = "" ] && {
 	ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in "$CAKEY" | sed 's/^[^=]*=//')")"
 	TODAY="$(date +%s)"
-	[ "$ENDDAY" != "" ] &&
-	    CERT_DAYS=$(echo $ENDDAY/86400 - $TODAY/86400 | bc)
+	[ "$ENDDAY" = "" ] && ENDDAY=2147126400
+	CERT_DAYS=$(echo $ENDDAY/86400 - $TODAY/86400 | bc)
     }
 
     CERT_DAYS=${CERT_DAYS:-30}
