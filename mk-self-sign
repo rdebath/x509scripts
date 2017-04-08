@@ -6,11 +6,15 @@ mkdir -p certs
 
 # openssl genrsa -out certs/ca.key 3072
 # openssl dsaparam -genkey -out certs/ca.key 3072
+
+# openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) -out certs/ca.key
+# openssl ecparam -name prime256v1 -genkey | openssl pkey -out certs/ca.key
+
 # openssl ecparam -name secp256k1 -genkey -out certs/ca.key
 openssl ecparam -name prime256v1 -genkey -out certs/ca.key
 
 KEY=-key ; [ -s certs/ca.key ] || KEY="-nodes -keyout"
-openssl req -new -x509 -days "${CERTDAYS:-3652}" \
+openssl req -new -x509 -days "${CERT_DAYS:-3652}" \
     -subj "/CN=${*:-Private CA}/" \
     $KEY certs/ca.key -out certs/ca.crt -config <(echo '
 [req]
