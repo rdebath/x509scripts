@@ -4,16 +4,18 @@ if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 [ -s certs/ca.pem ] && { echo ERROR: CA already exists ; exit 1 ; }
 mkdir -p certs 
 
-# openssl genrsa -out certs/ca.key 2048
-# openssl dsaparam -genkey -out certs/ca.key 2048
+# openssl genrsa -out certs/ca.key 3072
+# openssl dsaparam -genkey -out certs/ca.key 3072
 # openssl ecparam -name secp256k1 -genkey -out certs/ca.key
 openssl ecparam -name prime256v1 -genkey -out certs/ca.key
 
+KEY=-key ; [ -s certs/ca.key ] || KEY="-nodes -keyout"
 openssl req -new -x509 -days "${CERTDAYS:-3652}" \
     -subj "/CN=${*:-Private CA}/" \
-    -key certs/ca.key -out certs/ca.crt -config <(echo '
+    $KEY certs/ca.key -out certs/ca.crt -config <(echo '
 [req]
-distinguished_name=req_distinguished_name
+default_bits = 3072
+distinguished_name = req_distinguished_name
 [ req_distinguished_name ]' )
 
 {

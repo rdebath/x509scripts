@@ -38,6 +38,7 @@ commonName              = supplied
 emailAddress            = optional
 
 [req]
+default_bits            = 2048
 distinguished_name	= req_distinguished_name
 
 [ req_distinguished_name ]

@@ -141,7 +141,7 @@ fix_demoCA() {
 	[ -s certs/ca.crt ] || openssl x509 -in "$CACERT" -out certs/ca.crt
 	[ -s certs/ca.pem ] || {
 	    openssl x509 -text -certopt ca_default,no_sigdump -in "$CACERT"
-	    openssl pkey -text -in "$CAKEY"
+	    openssl pkey -in "$CAKEY"
 	} > certs/ca.pem
     }
 
@@ -222,12 +222,16 @@ make_a_key() {
     [ ! -s "$KEYF" -a "$ECTYPE" != "" ] &&
 	openssl ecparam -name "$ECTYPE" -genkey -out "$KEYF"
 
+    # Do we have an RSA bit size ?
+    [ ! -s "$KEYF" -a "$RSABITS" != "" ] &&
+	openssl genrsa -out "$KEYF" $RSABITS
+
     # Do we have a DSA bit size ?
     [ ! -s "$KEYF" -a "$DSABITS" != "" ] &&
 	openssl dsaparam -genkey -out "$KEYF" $DSABITS
 
     [ ! -s "$KEYF" ] &&
-	openssl genrsa -out "$KEYF" $RSABITS
+	openssl ecparam -name prime256v1 -genkey -out "$KEYF"
 }
 
 create_cert() {
@@ -311,7 +315,7 @@ create_extras() {
     {
        openssl x509 -text -certopt ca_default,no_sigdump -in certs/"$F".crt
     #  openssl x509 -text -certopt ca_default,no_sigdump -in "$CACERT"
-       openssl pkey -text -in certs/"$F".key
+       openssl pkey -in certs/"$F".key
     } > certs/"$F".pem
 
     # Make a p12 or Windows pfx file (with a blank password!)
