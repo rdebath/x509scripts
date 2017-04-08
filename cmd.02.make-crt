@@ -102,8 +102,12 @@ fix_demoCA() {
 
     # No CA around, just make up something.
     [ -s "$CAKEY" ] || {
-        # Create a CA key and cert.
+        # First see if the ENV say what we want.
 	make_a_key "$CAKEY"
+
+	# No preference? I like this one.
+	[ ! -s "$CAKEY" ] &&
+	    openssl ecparam -name prime256v1 -genkey -out "$CAKEY"
 
 	openssl req $CONF -nodes -new -x509 -days 3652 \
 	    -subj "/OU=Private CA/CN=${CN:-localhost}/" \
@@ -204,12 +208,7 @@ fix_demoCA() {
 make_a_key() {
     KEYF="$1"
 
-    # Match the RSA bitsize of the CA
-    [ "$ECTYPE$RSABITS$DSABITS" = "" -a -s "$CAKEY" ] &&
-	RSABITS=$(openssl rsa -text -noout -in "$CAKEY" 2>&1 |
-	    awk '/^Private.Key: .*bit/{gsub("[^0-9]","",$2); print $2;}')
-
-    # Or match the EC type.
+    # Match a named EC curve using an ASN1 OID.
     # Recommend:
     #   secp256k1 fast with approx 2^128 brute force.
     #   secp256r1, secp384r1, secp521r1  Supported by Windows 2008 R2.
@@ -218,7 +217,17 @@ make_a_key() {
 	ECTYPE=$(openssl ec -in "$CAKEY" -noout -text 2>&1 |
 	    awk '/^ASN1 OID:/ {print $3;}')
 
-    # Do we have an EC curve type ?
+    # Match the RSA bitsize of the CA
+    [ "$ECTYPE$RSABITS$DSABITS" = "" -a -s "$CAKEY" ] &&
+	RSABITS=$(openssl rsa -text -noout -in "$CAKEY" 2>&1 |
+	    awk '/^Private.Key: .*bit/{gsub("[^0-9]","",$2); print $2;}')
+
+    # Match the DSA bitsize of the CA
+    [ "$ECTYPE$RSABITS$DSABITS" = "" -a -s "$CAKEY" ] &&
+	DSABITS=$(openssl dsa -text -noout -in "$CAKEY" 2>&1 |
+	    awk '/^Private.Key: .*bit/{gsub("[^0-9]","",$2); print $2;}')
+
+    # Do we have an EC curve name ?
     [ ! -s "$KEYF" -a "$ECTYPE" != "" ] &&
 	openssl ecparam -name "$ECTYPE" -genkey -out "$KEYF"
 
@@ -229,17 +238,15 @@ make_a_key() {
     # Do we have a DSA bit size ?
     [ ! -s "$KEYF" -a "$DSABITS" != "" ] &&
 	openssl dsaparam -genkey -out "$KEYF" $DSABITS
-
-    [ ! -s "$KEYF" ] &&
-	openssl ecparam -name prime256v1 -genkey -out "$KEYF"
 }
 
 create_cert() {
 
     # If the keytype has been defined use that.
-    # If there's no CN openssl/req prompts without properly saving the key.
-    [ "$ECTYPE$RSABITS$DSABITS" != "" -o "$CN" = "" ] &&
-	make_a_key certs/"$F".key
+    # If an EC key doesn't have a name "newkey param:" can still copy it.
+    # Note: "newkey param:" fails for RSA keys.
+    # Note: If there's no CN openssl/req prompts without properly saving the key.
+    make_a_key certs/"$F".key
 
     # Make the CSR
     if [ ! -s certs/"$F".key ]
