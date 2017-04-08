@@ -1,0 +1,83 @@
+#!/bin/bash -
+if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
+
+if [ "$#" -gt 0 ]
+then
+    F="$1"
+    case "$F" in
+    *: )
+	CN="${F%:}"
+	F="$CN"
+	;;
+    *:* )
+	CN="${F%:*}"
+	CATAG="${F##*:}"
+	F="$CN"
+       ;;
+    * ) CN="$F" ;;
+    esac
+else
+    F=cert
+    unset CN CATAG
+fi
+
+F=$(echo "$F" | tr -c '[a-zA-Z0-9\.\-\012]' _)
+
+[ -s certs/ca.key -o -s certs/ca.crt ] && { echo ERROR: CA already exists ; exit 1 ; }
+[ -s certs/"$F".crt ] && { echo ERROR: Certificate CN already exists ; exit 1 ; }
+
+mkdir -p certs
+
+# openssl genrsa -out certs/ca.key 2048
+# openssl dsaparam -genkey -out certs/ca.key 2048
+# openssl ecparam -name secp256k1 -genkey -out certs/ca.key
+openssl ecparam -name prime256v1 -genkey -out certs/ca.key
+openssl ecparam -name prime256v1 -genkey -out certs/"$F.key"
+
+SERIAL=0x$(openssl pkey -pubout -in certs/ca.key | openssl md5 | sed 's/.* //')
+CERTSERIAL=$(openssl pkey -pubout -in certs/"$F".key | openssl md5 | sed 's/.* //')
+export CERTSERIAL
+
+openssl req -new -x509 -days 3652 \
+    -set_serial $SERIAL \
+    -subj "/OU=Private CA/CN=$CN/" \
+    -key certs/ca.key -out certs/ca.crt -config <(
+    
+echo '
+[req]
+distinguished_name=req_distinguished_name
+x509_extensions=req_x509
+[ req_distinguished_name ]
+[ req_x509 ]
+basicConstraints=critical,CA:TRUE, pathlen:0
+keyUsage=keyCertSign
+extendedKeyUsage=serverAuth
+certificatePolicies=@x509_pol
+[ x509_pol ]
+policyIdentifier =  2.5.29.32.0
+userNotice=@notice
+[ notice ]
+explicitText=\r\n\
+This CA was created by TVision Technology LTD.\r\n\
+Only one certificate was signed by this CA.\r\n\
+The serial number of that certificate is:\r\n\'
+echo "$CERTSERIAL"'\r\n\r\n\'
+echo 'The common name and alternative names on the certificate are:\r\n\'
+for h
+do echo $h'\r\n\'
+done
+echo
+)
+
+{
+openssl x509 -text -certopt no_sigdump -in certs/ca.crt
+openssl pkey -text -in certs/ca.key
+}> certs/ca.pem
+
+export CRLURL="http://${F//_./}/CertEnroll/${F//_./}.ca.crl"
+
+bash cmd.02.make-crt "$@"
+
+rm certs/ca.pem certs/ca.key
+mv certs/ca.crt certs/"$F.ca.crt"
+mv certs/ca.crl certs/"$F.ca.crl"

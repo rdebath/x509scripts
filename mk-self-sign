@@ -1,0 +1,22 @@
+#!/bin/bash -
+if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
+mkdir certs || exit
+
+# openssl genrsa -out certs/ca.key 2048
+# openssl dsaparam -genkey -out certs/ca.key 2048
+# openssl ecparam -name secp256k1 -genkey -out certs/ca.key
+openssl ecparam -name prime256v1 -genkey -out certs/ca.key
+
+openssl req -new -x509 -days 3652 \
+    -subj "/CN=${*:-Private CA}/" \
+    -key certs/ca.key -out certs/ca.crt -config <(
+    
+echo '
+[req]
+distinguished_name=req_distinguished_name
+[ req_distinguished_name ]' )
+
+{
+openssl x509 -text -certopt no_sigdump -in certs/ca.crt
+openssl pkey -in certs/ca.key
+}> certs/ca.pem
