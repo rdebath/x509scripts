@@ -102,7 +102,7 @@ fix_demoCA() {
 
     # No CA around, just make up something.
     [ -s "$CAKEY" ] || {
-        # First see if the ENV say what we want.
+	# First see if the ENV say what we want.
 	make_a_key "$CAKEY"
 
 	# No preference? I like this one.
@@ -253,16 +253,16 @@ create_cert() {
     then
        # Create a request on a new key (like the CA).
        openssl req $CONF -nodes -new \
-             -newkey param:"$CACERT" \
-             ${CN:+-subj /CN="$CN"/} \
-             ${SANLIST:+-reqexts SANLIST} \
-             -keyout certs/"$F".key -out demoCA/certs/"$F".csr || exit
+	     -newkey param:"$CACERT" \
+	     ${CN:+-subj /CN="$CN"/} \
+	     ${SANLIST:+-reqexts SANLIST} \
+	     -keyout certs/"$F".key -out demoCA/certs/"$F".csr || exit
     else
        # Create a request on an existing key.
        openssl req $CONF -nodes -new \
-             ${CN:+-subj /CN="$CN"/} \
-             ${SANLIST:+-reqexts SANLIST} \
-             -key certs/"$F".key -out demoCA/certs/"$F".csr || exit
+	     ${CN:+-subj /CN="$CN"/} \
+	     ${SANLIST:+-reqexts SANLIST} \
+	     -key certs/"$F".key -out demoCA/certs/"$F".csr || exit
     fi
 
     # If the CN has been reset rename the files.

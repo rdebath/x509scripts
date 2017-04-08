@@ -23,7 +23,7 @@ main() {
     do
 	cname="$host"
 	# Add a ":server" for the type of certificate
-        case "$cname" in
+	case "$cname" in
 	*:* )   CTYPE="${cname##*:}"
 		cname="${cname%:*}"
 		;;
