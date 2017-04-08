@@ -1,8 +1,8 @@
 #!/bin/bash
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 
-rm -rf demoCA certs
-mkdir certs
+[ -s certs/ca.pem ] && { echo ERROR: CA already exists ; exit 1 ; }
+mkdir -p certs
 
 # Default insecurity
 case "$1" in
@@ -16,7 +16,8 @@ case "$1" in
 esac
 
 # Copy CA key
-openssl pkcs12 -nodes ${PASS:+-passin pass:$PASS} -in "$PFX" -out certs/ca.pem
+openssl pkcs12 -nodes ${PASS:+-passin pass:$PASS} -in "$PFX" -out certs/ca.pem ||
+    exit
 
 if [ "$#" -gt 0 ]
 then

@@ -23,7 +23,7 @@ fi
 
 F=$(echo "$F" | tr -c '[a-zA-Z0-9\.\-\012]' _)
 
-[ -s certs/ca.key -o -s certs/ca.crt ] && { echo ERROR: CA already exists ; exit 1 ; }
+[ -s certs/ca.pem ] && { echo ERROR: CA already exists ; exit 1 ; }
 [ -s certs/"$F".crt ] && { echo ERROR: Certificate CN already exists ; exit 1 ; }
 
 mkdir -p certs
