@@ -1,0 +1,41 @@
+#!/bin/bash -
+if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
+
+CN=${1:-server}
+CERT_DAYS="${CERT_DAYS:-$2}"
+CERT_DAYS="${CERT_DAYS:-3652}"
+
+[ -s certs/"$CN".key ] && { echo "ERROR: Name '$CN' already exists" ; exit 1 ; }
+mkdir -p certs 
+set -e
+
+# The CA key
+openssl ecparam -name prime256v1 -genkey -out certs/"$CN".ca.key
+
+# Self sign the CA
+openssl req -new -x509 -days "$CERT_DAYS" \
+    -subj "/OU=CA/CN=$CN/" \
+    -key certs/"$CN".ca.key -config <(echo '
+[req]
+distinguished_name = req_distinguished_name
+x509_extensions = req_x509
+[ req_x509 ]
+[ req_distinguished_name ]' ) |
+openssl x509 -subject > certs/"$CN".ca.crt
+
+# Make system key, matching the CA
+openssl req -new -nodes \
+    -newkey param:certs/"$CN".ca.crt \
+    -subj "/CN=$CN/" \
+    -keyout certs/$CN.key |
+
+# Sign it
+openssl x509 -req -days "$CERT_DAYS" \
+    -set_serial 0x$(openssl rand -hex 8) \
+    -out certs/$CN.crt \
+    -CA certs/"$CN".ca.crt \
+    -CAkey certs/"$CN".ca.key \
+    -extfile /dev/null
+
+# Remove the CA key
+rm certs/"$CN".ca.key
