@@ -1,6 +1,8 @@
 #!/bin/bash -
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
-mkdir certs || exit
+
+[ -s certs/ca.key -o -s certs/ca.crt ] && { echo ERROR: CA already exists ; exit 1 ; }
+mkdir -p certs 
 
 # openssl genrsa -out certs/ca.key 2048
 # openssl dsaparam -genkey -out certs/ca.key 2048
