@@ -9,7 +9,7 @@ mkdir -p certs
 # openssl ecparam -name secp256k1 -genkey -out certs/ca.key
 openssl ecparam -name prime256v1 -genkey -out certs/ca.key
 
-openssl req -new -x509 -days 3652 \
+openssl req -new -x509 -days "${CERTDAYS:-3652}" \
     -subj "/CN=${*:-Private CA}/" \
     -key certs/ca.key -out certs/ca.crt -config <(
     
