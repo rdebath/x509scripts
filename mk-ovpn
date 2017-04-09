@@ -16,7 +16,6 @@ do
     esac
 done
 
-CERT_DAYS="${CERT_DAYS:-$2}"
 CERT_DAYS="${CERT_DAYS:-3652}"
 
 [ -s certs/"$CN".key ] && { echo "ERROR: Name '$CN' already exists" ; exit 1 ; }
