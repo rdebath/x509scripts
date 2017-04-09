@@ -1,0 +1,67 @@
+#!/bin/bash -
+if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
+
+[ "$#" = 0 ] && { echo >&2 "Usage: $0 CommonName [Options]" ; exit 1; }
+CN="$1"
+
+[ -s certs/"$CN".key ] || { echo "ERROR: Name '$CN' does not exist" ; exit 1 ; }
+
+for file in pattern-*.ovpn
+do
+    nfile="certs/$CN-${file/pattern-/}"
+
+    {
+	cat "$file"
+
+	if grep -q key-direction "$file"
+	then
+	    echo '<tls-auth>'
+	    cat certs/tls-auth.pvkey
+	    echo '</tls-auth>'
+	fi
+
+	echo '<cert>'
+	openssl x509 -subject -serial -dates -in certs/"$CN".crt
+	echo '</cert>'
+
+	echo '<key>'
+	openssl pkey -in certs/"$CN".key
+	echo '</key>'
+
+	echo '<ca>'
+
+	# Add all the CA certificates for certificates with the "server" flag.
+	for i in certs/*.crt
+	do
+	    {
+		openssl x509 -in "$i" -noout -purpose |
+		    grep -q 'SSL client : No' &&
+		    echo "$i"
+	    } | while read cert
+	    do
+		CA="${cert/.crt/.ca.crt}"
+		[ -s "$CA" ] &&
+		    openssl x509 -subject -serial -dates -in "$CA"
+	    done
+	done
+	echo '</ca>'
+
+    } > "$nfile"
+
+done
+
+# Add all the CA certificates for certificates without the "server" flag.
+for i in certs/*.crt
+do
+    {
+	openssl x509 -in "$i" -noout -purpose |
+	    grep -q 'SSL client : No' ||
+	    echo "$i"
+    } | while read cert
+    do
+	CA="${cert/.crt/.ca.crt}"
+	[ -s "$CA" ] &&
+	    openssl x509 -subject -serial -dates -in "$CA"
+    done
+done > certs/clients.ca-list.pem
+

@@ -1,7 +1,21 @@
 #!/bin/bash -
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 
-CN=${1:-server}
+[ "$#" = 0 ] && { echo >&2 "Usage: $0 CommonName [Options]" ; exit 1; }
+CN="$1" ; shift
+V3FLG=""
+
+# Some options...
+for v
+do
+    case "$v" in
+    svr|s|server ) V3FLG="nsCertType = server" ;;
+    c|client ) V3FLG="nsCertType = client" ;;
+    [1-9]*[0-9] ) CERT_DAYS="$v" ;;
+    * ) echo >&2 "Option $v not recognised"; exit 1;;
+    esac
+done
+
 CERT_DAYS="${CERT_DAYS:-$2}"
 CERT_DAYS="${CERT_DAYS:-3652}"
 
@@ -36,7 +50,7 @@ openssl x509 -req -days "$CERT_DAYS" \
     -out certs/$CN.crt \
     -CA certs/"$CN".ca.crt \
     -CAkey certs/"$CN".ca.key \
-    -extfile <(echo basicConstraints = critical,CA:FALSE )
+    -extfile <(echo basicConstraints = critical,CA:FALSE ; echo "$V3FLG" )
 
 # Remove the CA key
 rm certs/"$CN".ca.key
