@@ -38,6 +38,6 @@ organizationalUnitName = Organizational Unit Name
 commonName = Common Name' )
 
 {
-    openssl x509 -text -certopt no_sigdump -in certs/ca.crt
+    openssl x509 -subject -serial -dates -in certs/ca.crt
     openssl pkey -in certs/ca.key
 }> certs/ca.pem

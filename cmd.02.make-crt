@@ -149,7 +149,7 @@ fix_demoCA() {
 	# Recreating.
 	[ -s certs/ca.crt ] || openssl x509 -in "$CACERT" -out certs/ca.crt
 	[ -s certs/ca.pem ] || {
-	    openssl x509 -text -certopt ca_default,no_sigdump -in "$CACERT"
+	    openssl x509 -subject -serial -dates -in "$CACERT"
 	    openssl pkey -in "$CAKEY"
 	} > certs/ca.pem
     }
@@ -325,8 +325,8 @@ create_cert() {
 create_extras() {
     # This seems to be how you make a combined PEM
     {
-       openssl x509 -text -certopt ca_default,no_sigdump -in certs/"$F".crt
-    #  openssl x509 -text -certopt ca_default,no_sigdump -in "$CACERT"
+       openssl x509 -subject -serial -dates -in certs/"$F".crt
+    #  openssl x509 -subject -serial -dates -in "$CACERT"
        openssl pkey -in certs/"$F".key
     } > certs/"$F".pem
 

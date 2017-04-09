@@ -70,8 +70,8 @@ echo
 )
 
 {
-openssl x509 -text -certopt no_sigdump -in certs/ca.crt
-openssl pkey -text -in certs/ca.key
+    openssl x509 -in certs/ca.crt
+    openssl pkey -in certs/ca.key
 }> certs/ca.pem
 
 export CRLURL="http://${F//_./}/CertEnroll/${F//_./}.ca.crl"
