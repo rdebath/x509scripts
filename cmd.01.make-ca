@@ -6,7 +6,14 @@ set -e
 
 if [ $# -gt 0 ] ; then
     SUBJ="$*" ;
-    case "$SUBJ" in */* ) ;; "" ) SUBJ="/" ;; * ) SUBJ="/CN=$SUBJ/" ;; esac
+    case "$SUBJ" in */* ) ;; "" ) SUBJ="/" ;; * )
+	if [ "${#SUBJ}" -le 64 ]
+	then SUBJ="/CN=$SUBJ/"
+	elif [ "${#SUBJ}" -le 32768 ]
+	then SUBJ="/name=$SUBJ/"
+	else SUBJ="/unstructuredName=$SUBJ/"
+	fi
+    ;; esac
 else unset SUBJ
 fi
 
