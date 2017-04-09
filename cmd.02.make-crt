@@ -92,6 +92,11 @@ fix_demoCA() {
     [ ! -s "$CAKEY" -a -s certs/ca.pem ] && {
 	openssl pkey -in certs/ca.pem -out "$CAKEY" &&
 	openssl x509 -in certs/ca.pem -out "$CACERT" 2>/dev/null
+
+	[ ! -s "$CAKEY" -a -s certs/ca.key ] &&
+	    openssl pkey -in certs/ca.pem -out "$CAKEY"
+	[ ! -s "$CACERT" -a -s certs/ca.crt ] &&
+	    openssl x509 -in certs/ca.crt -out "$CACERT"
     }
 
     # We've got a key, but no cert ... okay

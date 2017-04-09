@@ -40,7 +40,7 @@ export CERTSERIAL
 
 openssl req -new -x509 -days 3652 \
     -set_serial $SERIAL \
-    -subj "/OU=Private CA/CN=$CN/" \
+    -subj "/OU=$CN/CN=Private CA/" \
     -key certs/ca.key -out certs/ca.crt -config <(
     
 echo '

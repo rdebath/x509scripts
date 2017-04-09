@@ -14,12 +14,13 @@ openssl ecparam -name prime256v1 -genkey -out certs/"$CN".ca.key
 
 # Self sign the CA
 openssl req -new -x509 -days "$CERT_DAYS" \
-    -subj "/OU=CA/CN=$CN/" \
+    -subj "/OU=$CN/CN=Private CA/" \
     -key certs/"$CN".ca.key -config <(echo '
 [req]
 distinguished_name = req_distinguished_name
 x509_extensions = req_x509
 [ req_x509 ]
+basicConstraints = critical,CA:TRUE, pathlen:0
 [ req_distinguished_name ]' ) |
 openssl x509 -subject > certs/"$CN".ca.crt
 
@@ -35,7 +36,7 @@ openssl x509 -req -days "$CERT_DAYS" \
     -out certs/$CN.crt \
     -CA certs/"$CN".ca.crt \
     -CAkey certs/"$CN".ca.key \
-    -extfile /dev/null
+    -extfile <(echo basicConstraints = critical,CA:FALSE )
 
 # Remove the CA key
 rm certs/"$CN".ca.key
