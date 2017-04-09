@@ -1,61 +1,14 @@
 #!/bin/bash -
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 
-[ "$#" = 0 ] && { echo >&2 "Usage: $0 CommonName [Options]" ; exit 1; }
-CN="$1"
+[ -d certs ] || { echo >&2 ERROR: Certificate directory missing ; exit 1;}
 
-[ -s certs/"$CN".key ] || { echo "ERROR: Name '$CN' does not exist" ; exit 1 ; }
-
-for file in pattern-*.ovpn
-do
-    nfile="certs/$CN-${file/pattern-/}"
-
-    {
-	cat "$file"
-
-	if grep -q key-direction "$file"
-	then
-	    echo '<tls-auth>'
-	    cat certs/tls-auth.pvkey
-	    echo '</tls-auth>'
-	fi
-
-	echo '<cert>'
-	openssl x509 -subject -serial -dates -in certs/"$CN".crt
-	echo '</cert>'
-
-	echo '<key>'
-	openssl pkey -in certs/"$CN".key
-	echo '</key>'
-
-	echo '<ca>'
-
-	# Add all the CA certificates for certificates with the "server" flag.
-	for i in certs/*.crt
-	do
-	    {
-		openssl x509 -in "$i" -noout -purpose |
-		    grep -q 'SSL client : No' &&
-		    echo "$i"
-	    } | while read cert
-	    do
-		CA="${cert/.crt/.ca.crt}"
-		[ -s "$CA" ] &&
-		    openssl x509 -subject -serial -dates -in "$CA"
-	    done
-	done
-	echo '</ca>'
-
-    } > "$nfile"
-
-done
-
-# Add all the CA certificates for certificates without the "server" flag.
+# Add all the CA certificates for certificates with the "server" flag.
 for i in certs/*.crt
 do
     {
 	openssl x509 -in "$i" -noout -purpose |
-	    grep -q 'SSL client : No' ||
+	    grep -q 'SSL client : No' &&
 	    echo "$i"
     } | while read cert
     do
@@ -63,5 +16,103 @@ do
 	[ -s "$CA" ] &&
 	    openssl x509 -subject -serial -dates -in "$CA"
     done
+done > certs/servers.ca-list.pem
+
+[ -s certs/servers.ca-list.pem ] || {
+    echo >&2 ERROR: No servers have been defined.
+    exit 1
+}
+
+mkdir -p ovpn-conf
+
+[ -f certs/tls-auth.pvkey ] ||
+    openvpn --genkey --secret certs/tls-auth.pvkey
+
+# For all certificates without the "server" flag.
+for i in certs/*.crt
+do
+    openssl x509 -in "$i" -noout -purpose |
+        grep -q '^SSL client : No' ||
+        echo "$i"
+done |
+while read cert
+do
+    CN="$(basename "$cert" .crt)"
+    CA="certs/$CN.ca.crt"
+    [ -s certs/"$CN".key -a -s "$CA" ] && {
+
+	echo Client $CN
+
+	for file in pattern*.ovpn
+	do
+	    nfile="ovpn-conf/$CN${file/pattern/}"
+
+	    {
+		cat "$file"
+
+		if grep -q key-direction "$file"
+		then
+		    echo '<tls-auth>'
+		    cat certs/tls-auth.pvkey
+		    echo '</tls-auth>'
+		fi
+
+		echo '<cert>'
+		openssl x509 -subject -serial -dates -in certs/"$CN".crt
+		echo '</cert>'
+
+		echo '<key>'
+		openssl pkey -in certs/"$CN".key
+		echo '</key>'
+
+		echo '<ca>'
+		cat certs/servers.ca-list.pem
+		echo '</ca>'
+
+	    } > "$nfile"
+
+	done
+    }
+done
+
+# Add all the CA certificates for certificates without the "server" flag.
+for i in certs/*.crt
+do
+    openssl x509 -in "$i" -noout -purpose |
+	grep -q '^SSL client : No' ||
+	echo "$i"
+done |
+while read cert
+do
+    CN="$(basename "$cert" .crt)"
+    CA="certs/$CN.ca.crt"
+    [ -s "$CA" ] &&
+	openssl x509 -subject -serial -dates -in "$CA"
 done > certs/clients.ca-list.pem
+
+# Copy all the certificates and keys with the "server" flag.
+for i in certs/*.crt
+do
+    openssl x509 -in "$i" -noout -purpose |
+	grep -q '^SSL client : No' &&
+	echo "$i"
+done |
+while read cert
+do
+    CN="$(basename "$cert" .crt)"
+    [ -s certs/"$CN".key ] && {
+	echo Server $CN
+
+	openssl x509 -subject -serial -dates -in certs/"$CN".crt > ovpn-conf/"$CN".crt
+	openssl pkey -in certs/"$CN".key > ovpn-conf/"$CN".key
+
+	cp -p certs/clients.ca-list.pem ovpn-conf/"$CN".ca-list.pem
+
+	[ -s certs/dhparam.pem ] ||
+	    openssl dhparam -out certs/dhparam.pem 1024
+
+	cp -p certs/dhparam.pem ovpn-conf/"$CN".dhparam.pem
+	cp -p certs/tls-auth.pvkey ovpn-conf/"$CN".tls-auth.pvk
+    }
+done
 

@@ -4,13 +4,14 @@ if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 [ "$#" = 0 ] && { echo >&2 "Usage: $0 CommonName [Options]" ; exit 1; }
 CN="$1" ; shift
 V3FLG=""
+SERVER=no
 
 # Some options...
 for v
 do
     case "$v" in
-    svr|s|server ) V3FLG="nsCertType = server" ;;
-    c|client ) V3FLG="nsCertType = client" ;;
+    svr|s|server ) V3FLG="nsCertType = server" ; SERVER=yes ;;
+    c|client ) V3FLG="nsCertType = client" ; SERVER=no ;;
     [1-9]*[0-9] ) CERT_DAYS="$v" ;;
     * ) echo >&2 "Option $v not recognised"; exit 1;;
     esac
@@ -21,6 +22,17 @@ CERT_DAYS="${CERT_DAYS:-3652}"
 [ -s certs/"$CN".key ] && { echo "ERROR: Name '$CN' already exists" ; exit 1 ; }
 mkdir -p certs 
 set -e
+
+# Do we have DH parameters?
+[ "$SERVER" = yes ] && {
+    # Very slow
+    [ -s certs/dhparam.pem ] ||
+	openssl dhparam -out certs/dhparam.pem 1024
+
+    # Twice the size but faster. However, it should probably be kept secret.
+    [ -s certs/dhparam.pem ] ||
+	openssl dsaparam 2048 | openssl dhparam -dsaparam -out certs/dhparam.pem
+}
 
 # The CA key
 openssl ecparam -name prime256v1 -genkey -out certs/"$CN".ca.key
