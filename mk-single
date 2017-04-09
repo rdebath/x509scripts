@@ -24,7 +24,7 @@ fi
 F=$(echo "$F" | tr -c '[a-zA-Z0-9\.\-\012]' _)
 
 [ -s certs/ca.pem ] && { echo ERROR: CA already exists ; exit 1 ; }
-[ -s certs/"$F".crt ] && { echo ERROR: Certificate CN already exists ; exit 1 ; }
+[ -s certs/"$F".crt ] && { echo "ERROR: Certificate for '$CN' already exists" ; exit 1 ; }
 
 mkdir -p certs
 

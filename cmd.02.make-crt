@@ -97,7 +97,7 @@ fix_demoCA() {
     # We've got a key, but no cert ... okay
     [ -s "$CAKEY" -a ! -s "$CACERT" ] &&
 	openssl req $CONF -nodes -new -x509 -days 3652 \
-	    -subj "/OU=Private CA/CN=${CN:-localhost}/" \
+	    -subj "/CN=Private CA/" \
 	    -key "$CAKEY" -out "$CACERT"
 
     # No CA around, just make up something.
@@ -110,7 +110,7 @@ fix_demoCA() {
 	    openssl ecparam -name prime256v1 -genkey -out "$CAKEY"
 
 	openssl req $CONF -nodes -new -x509 -days 3652 \
-	    -subj "/OU=Private CA/CN=${CN:-localhost}/" \
+	    -subj "/CN=Private CA/" \
 	    -key "$CAKEY" -out "$CACERT"
     }
 

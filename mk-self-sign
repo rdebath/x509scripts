@@ -1,5 +1,6 @@
 #!/bin/bash -
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
+set -e
 
 [ -s certs/ca.pem ] && { echo ERROR: CA already exists ; exit 1 ; }
 mkdir -p certs 
@@ -13,14 +14,21 @@ mkdir -p certs
 # openssl ecparam -name secp256k1 -genkey -out certs/ca.key
 openssl ecparam -name prime256v1 -genkey -out certs/ca.key
 
+if [ $# -gt 0 ] ; then
+    SUBJ="$*" ;
+    case "$SUBJ" in */* ) ;; "" ) SUBJ="/" ;; * ) SUBJ="/CN=$SUBJ/" ;; esac
+else unset SUBJ
+fi
+
 KEY=-key ; [ -s certs/ca.key ] || KEY="-nodes -keyout"
 openssl req -new -x509 -days "${CERT_DAYS:-3652}" \
-    -subj "/CN=${*:-Private CA}/" \
+    ${SUBJ:+-subj "$SUBJ"} \
     $KEY certs/ca.key -out certs/ca.crt -config <(echo '
 [req]
-default_bits = 3072
 distinguished_name = req_distinguished_name
-[ req_distinguished_name ]' )
+[ req_distinguished_name ]
+organizationalUnitName = Organizational Unit Name
+commonName = Common Name' )
 
 {
     openssl x509 -text -certopt no_sigdump -in certs/ca.crt
