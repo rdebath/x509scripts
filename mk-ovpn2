@@ -3,20 +3,20 @@ if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 
 [ -d certs ] || { echo >&2 ERROR: Certificate directory missing ; exit 1;}
 
-# Add all the CA certificates for certificates with the "server" flag.
-for i in certs/*.crt
+umask 077
+
+build_files() {
+
+mkdir -p tmp
+
+# Add all the server CA certificates.
+for CA in certs/*.ca.cer
 do
-    {
-	openssl x509 -in "$i" -noout -purpose |
-	    grep -q 'SSL client : No' &&
-	    echo "$i"
-    } | while read cert
-    do
-	CA="${cert/.crt/.ca.crt}"
-	[ -s "$CA" ] &&
-	    openssl x509 -subject -serial -dates -in "$CA"
-    done
-done > certs/servers.ca-list.pem
+    [ -s "$CA" ] &&
+	openssl x509 -subject -serial -dates -in "$CA"
+done > tmp/servers.ca-list.pem
+
+try_file certs servers.ca-list.pem
 
 [ -s certs/servers.ca-list.pem ] || {
     echo >&2 ERROR: No servers have been defined.
@@ -25,19 +25,14 @@ done > certs/servers.ca-list.pem
 
 mkdir -p ovpn-conf
 
-[ -f certs/tls-auth.pvkey ] ||
-    openvpn --genkey --secret certs/tls-auth.pvkey
+# Need one of these to create the client files correctly.
+[ -f certs/tls-crypt.pvk ] ||
+    openvpn --genkey --secret certs/tls-crypt.pvk
 
-# For all certificates without the "server" flag.
-for i in certs/*.crt
+# For all the client CA certificates
+for cert in certs/*.ca.crt
 do
-    openssl x509 -in "$i" -noout -purpose |
-        grep -q '^SSL client : No' ||
-        echo "$i"
-done |
-while read cert
-do
-    CN="$(basename "$cert" .crt)"
+    CN="$(basename "$cert" .ca.crt)"
     CA="certs/$CN.ca.crt"
     [ -s certs/"$CN".key -a -s "$CA" ] && {
 
@@ -45,17 +40,19 @@ do
 
 	for file in pattern*.ovpn
 	do
-	    nfile="ovpn-conf/$CN${file/pattern/}"
+	    tfile="$CN${file/pattern/}"
 
 	    {
 		cat "$file"
 
-		if grep -q key-direction "$file"
-		then
-		    echo '<tls-auth>'
-		    cat certs/tls-auth.pvkey
-		    echo '</tls-auth>'
-		fi
+		[ -s certs/tls-crypt.pvk ] && {
+		    if ! grep -q tls-auth "$file"
+		    then
+			echo '<tls-crypt>'
+			cat certs/tls-crypt.pvk
+			echo '</tls-crypt>'
+		    fi
+		}
 
 		echo '<cert>'
 		openssl x509 -subject -serial -dates -in certs/"$CN".crt
@@ -69,50 +66,62 @@ do
 		cat certs/servers.ca-list.pem
 		echo '</ca>'
 
-	    } > "$nfile"
+	    } > tmp/"$tfile"
 
+	    try_file ovpn-conf "$tfile"
 	done
     }
 done
 
-# Add all the CA certificates for certificates without the "server" flag.
-for i in certs/*.crt
+# Add all the client CA certificates
+for cert in certs/*.ca.crt
 do
-    openssl x509 -in "$i" -noout -purpose |
-	grep -q '^SSL client : No' ||
-	echo "$i"
-done |
-while read cert
-do
-    CN="$(basename "$cert" .crt)"
+    CN="$(basename "$cert" .ca.crt)"
     CA="certs/$CN.ca.crt"
-    [ -s "$CA" ] &&
+    [ -s certs/"$CN".crt -a -s "$CA" ] && {
 	openssl x509 -subject -serial -dates -in "$CA"
-done > certs/clients.ca-list.pem
+	echo
+    }
+done > tmp/clients.ca-list.pem
 
-# Copy all the certificates and keys with the "server" flag.
-for i in certs/*.crt
+try_file certs clients.ca-list.pem
+
+# Copy all the certificates and keys for the servers.
+for cert in certs/*.ca.cer
 do
-    openssl x509 -in "$i" -noout -purpose |
-	grep -q '^SSL client : No' &&
-	echo "$i"
-done |
-while read cert
-do
-    CN="$(basename "$cert" .crt)"
+    CN="$(basename "$cert" .ca.cer)"
     [ -s certs/"$CN".key ] && {
 	echo Server $CN
 
-	openssl x509 -subject -serial -dates -in certs/"$CN".crt > ovpn-conf/"$CN".crt
-	openssl pkey -in certs/"$CN".key > ovpn-conf/"$CN".key
+	openssl x509 -subject -serial -dates -in certs/"$CN".crt > tmp/"$CN".crt
+	openssl pkey -in certs/"$CN".key > tmp/"$CN".key
 
-	cp -p certs/clients.ca-list.pem ovpn-conf/"$CN".ca-list.pem
+	cp -p certs/clients.ca-list.pem tmp/"$CN".ca-list.pem
 
-	[ -s certs/dhparam.pem ] ||
-	    openssl dhparam -out certs/dhparam.pem 1024
+	cp -p certs/tls-crypt.pvk tmp/"$CN".tls-crypt.pvk
 
-	cp -p certs/dhparam.pem ovpn-conf/"$CN".dhparam.pem
-	cp -p certs/tls-auth.pvkey ovpn-conf/"$CN".tls-auth.pvk
+	try_file ovpn-conf "$CN".crt
+	try_file ovpn-conf "$CN".key
+	try_file ovpn-conf "$CN".ca-list.pem
+	try_file ovpn-conf "$CN".tls-crypt.pvk
+
+	[ -f certs/dhparam.pem ] && {
+	    cp -p certs/dhparam.pem tmp/"$CN".dhparam.pem
+	    try_file ovpn-conf "$CN".dhparam.pem
+	}
     }
 done
 
+rm -rf tmp
+}
+
+try_file() {
+    [ ! -s "$1"/"$2" ] &&
+	cp -p tmp/"$2" "$1"/"$2"
+    if ! cmp -s tmp/"$2" "$1"/"$2"
+    then cp -p tmp/"$2" "$1"/"$2"
+    fi
+    [ -f tmp/"$2" ] && rm tmp/"$2"
+}
+
+build_files

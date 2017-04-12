@@ -1,57 +1,83 @@
 #!/bin/bash -
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
-
 [ "$#" = 0 ] && { echo >&2 "Usage: $0 CommonName [Options]" ; exit 1; }
+#
+# This script creates certificates for OpenVPN tls setups.
+# Each key has a different CA certificate created for it and the setup
+# is designed so that any machine only has the CA certificates for the
+# machines that it is allowed to connect to.
+#
+# Note the nsCertType flag is not required to make this secure, but is
+# only used to mark those certificates that should be put in configurations
+# formatted for client or server style use.
+
 CN="$1" ; shift
-V3FLG=""
+V3CA=""
+V3CERT=""
 SERVER=no
+ECPARAM=prime256v1
+CAFILE=certs/"$CN".ca.crt
+CACN='Private CA'
+
+V3BASECERT='basicConstraints = critical,CA:FALSE
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid,issuer
+'
+V3BASECA='
+x509_extensions = req_x509
+[ req_x509 ]
+basicConstraints = critical,CA:TRUE, pathlen:0
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid:always,issuer
+'
 
 # Some options...
 for v
 do
     case "$v" in
-    svr|s|server ) V3FLG="nsCertType = server" ; SERVER=yes ;;
-    c|client ) V3FLG="nsCertType = client" ; SERVER=no ;;
-    [1-9]*[0-9] ) CERT_DAYS="$v" ;;
+    s|server ) SERVER=yes ; CACN='OpenVPN server CA' ;;
+    c|client ) SERVER=client ; CACN='OpenVPN client CA' ;;
+    v3 )
+	V3CERT="${V3BASECERT}"
+	V3CA="$V3BASECA"
+	;;
+    [1-9]*[0-9] )
+	CERT_DAYS="$v" ;;
     * ) echo >&2 "Option $v not recognised"; exit 1;;
     esac
 done
 
+[ "$V3CERT" != "" -a "$SERVER" = yes ] &&
+    V3CERT="${V3BASECERT} nsCertType = server "
+[ "$V3CERT" != "" -a "$SERVER" = client ] &&
+    V3CERT="${V3BASECERT} nsCertType = client "
+
+[ "$SERVER" = yes ] &&
+    CAFILE=certs/"$CN".ca.cer
+
 CERT_DAYS="${CERT_DAYS:-3652}"
 
 [ -s certs/"$CN".key ] && { echo "ERROR: Name '$CN' already exists" ; exit 1 ; }
+umask 077
 mkdir -p certs 
 set -e
 
-# Do we have DH parameters?
-[ "$SERVER" = yes ] && {
-    # Very slow
-    [ -s certs/dhparam.pem ] ||
-	openssl dhparam -out certs/dhparam.pem 1024
-
-    # Twice the size but faster. However, it should probably be kept secret.
-    [ -s certs/dhparam.pem ] ||
-	openssl dsaparam 2048 | openssl dhparam -dsaparam -out certs/dhparam.pem
-}
-
 # The CA key
-openssl ecparam -name prime256v1 -genkey -out certs/"$CN".ca.key
+openssl ecparam -name $ECPARAM -genkey -out certs/"$CN".ca.key
 
 # Self sign the CA
 openssl req -new -x509 -days "$CERT_DAYS" \
-    -subj "/OU=$CN/CN=Private CA/" \
+    -subj "/OU=$CN/CN=$CACN/" \
     -key certs/"$CN".ca.key -config <(echo '
 [req]
 distinguished_name = req_distinguished_name
-x509_extensions = req_x509
-[ req_x509 ]
-basicConstraints = critical,CA:TRUE, pathlen:0
+'"$V3CA"'
 [ req_distinguished_name ]' ) |
-openssl x509 -subject > certs/"$CN".ca.crt
+openssl x509 -subject > "$CAFILE"
 
-# Make system key, matching the CA
+# Make system key, matching the CA type
 openssl req -new -nodes \
-    -newkey param:certs/"$CN".ca.crt \
+    -newkey param:"$CAFILE" \
     -subj "/CN=$CN/" \
     -keyout certs/$CN.key |
 
@@ -59,9 +85,9 @@ openssl req -new -nodes \
 openssl x509 -req -days "$CERT_DAYS" \
     -set_serial 0x$(openssl rand -hex 8) \
     -out certs/$CN.crt \
-    -CA certs/"$CN".ca.crt \
+    -CA "$CAFILE" \
     -CAkey certs/"$CN".ca.key \
-    -extfile <(echo basicConstraints = critical,CA:FALSE ; echo "$V3FLG" )
+    ${V3CERT:+-extfile <(echo "$V3CERT")}
 
 # Remove the CA key
 rm certs/"$CN".ca.key
