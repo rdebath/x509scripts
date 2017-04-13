@@ -1,0 +1,15 @@
+#/bin/bash
+
+umask 077
+mkdir -p certs
+
+# Very slow to generate but fast to use.
+[ -s certs/dhparam.pem ] ||
+    openssl dhparam -out certs/dhparam.pem -2 2048
+
+# Much faster to generate, however working performance is lower.
+[ -s certs/dhparam.pem ] ||
+    openssl dsaparam 2048 | openssl dhparam -dsaparam -out certs/dhparam.pem
+
+
+# https://security.stackexchange.com/questions/54359/what-is-the-difference-between-diffie-hellman-generator-2-and-5
