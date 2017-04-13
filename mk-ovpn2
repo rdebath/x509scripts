@@ -40,7 +40,11 @@ do
 
 	for file in pattern*.ovpn
 	do
-	    tfile="$CN${file/pattern/}"
+	    if [ -f "$file" ]
+	    then tfile="$CN${file/pattern/}"
+	    else file=/dev/null
+		 tfile="$CN.ovpn"
+	    fi
 
 	    {
 		cat "$file"
