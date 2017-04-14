@@ -7,13 +7,20 @@ umask 077
 
 build_files() {
 
-mkdir -p tmp
+mkdir -p tmp ovpn-conf
+
+SERVERCOUNT=0
+SERVERNAME=
 
 # Add all the server CA certificates.
 for CA in certs/*.ca.cer
 do
-    [ -s "$CA" ] &&
+    [ -s "$CA" ] && {
 	openssl x509 -subject -serial -dates -in "$CA"
+	SERVERCOUNT=$((SERVERCOUNT+1))
+	SERVERNAME="$(openssl x509 -noout -in "${CA/.ca.cer/.crt}" \
+	    -subject -nameopt multiline | sed -n 's/ *commonName *= //p')"
+    }
 done > tmp/servers.ca-list.pem
 
 try_file certs servers.ca-list.pem
@@ -23,9 +30,7 @@ try_file certs servers.ca-list.pem
     exit 1
 }
 
-mkdir -p ovpn-conf
-
-# Need one of these to create the client files correctly.
+# Protect the TLS handshake from s-kiddies.
 [ -f certs/tls-crypt.pvk ] ||
     openvpn --genkey --secret certs/tls-crypt.pvk
 
@@ -48,6 +53,14 @@ do
 
 	    {
 		cat "$file"
+
+		# If there's one server cert mark choose it to stop the deamon
+		# whinging. This has NO security effect as the CA is unique.
+		[ "$SERVERCOUNT" -eq 1 -a "$SERVERNAME" != "" ] && {
+		    echo x509-username-field CN
+		    echo "verify-x509-name '$SERVERNAME' name"
+		    echo
+		}
 
 		[ -s certs/tls-crypt.pvk ] && {
 		    if ! grep -q tls-auth "$file"
