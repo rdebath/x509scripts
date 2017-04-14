@@ -15,7 +15,7 @@ V3CERT=""
 SERVER=no
 ECPARAM=prime256v1
 CAFILE=certs/"$CN".ca.crt
-CACN='Private CA'
+CAOU='Private CA'
 SERVEROU="OpenVPN Server TLS"
 CERTOU=""
 CASUBJ=""
@@ -36,8 +36,8 @@ authorityKeyIdentifier=keyid:always,issuer
 for v
 do
     case "$v" in
-    s|server ) SERVER=yes ; CACN='OpenVPN server CA' ;;
-    c|client ) SERVER=client ; CACN='OpenVPN client CA' ;;
+    s|server ) SERVER=yes ; CAOU='OpenVPN server CA' ;;
+    c|client ) SERVER=client ; CAOU='OpenVPN client CA' ;;
     v3 )
 	V3CERT="${V3BASECERT}"
 	V3CA="$V3BASECA"
@@ -61,7 +61,7 @@ done
 [ "$CERTOU" = "" -a "$SERVER" = yes ] &&
     CERTOU="$SERVEROU"
 
-[ "$CASUBJ" = "" ] && CASUBJ="/OU=$CN/CN=$CACN/"
+[ "$CASUBJ" = "" ] && CASUBJ="/CN=$CN/OU=$CAOU/"
 
 CERT_DAYS="${CERT_DAYS:-3652}"
 
