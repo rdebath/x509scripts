@@ -77,10 +77,7 @@ main() {
     # echo copy_extensions=subjectAltName >> "$TMP".cnf
 
     fix_demoCA
-
     create_cert
-    # create_self_signed_cert
-
     create_extras
 }
 
@@ -415,14 +412,6 @@ choose_cert_type() {
 
 conv_pfx_to_pem() {
     openssl pkcs12 -passin pass: -in "$1".pfx -out "$1".pfx.pem -nodes
-}
-
-create_self_signed_cert() {
-    openssl req $CONF -new -x509 -days 3652 -nodes \
-	-extensions dyn_ext \
-	-set_serial 0x$(openssl rand -hex 16) \
-	-keyout certs/"$F".key -out certs/"$F".crt \
-	${CN:+-subj /CN="$CN"/}
 }
 
 main "$@"

@@ -21,8 +21,8 @@ do  case "$ar" in
     -md4|-md5|-ripemd160|-sha|-sha1|-sha224|-sha256|-sha384|-sha512|-whirlpool)
 	DGST=$ar ;;
 
-    -* ) echo >&2 "Unknown option: $ar" ; exit 1 ;;
-    * ) SUBJ="/CN=$ar" ; CN="$ar";;
+    -*|*/*) echo >&2 "Unknown option: $ar" ; exit 1 ;;
+    * ) SUBJ="/CN=$ar/" ; CN="$ar";;
     esac
 done
 # openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) -out "$CAKEY"
