@@ -2,35 +2,51 @@
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 set -e
 
-[ -s certs/ca.pem ] && { echo ERROR: CA already exists ; exit 1 ; }
+mkkey() { openssl ecparam -name prime256v1 -genkey -out "$1" ;}
+
+for ar
+do  case "$ar" in
+    /*=* ) SUBJ="$ar" ;;
+    -days=* ) CERT_DAYS=${ar#*=} ;;
+    -ca ) FN=ca ;;
+    -out=* ) FN="${ar#*=}" ;;
+
+    -rsa ) eval "mkkey() { openssl genrsa -out \"\$1\" 3072 ; }" ;;
+    -rsa=* ) eval "mkkey() { openssl genrsa -out \"\$1\" ${ar#*=} ; }" ;;
+    -dsa ) eval "mkkey() { openssl dsaparam -genkey -out \"\$1\" 3072 ; }" ;;
+    -dsa=* ) eval "mkkey() { openssl dsaparam -genkey -out \"\$1\" ${ar#*=} ; }" ;;
+    -ec ) eval "mkkey() { openssl ecparam -name prime256v1 -genkey -out \"\$1\" ; }" ;;
+    -ec=* ) eval "mkkey() { openssl ecparam -name ${ar#*=} -genkey -out \"\$1\" ; }" ;;
+
+    -md4|-md5|-ripemd160|-sha|-sha1|-sha224|-sha256|-sha384|-sha512|-whirlpool)
+	DGST=$ar ;;
+
+    -* ) echo >&2 "Unknown option: $ar" ; exit 1 ;;
+    * ) SUBJ="/CN=$ar" ; CN="$ar";;
+    esac
+done
+# openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) -out "$CAKEY"
+
+[ "$FN" = "" ] && {
+    [ "$CN" = "" ] && { CN="${SUBJ/*\/CN=/}" ; CN="${CN/\/*/}"; }
+    FN="$CN"
+    case "$FN" in \*.* ) FN=${FN#??} ;; esac
+    FN="${FN:-ca}"
+}
+
+umask 077
 mkdir -p certs 
+CAKEY=certs/"$FN.key"
+CACRT=certs/"$FN.crt"
+CAPEM=certs/"$FN.pem"
 
-# openssl genrsa -out certs/ca.key 3072
-# openssl dsaparam -genkey -out certs/ca.key 3072
+[ -s "$CAPEM" -o -s "$CAKEY" ] &&
+    { echo ERROR: File $CAPEM or .key already exists ; exit 1 ; }
 
-# openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) -out certs/ca.key
-# openssl ecparam -name prime256v1 -genkey | openssl pkey -out certs/ca.key
-
-# openssl ecparam -name secp256k1 -genkey -out certs/ca.key
-openssl ecparam -name prime256v1 -genkey -out certs/ca.key
-
-if [ $# -gt 0 ] ; then
-    SUBJ="$*" ;
-    case "$SUBJ" in */* ) ;; "" ) SUBJ="/" ;; * )
-	if [ "${#SUBJ}" -le 64 ]
-	then SUBJ="/CN=$SUBJ"
-	elif [ "${#SUBJ}" -le 32768 ]
-	then SUBJ="/name=$SUBJ"
-	else SUBJ="/unstructuredName=$SUBJ"
-	fi
-    ;; esac
-else unset SUBJ
-fi
-
-KEY=-key ; [ -s certs/ca.key ] || KEY="-nodes -keyout"
-openssl req -new -x509 -days "${CERT_DAYS:-3652}" \
+mkkey "$CAKEY"
+openssl req -new -x509 $DGST -days "${CERT_DAYS:-3652}" \
     ${SUBJ:+-subj "$SUBJ"} \
-    $KEY certs/ca.key -out certs/ca.crt -config <(echo '
+    -key "$CAKEY" -out "$CACRT" -config <(echo '
 [req]
 distinguished_name = req_distinguished_name
 [ req_distinguished_name ]
@@ -38,6 +54,6 @@ organizationalUnitName = Organizational Unit Name
 commonName = Common Name' )
 
 {
-    openssl x509 -subject -serial -dates -in certs/ca.crt
-    openssl pkey -in certs/ca.key
-}> certs/ca.pem
+    openssl x509 -subject -serial -dates -in "$CACRT"
+    openssl pkey -in "$CAKEY"
+}> "$CAPEM"
