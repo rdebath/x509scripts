@@ -210,15 +210,17 @@ fix_demoCA() {
     }
 
     # Finally create a current CRL file
-    [ "$CERT_DAYS" = "" ] && {
-	ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in "$CACERT" | sed 's/^[^=]*=//')")"
-	TODAY="$(date +%s)"
-	[ "$ENDDAY" != "" ] &&
-	    CERT_DAYS=$((ENDDAY/86400 - TODAY/86400))
-    }
+    [ "$(grep ^R demoCA/index.txt | wc -l)" -gt 0 ] && {
+	[ "$CERT_DAYS" = "" ] && {
+	    ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in "$CACERT" | sed 's/^[^=]*=//')")"
+	    TODAY="$(date +%s)"
+	    [ "$ENDDAY" != "" ] &&
+		CERT_DAYS=$((ENDDAY/86400 - TODAY/86400))
+	}
 
-    openssl ca $CONF -gencrl ${CERT_DAYS:+-crldays $CERT_DAYS} -out demoCA/crl.pem
-    cp demoCA/crl.pem certs/ca.crl
+	openssl ca $CONF -gencrl ${CERT_DAYS:+-crldays $CERT_DAYS} -out demoCA/crl.pem
+	cp demoCA/crl.pem certs/ca.crl
+    }
 }
 
 make_a_key() {
