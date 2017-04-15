@@ -262,7 +262,9 @@ create_cert() {
 	     -newkey param:"$CACERT" \
 	     ${CN:+-subj /CN="$CN"/} \
 	     ${SANLIST:+-reqexts SANLIST} \
-	     -keyout certs/"$F".key -out demoCA/certs/"$F".csr || exit
+	     -keyout certs/"$F".tmpkey -out demoCA/certs/"$F".csr || exit
+
+       mv certs/"$F".tmpkey certs/"$F".key
     else
        # Create a request on an existing key.
        openssl req $CONF -nodes -new \
