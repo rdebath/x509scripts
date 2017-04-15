@@ -51,7 +51,7 @@ main() {
 	    -keyout "$fname".key |
 
 	# Sign it
-	openssl x509 -req -days "$CERT_DAYS" \
+	openssl x509 -req ${CERT_DAYS:+-days "$CERT_DAYS"} \
 	    -set_serial 0x$(openssl rand -hex 16) \
 	    -out "$fname".crt \
 	    -CA "$CAKEY" -issuer \
@@ -79,8 +79,6 @@ make_cakey() {
 	[ "$ENDDAY" = "" ] && ENDDAY=2147126400
 	CERT_DAYS=$(echo $ENDDAY/86400 - $TODAY/86400 | bc)
     }
-
-    CERT_DAYS=${CERT_DAYS:-30}
 
     if [ "$(openssl pkey -in "$CAKEY" -pubout | openssl dgst)" != \
 	 "$(openssl x509 -in "$CAKEY" -noout -pubkey | openssl dgst)" ]

@@ -96,66 +96,9 @@ fix_demoCA() {
 	    openssl x509 -in certs/ca.crt -out "$CACERT"
     }
 
-    # We've got a key, but no cert ... okay
-    [ -s "$CAKEY" -a ! -s "$CACERT" ] &&
-	openssl req $CONF -nodes -new -x509 -days 3652 \
-	    -subj "/CN=Private CA/" \
-	    -key "$CAKEY" -out "$CACERT"
-
-    # No CA around, just make up something.
-    [ -s "$CAKEY" ] || {
-	# First see if the ENV say what we want.
-	make_a_key "$CAKEY"
-
-	# No preference? I like this one.
-	[ ! -s "$CAKEY" ] &&
-	    openssl ecparam -name prime256v1 -genkey -out "$CAKEY"
-
-	openssl req $CONF -nodes -new -x509 -days 3652 \
-	    -subj "/CN=Private CA/" \
-	    -key "$CAKEY" -out "$CACERT" -config <(echo '
-		[req]
-		distinguished_name = req_distinguished_name
-		[ req_distinguished_name ]
-		commonName = Common Name' )
-    }
-
-    # Check the files we've found match.
-    PRVKEYID=$(openssl pkey -in "$CAKEY" -pubout | openssl dgst)
-    PUBKEYID=$(openssl x509 -in "$CACERT" -noout -pubkey | openssl dgst)
-
-    if [ "$PRVKEYID" != "$PUBKEYID" ]
-    then
-	echo "The public keys in the CA key and CA certificate do NOT match" >&2
-	exit 99
-    fi
-
-    # Save an existing CA in a new certs directory
-    [ -s "$CACERT" -a -s "$CAKEY" ] && {
-
-	# Checking ...
-	if [ "$(openssl x509 -in "$CACERT" 2>&1 | openssl dgst)" != \
-	     "$(openssl x509 -in certs/ca.crt 2>&1 | openssl dgst)" ]
-	then rm -f certs/ca.crt ||:
-	fi
-	if [ "$(openssl x509 -in "$CACERT" 2>&1 | openssl dgst)" != \
-	     "$(openssl x509 -in certs/ca.pem 2>&1 | openssl dgst)" ]
-	then rm -f certs/ca.pem ||:
-	fi
-	if [ "$(openssl pkey -in "$CAKEY" 2>&1 | openssl dgst)" != \
-	     "$(openssl pkey -in certs/ca.pem 2>&1 | openssl dgst)" ]
-	then rm -f certs/ca.pem ||:
-	fi
-
-	# Recreating.
-	[ -s certs/ca.crt ] || openssl x509 -in "$CACERT" -out certs/ca.crt
-	[ -s certs/ca.pem ] || {
-	    openssl x509 -subject -serial -dates -in "$CACERT"
-	    openssl pkey -in "$CAKEY"
-	} > certs/ca.pem
-    }
-
     # Now add the other files.
+    [ -f demoCA/index.txt.attr ] || echo unique_subject = no > demoCA/index.txt.attr
+    [ -f demoCA/crlnumber ] || echo 00 > demoCA/crlnumber
     [ -f demoCA/index.txt ] || {
 	touch demoCA/index.txt
 
@@ -192,23 +135,90 @@ fix_demoCA() {
 	fi
     }
 
-    [ -f demoCA/index.txt.attr ] || echo unique_subject = no > demoCA/index.txt.attr
-    [ -f demoCA/crlnumber ] || echo 00 > demoCA/crlnumber
+    # We haven't got a proper CA, make one.
+    [ -s "$CAKEY" -a -s "$CACERT" ] || {
+	echo Creating a CA certificate.
+	# First see if the key type is in the ENV
+	[ ! -s "$CAKEY" ] &&
+	    make_a_key "$CAKEY"
 
-    if [ -f certs/ca.crl ]
-    then cp certs/ca.crl demoCA/crl.pem
-    else
+	# No preference? I like this one.
+	[ ! -s "$CAKEY" ] &&
+	    openssl ecparam -name prime256v1 -genkey -out "$CAKEY"
 
-	[ "$CERT_DAYS" = "" ] && {
-	    ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in "$CACERT" | sed 's/^[^=]*=//')")"
-	    TODAY="$(date +%s)"
-	    [ "$ENDDAY" != "" ] &&
-		CERT_DAYS=$(echo $ENDDAY/86400 - $TODAY/86400 | bc)
-	}
+	# No dates, make it huge.
+	CERTSTART=${CERTSTART:-19700101000000Z}
+	CERTEND=${CERTEND:-99991231235959Z}
 
-	openssl ca $CONF -gencrl ${CERT_DAYS:+-crldays $CERT_DAYS} -out demoCA/crl.pem
-	cp demoCA/crl.pem certs/ca.crl
+	# Choose a serial number for the new key
+	openssl pkey -pubout -in "$CAKEY" | openssl md5 | sed 's/.* //' > demoCA/serial
+
+	# Create a cert request
+	openssl req $CONF -new -nodes \
+		-key "$CAKEY" \
+		-subj "/CN=Private CA/" \
+		-out demoCA/private/ca.csr
+
+	# Self-sign the CA-certificate
+	openssl ca $CONF -batch \
+		-policy policy_anything \
+		-selfsign \
+		-noemailDN \
+		-keyfile "$CAKEY" \
+		-out "$CACERT" \
+		-in demoCA/private/ca.csr \
+		-extensions v3_ca \
+		-startdate $CERTSTART  -enddate $CERTEND
+
+	# Don't need the csr
+	rm demoCA/private/ca.csr
+    }
+
+    # Check the CA files match.
+    PRVKEYID=$(openssl pkey -in "$CAKEY" -pubout | openssl dgst)
+    PUBKEYID=$(openssl x509 -in "$CACERT" -noout -pubkey | openssl dgst)
+
+    if [ "$PRVKEYID" != "$PUBKEYID" ]
+    then
+	echo "The public keys in the CA key and CA certificate do NOT match" >&2
+	exit 99
     fi
+
+    # Save an existing CA in a new certs directory
+    [ -s "$CACERT" -a -s "$CAKEY" ] && {
+
+	# Checking ...
+	if [ "$(openssl x509 -in "$CACERT" 2>&1 | openssl dgst)" != \
+	     "$(openssl x509 -in certs/ca.crt 2>&1 | openssl dgst)" ]
+	then rm -f certs/ca.crt ||:
+	fi
+	if [ "$(openssl x509 -in "$CACERT" 2>&1 | openssl dgst)" != \
+	     "$(openssl x509 -in certs/ca.pem 2>&1 | openssl dgst)" ]
+	then rm -f certs/ca.pem ||:
+	fi
+	if [ "$(openssl pkey -in "$CAKEY" 2>&1 | openssl dgst)" != \
+	     "$(openssl pkey -in certs/ca.pem 2>&1 | openssl dgst)" ]
+	then rm -f certs/ca.pem ||:
+	fi
+
+	# Recreating.
+	[ -s certs/ca.crt ] || openssl x509 -in "$CACERT" -out certs/ca.crt
+	[ -s certs/ca.pem ] || {
+	    openssl x509 -subject -serial -dates -in "$CACERT"
+	    openssl pkey -in "$CAKEY"
+	} > certs/ca.pem
+    }
+
+    # Finally create a current CRL file
+    [ "$CERT_DAYS" = "" ] && {
+	ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in "$CACERT" | sed 's/^[^=]*=//')")"
+	TODAY="$(date +%s)"
+	[ "$ENDDAY" != "" ] &&
+	    CERT_DAYS=$((ENDDAY/86400 - TODAY/86400))
+    }
+
+    openssl ca $CONF -gencrl ${CERT_DAYS:+-crldays $CERT_DAYS} -out demoCA/crl.pem
+    cp demoCA/crl.pem certs/ca.crl
 }
 
 make_a_key() {

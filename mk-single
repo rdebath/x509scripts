@@ -58,7 +58,6 @@ policyIdentifier =  2.5.29.32.0
 userNotice=@notice
 [ notice ]
 explicitText=\r\n\
-This CA was created by TVision Technology LTD.\r\n\
 Only one certificate was signed by this CA.\r\n\
 The serial number of that certificate is:\r\n\'
 echo "$CERTSERIAL"'\r\n\r\n\'
@@ -81,3 +80,4 @@ bash cmd.02.make-crt "$@"
 rm certs/ca.pem certs/ca.key
 mv certs/ca.crt certs/"$F.ca.crt"
 mv certs/ca.crl certs/"$F.ca.crl"
+rm -rf demoCA
