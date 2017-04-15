@@ -18,10 +18,10 @@ if [ $# -gt 0 ] ; then
     SUBJ="$*" ;
     case "$SUBJ" in */* ) ;; "" ) SUBJ="/" ;; * )
 	if [ "${#SUBJ}" -le 64 ]
-	then SUBJ="/CN=$SUBJ/"
+	then SUBJ="/CN=$SUBJ"
 	elif [ "${#SUBJ}" -le 32768 ]
-	then SUBJ="/name=$SUBJ/"
-	else SUBJ="/unstructuredName=$SUBJ/"
+	then SUBJ="/name=$SUBJ"
+	else SUBJ="/unstructuredName=$SUBJ"
 	fi
     ;; esac
 else unset SUBJ

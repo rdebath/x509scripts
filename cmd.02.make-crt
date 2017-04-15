@@ -116,7 +116,11 @@ fix_demoCA() {
 
 	openssl req $CONF -nodes -new -x509 -days 3652 \
 	    -subj "/CN=Private CA/" \
-	    -key "$CAKEY" -out "$CACERT"
+	    -key "$CAKEY" -out "$CACERT" -config <(echo '
+		[req]
+		distinguished_name = req_distinguished_name
+		[ req_distinguished_name ]
+		commonName = Common Name' )
     }
 
     # Check the files we've found match.

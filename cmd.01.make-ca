@@ -6,14 +6,11 @@ set -e
 
 if [ $# -gt 0 ] ; then
     SUBJ="$*" ;
-    case "$SUBJ" in */* ) ;; "" ) SUBJ="/" ;; * )
-	if [ "${#SUBJ}" -le 64 ]
-	then SUBJ="/CN=$SUBJ/"
-	elif [ "${#SUBJ}" -le 32768 ]
-	then SUBJ="/name=$SUBJ/"
-	else SUBJ="/unstructuredName=$SUBJ/"
-	fi
-    ;; esac
+    case "$SUBJ" in
+    */* ) ;;
+    "" ) SUBJ="/CN=CA" ;;
+    * ) SUBJ="/CN=$SUBJ" ;;
+    esac
 else unset SUBJ
 fi
 
@@ -35,8 +32,11 @@ openssl req $CONF -new -nodes \
 # Choose a serial number for it
 openssl pkey -pubout -in demoCA/private/cakey.pem | openssl md5 | sed 's/.* //' > demoCA/serial
 
-YEAR=`date +%Y`
-ENDY=$((YEAR+20))
+# CERTSTART=$(date +%Y)0102000000Z
+# CERTEND=$(($(date +%Y)+20))0115000000Z
+
+CERTSTART=19700101000000Z
+CERTEND=99991231235959Z
 
 # Self-sign the CA-certificate
 openssl ca $CONF -batch \
@@ -47,7 +47,7 @@ openssl ca $CONF -batch \
 	-in demoCA/private/ca.csr \
 	-out demoCA/cacert.pem \
 	-extensions v3_ca \
-	-startdate ${YEAR}0102000000Z -enddate ${ENDY}0115000000Z
+	-startdate $CERTSTART  -enddate $CERTEND
 
 # Don't need the csr
 rm demoCA/private/ca.csr
