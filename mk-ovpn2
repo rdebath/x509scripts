@@ -4,6 +4,7 @@ if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 [ -d certs ] || { echo >&2 ERROR: Certificate directory missing ; exit 1;}
 
 umask 077
+export OPENSSL_CONF=/dev/null
 
 build_files() {
 

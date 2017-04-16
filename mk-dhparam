@@ -2,6 +2,7 @@
 
 umask 077
 mkdir -p certs
+export OPENSSL_CONF=/dev/null
 
 # Very slow to generate but fast to use.
 [ -s certs/dhparam.pem ] ||

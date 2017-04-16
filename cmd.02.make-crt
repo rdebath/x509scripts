@@ -1,5 +1,7 @@
 #!/bin/bash
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
+set -e
+export OPENSSL_CONF=/dev/null
 
 main() {
     CAKEY=demoCA/private/cakey.pem
@@ -27,19 +29,26 @@ main() {
 	esac
     else
 	F=cert
-	unset CN CATAG
+	unset CN
     fi
 
     F=$(echo "$F" | tr -c '[a-zA-Z0-9\.\-\012]' _)
 
-    if [ -f openssl.cnf ]
-    then cat openssl.cnf > "$TMP".cnf
-    elif [ "$OPENSSL_CONF" != "" -a -s "$OPENSSL_CONF" ]
-    then cat "$OPENSSL_CONF" > "$TMP".cnf
-    else cat $(openssl version -d | cut -d\" -f2)/openssl.cnf > "$TMP".cnf
-    fi
     CONF='-config '"$TMP"'.cnf'
-    echo  >> "$TMP".cnf
+    cat <<-! > "$TMP".cnf
+	[ca]
+	default_ca = CA_default
+	[ CA_default ]
+	database = demoCA/index.txt
+	default_md = default
+	serial = demoCA/serial
+	default_days = 
+	cert_opt = 
+	policy = policy_cn
+	[policy_cn]
+	commonName = supplied
+
+!
 
     # Should use a section for the san list in the req
     echo '[ SANLIST ]' >> "$TMP".cnf
@@ -154,20 +163,21 @@ fix_demoCA() {
 	openssl pkey -pubout -in "$CAKEY" | openssl md5 | sed 's/.* //' > demoCA/serial
 
 	# Create a cert request
-	openssl req $CONF -new -nodes \
+	openssl req -new -nodes -config <(mk_reqconfig) \
 		-key "$CAKEY" \
 		-subj "/CN=Private CA/" \
 		-out demoCA/private/ca.csr
 
 	# Self-sign the CA-certificate
 	openssl ca $CONF -batch \
-		-policy policy_anything \
 		-selfsign \
 		-noemailDN \
 		-keyfile "$CAKEY" \
 		-out "$CACERT" \
 		-in demoCA/private/ca.csr \
-		-extensions v3_ca \
+		-outdir demoCA/newcerts \
+		-extensions x \
+		-extfile <(echo '[x]'; choose_cert_type v3_ca) \
 		-startdate $CERTSTART  -enddate $CERTEND
 
 	# Don't need the csr
@@ -210,17 +220,25 @@ fix_demoCA() {
     }
 
     # Finally create a current CRL file
-    [ "$(grep ^R demoCA/index.txt | wc -l)" -gt 0 ] && {
+    [ "$(grep ^R demoCA/index.txt | wc -l)" -ge 0 ] && {
 	[ "$CERT_DAYS" = "" ] && {
-	    ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in "$CACERT" | sed 's/^[^=]*=//')")"
+	    ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in "$CACERT" |
+		    sed 's/^[^=]*=//')" ||:)"
 	    TODAY="$(date +%s)"
 	    [ "$ENDDAY" != "" ] &&
 		CERT_DAYS=$((ENDDAY/86400 - TODAY/86400))
 	}
+	CRL_DAYS="${CERT_DAYS:-3650}"
 
-	openssl ca $CONF -gencrl ${CERT_DAYS:+-crldays $CERT_DAYS} -out demoCA/crl.pem
+	openssl ca $CONF \
+	    -gencrl -crldays $CRL_DAYS \
+	    -keyfile "$CAKEY" \
+	    -cert "$CACERT" \
+	    -out demoCA/crl.pem
+
 	cp demoCA/crl.pem certs/ca.crl
     }
+    return 0
 }
 
 make_a_key() {
@@ -256,6 +274,8 @@ make_a_key() {
     # Do we have a DSA bit size ?
     [ ! -s "$KEYF" -a "$DSABITS" != "" ] &&
 	openssl dsaparam -genkey -out "$KEYF" $DSABITS
+
+    return 0
 }
 
 create_cert() {
@@ -270,20 +290,21 @@ create_cert() {
     if [ ! -s certs/"$F".key ]
     then
        # Create a request on a new key (like the CA).
-       openssl req $CONF -nodes -new \
+       openssl req -config <(mk_reqconfig) -nodes -new \
 	     -newkey param:"$CACERT" \
 	     ${CN:+-subj /CN="$CN"/} \
-	     ${SANLIST:+-reqexts SANLIST} \
 	     -keyout certs/"$F".tmpkey -out demoCA/certs/"$F".csr || exit
 
        mv certs/"$F".tmpkey certs/"$F".key
     else
        # Create a request on an existing key.
-       openssl req $CONF -nodes -new \
+       openssl req -config <(mk_reqconfig) -nodes -new \
 	     ${CN:+-subj /CN="$CN"/} \
-	     ${SANLIST:+-reqexts SANLIST} \
 	     -key certs/"$F".key -out demoCA/certs/"$F".csr || exit
     fi
+
+    # For a 'real' CA the SANLIST will be copied from the request
+    #	     ${SANLIST:+-reqexts SANLIST} \
 
     # If the CN has been reset rename the files.
     NEWF="$(openssl req -noout -in demoCA/certs/"$F".csr -subject | \
@@ -298,8 +319,8 @@ create_cert() {
     fi
 
     # Extract the start and end date from the CA key.
-    STRDATE=$(TZ=UTC date +%Y%m%d%H%M%SZ --date="$(openssl x509 -noout -in "$CACERT" -startdate | sed 's/.*=//')")
-    ENDDATE=$(TZ=UTC date +%Y%m%d%H%M%SZ --date="$(openssl x509 -noout -in "$CACERT" -enddate | sed 's/.*=//')")
+    STRDATE=$(TZ=UTC date +%Y%m%d%H%M%SZ --date="$(openssl x509 -noout -in "$CACERT" -startdate | sed 's/.*=//')" ||:)
+    ENDDATE=$(TZ=UTC date +%Y%m%d%H%M%SZ --date="$(openssl x509 -noout -in "$CACERT" -enddate | sed 's/.*=//')" ||:)
 
     # 32bit unix time trapper.
     [ "$STRDATE" = "" ] && STRDATE=20000101000000Z
@@ -324,11 +345,13 @@ create_cert() {
 	$CONF \
 	${CN:+-subj /CN="$CN"/} \
 	${CATAG:+-extensions dyn_ext} \
-	-policy policy_anything \
 	-noemailDN \
+	-keyfile "$CAKEY" \
+	-cert "$CACERT" \
 	-startdate $STRDATE -enddate $ENDDATE \
 	-in demoCA/certs/"$F".csr \
-	-out demoCA/certs/"$F".crt
+	-out demoCA/certs/"$F".crt \
+	-outdir demoCA/newcerts
     RV=$?
 
     [ -f demoCA/serial.tmp ] && mv demoCA/serial.tmp demoCA/serial
@@ -363,6 +386,41 @@ create_extras() {
 	-certfile "$CACERT" \
 	-caname "$(openssl x509 -noout -in certs/ca.crt \
 		-subject -nameopt multiline | sed -n 's/ *commonName *= //p')"
+}
+
+mk_caconfig() {
+    echo '[req]'
+    echo 'default_bits = 3072'
+    echo 'distinguished_name = req_distinguished_name'
+    echo 'x509_extensions = v3_ca'
+    echo '[v3_ca]'
+    echo 'subjectKeyIdentifier=hash'
+    echo 'authorityKeyIdentifier=keyid:always,issuer'
+    echo 'basicConstraints = CA:true'
+    echo '[ req_distinguished_name ]'
+}
+
+mk_reqconfig() {
+    echo '[req]'
+    echo 'default_bits = 3072'
+    echo 'distinguished_name = req_distinguished_name'
+    echo '[ req_distinguished_name ]'
+
+cat <<\!
+countryName                     = Country Name (2 letter code)
+countryName_min                 = 2
+countryName_max                 = 2
+stateOrProvinceName             = State or Province Name (full name)
+localityName                    = Locality Name (eg, city)
+0.organizationName              = Organization Name (eg, company)
+organizationalUnitName          = Organizational Unit Name (eg, section)
+commonName                      = Common Name (e.g. server FQDN or YOUR name)
+commonName_max                  = 64
+commonName_default              = www.example.com
+emailAddress                    = Email Address
+emailAddress_max                = 64
+!
+
 }
 
 choose_cert_type() {
@@ -419,6 +477,12 @@ choose_cert_type() {
 	echo basicConstraints = CA:false
 	echo subjectKeyIdentifier=hash
 	echo authorityKeyIdentifier=keyid,issuer
+	;;
+
+    v3_ca )
+	echo 'subjectKeyIdentifier=hash'
+	echo 'authorityKeyIdentifier=keyid:always,issuer'
+	echo 'basicConstraints = CA:true'
 	;;
 
     esac
