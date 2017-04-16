@@ -13,24 +13,37 @@ main() {
 
     if [ "$#" -gt 0 ]
     then
-	F="$1"
+	FN="$1"
 	shift
-	case "$F" in 
+	case "$FN" in
 	*: )
-	    CN="${F%:}"
-	    F="$CN"
+	    SUBJ="${FN%:}"
 	    ;;
 	*:* )
-	    CN="${F%:*}"
-	    CATAG="${F##*:}"
-	    F="$CN"
+	    SUBJ="${FN%:*}"
+	    CATAG="${FN##*:}"
 	   ;;
-	* ) CN="$F" ;;
+	* ) SUBJ="$FN" ;;
+	esac
+
+	case "$SUBJ" in
+	"" ) ;;
+	/*=* ) ;;
+	* ) SUBJ="/CN=$SUBJ/" ;;
 	esac
     else
 	F=cert
-	unset CN
+	unset SUBJ CN
     fi
+
+    [ "$F" = "" ] && {
+	[ "$CN" = "" ] && { CN="${SUBJ/*\/CN=/}" ; CN="${CN/\/*/}"; }
+	F="$CN"
+	case "$F" in \*.* ) F=${F#??} ;; esac
+	F="${F:-cert}"
+    }
+
+    echo Creating CN="$CN"
 
     F=$(echo "$F" | tr -c '[a-zA-Z0-9\.\-\012]' _)
 
@@ -57,31 +70,35 @@ main() {
 
 !
 
-    # Should use a section for the san list in the req
-    echo '[ SANLIST ]' >> "$TMP".cnf
     SANLIST=
     if [ "$#" -gt 0 ]
     then
-	SANLIST="subjectAltName=DNS:$CN"
+	if [ "$CN" != "" ]
+	then
+	    SANLIST="subjectAltName=DNS:$CN"
+	    C=,
+	else
+	    SANLIST="subjectAltName="
+	    C=
+	fi
 	for san in "$@"
 	do
 	    [ "$san" = "$CN" ] && continue
 	    case "$san" in
 	    [0-9]* )
-		    SANLIST="$SANLIST,IP:$san"
+		    SANLIST="$SANLIST${C}IP:$san"
 		    ;;
 	    *@* )
-		    SANLIST="$SANLIST,email:$san"
+		    SANLIST="$SANLIST${C}email:$san"
 		    ;;
 	    * )
-		    SANLIST="$SANLIST,DNS:$san"
+		    SANLIST="$SANLIST${C}DNS:$san"
 		    ;;
 	    esac
+	    C=,
 	done
-	echo "$SANLIST" >> "$TMP".cnf
     fi
 
-    # Note the san list in the request is NOT copied to the cert
     echo '[ dyn_ext ]' >> "$TMP".cnf
     echo "$SANLIST" >> "$TMP".cnf
     [ "$CRLURL" != "" ] && {
@@ -89,6 +106,8 @@ main() {
     }
     choose_cert_type "$CATAG" >> "$TMP".cnf
 
+    # Should use a section for the san list in the req
+    # Note the san list in the request is NOT copied to the cert
     # This would setup the copy, but from the ca* section
     # echo copy_extensions=subjectAltName >> "$TMP".cnf
 
@@ -227,7 +246,7 @@ fix_demoCA() {
     }
 
     # Finally create a current CRL file
-    [ "$(grep ^R demoCA/index.txt | wc -l)" -ge 0 ] && {
+    [ "$(grep ^R demoCA/index.txt | wc -l)" -gt 0 -o "$CRLURL" != "" ] && {
 	[ "$CERT_DAYS" = "" ] && {
 	    ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in "$CACERT" |
 		    sed 's/^[^=]*=//')" ||:)"
@@ -299,31 +318,33 @@ create_cert() {
        # Create a request on a new key (like the CA).
        openssl req -config <(mk_reqconfig) -nodes -new \
 	     -newkey param:"$CACERT" \
-	     ${CN:+-subj /CN="$CN"/} \
+	     ${SUBJ:+-subj "$SUBJ"} \
 	     -keyout certs/"$F".tmpkey -out demoCA/certs/"$F".csr || exit
 
        mv certs/"$F".tmpkey certs/"$F".key
     else
        # Create a request on an existing key.
        openssl req -config <(mk_reqconfig) -nodes -new \
-	     ${CN:+-subj /CN="$CN"/} \
+	     ${SUBJ:+-subj "$SUBJ"} \
 	     -key certs/"$F".key -out demoCA/certs/"$F".csr || exit
     fi
 
     # For a 'real' CA the SANLIST will be copied from the request
     #	     ${SANLIST:+-reqexts SANLIST} \
 
-    # If the CN has been reset rename the files.
-    NEWF="$(openssl req -noout -in demoCA/certs/"$F".csr -subject | \
-	    sed -n '/^subject/s/^.*CN[ \t]*=[ \t]*//p' | \
-	    tr -c '[a-zA-Z0-9\.\-\012]' _)"
+    [ "$SUBJ" = "" ] && {
+	# If the CN has been reset rename the files.
+	NEWF="$(openssl req -noout -in demoCA/certs/"$F".csr -subject | \
+		sed -n '/^subject/s/^.*CN[ \t]*=[ \t]*//p' | \
+		tr -c '[a-zA-Z0-9\.\-\012]' _)"
 
-    if [ "$F" != "$NEWF" -a "$NEWF" != "" ]
-    then
-	    mv certs/"$F".key certs/"$NEWF".key
-	    mv demoCA/certs/"$F".csr demoCA/certs/"$NEWF".csr
-	    F="$NEWF"
-    fi
+	if [ "$F" != "$NEWF" -a "$NEWF" != "" ]
+	then
+		mv certs/"$F".key certs/"$NEWF".key
+		mv demoCA/certs/"$F".csr demoCA/certs/"$NEWF".csr
+		F="$NEWF"
+	fi
+    }
 
     # Extract the start and end date from the CA key.
     STRDATE=$(TZ=UTC date +%Y%m%d%H%M%SZ --date="$(openssl x509 -noout -in "$CACERT" -startdate | sed 's/.*=//')" ||:)
@@ -350,7 +371,7 @@ create_cert() {
     openssl ca \
 	-batch \
 	$CONF \
-	${CN:+-subj /CN="$CN"/} \
+	${SUBJ:+-subj "$SUBJ"} \
 	${CATAG:+-extensions dyn_ext} \
 	-noemailDN \
 	-keyfile "$CAKEY" \
