@@ -45,8 +45,15 @@ main() {
 	default_days = 
 	cert_opt = 
 	policy = policy_cn
+	copy_extensions = copyall
 	[policy_cn]
-	commonName = supplied
+	countryName             = optional
+	stateOrProvinceName     = optional
+	localityName            = optional
+	organizationName        = optional
+	organizationalUnitName  = optional
+	commonName 				= supplied
+	emailAddress            = optional
 
 !
 
