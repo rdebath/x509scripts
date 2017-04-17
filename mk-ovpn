@@ -10,6 +10,8 @@ if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 # Note the nsCertType flag is not required to make this secure.
 
 export OPENSSL_CONF=/dev/null
+CERT_DIR="${CERT_DIR:-certs}"
+
 V3CA=""
 V3CERT=""
 SERVER=no
@@ -54,10 +56,10 @@ done
 [ "$V3CERT" != "" -a "$SERVER" = client ] &&
     V3CERT="${V3BASECERT} nsCertType = client "
 
-CAFILE=certs/"$CN".ca.crt
+CAFILE="$CERT_DIR"/"$CN".ca.crt
 
 [ "$SERVER" = yes ] &&
-    CAFILE=certs/"$CN".ca.cer
+    CAFILE="$CERT_DIR"/"$CN".ca.cer
 
 [ "$CERTOU" = "" -a "$SERVER" = yes ] &&
     CERTOU="$SERVEROU"
@@ -66,9 +68,9 @@ CAFILE=certs/"$CN".ca.crt
 
 CERT_DAYS="${CERT_DAYS:-3652}"
 
-[ -s certs/"$CN".key ] && { echo "ERROR: Name '$CN' already exists" ; exit 1 ; }
+[ -s "$CERT_DIR"/"$CN".key ] && { echo "ERROR: Name '$CN' already exists" ; exit 1 ; }
 umask 077
-mkdir -p certs 
+mkdir -p "$CERT_DIR"
 set -e
 
 mkconfig() {
@@ -80,28 +82,28 @@ mkconfig() {
 }
 
 # The CA key
-openssl ecparam -name $ECPARAM -genkey -out certs/"$CN".ca.key
+openssl ecparam -name $ECPARAM -genkey -out "$CERT_DIR"/"$CN".ca.key
 
 # Self sign the CA
 openssl req -new -x509 -days "$CERT_DAYS" \
     -subj "$CASUBJ" \
-    -key certs/"$CN".ca.key -config <(mkconfig ca) |
+    -key "$CERT_DIR"/"$CN".ca.key -config <(mkconfig ca) |
 openssl x509 -subject > "$CAFILE"
 
 # Make system key, matching the CA type
 openssl req -new -nodes \
     -newkey param:"$CAFILE" \
     -subj "${CERTOU:+/OU=$CERTOU}/CN=$CN/" \
-    -keyout certs/$CN.key \
+    -keyout "$CERT_DIR"/$CN.key \
     -config <(mkconfig) |
 
 # Sign it
 openssl x509 -req -days "$CERT_DAYS" \
     -set_serial 0x$(openssl rand -hex 8) \
-    -out certs/$CN.crt \
+    -out "$CERT_DIR"/$CN.crt \
     -CA "$CAFILE" \
-    -CAkey certs/"$CN".ca.key \
+    -CAkey "$CERT_DIR"/"$CN".ca.key \
     ${V3CERT:+-extfile <(echo "$V3CERT")}
 
 # Remove the CA key
-rm certs/"$CN".ca.key
+rm "$CERT_DIR"/"$CN".ca.key

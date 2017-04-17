@@ -2,6 +2,8 @@
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 set -e
 export OPENSSL_CONF=/dev/null
+CERT_DIR="${CERT_DIR:-certs}"
+
 if openssl no-pkey >/dev/null ;then
     NOPKEY=yes
     CERT_DAYS=${CERT_DAYS:-3650}
@@ -11,6 +13,7 @@ main() {
     CAKEY=demoCA/private/cakey.pem
     CACERT=demoCA/cacert.pem
     CATAG=default
+    umask 077
 
     TMP=_ssl_.tmp
     trap "rm -f $TMP.*" 0 1 2
@@ -125,22 +128,22 @@ main() {
 
 fix_demoCA() {
     # Make sure the basics exist in the demoCA directory
-    mkdir -p certs demoCA demoCA/private demoCA/newcerts demoCA/certs
+    mkdir -p "$CERT_DIR" demoCA demoCA/private demoCA/newcerts demoCA/certs
 
     # Recover an existing CA cert & key from the certs directory
-    [ ! -s "$CAKEY" -a -s certs/ca.pem ] && {
+    [ ! -s "$CAKEY" -a -s "$CERT_DIR"/ca.pem ] && {
 	if [ "$NOPKEY" != yes ] ; then
-	    openssl pkey -in certs/ca.pem -out "$CAKEY" &&
-	    openssl x509 -in certs/ca.pem -out "$CACERT" 2>/dev/null
+	    openssl pkey -in "$CERT_DIR"/ca.pem -out "$CAKEY" &&
+	    openssl x509 -in "$CERT_DIR"/ca.pem -out "$CACERT" 2>/dev/null
 	else
-	    openssl rsa -in certs/ca.pem -out "$CAKEY" 2>/dev/null &&
-	    openssl x509 -in certs/ca.pem -out "$CACERT" 2>/dev/null
+	    openssl rsa -in "$CERT_DIR"/ca.pem -out "$CAKEY" 2>/dev/null &&
+	    openssl x509 -in "$CERT_DIR"/ca.pem -out "$CACERT" 2>/dev/null
 	fi
     }
 
-    [ ! -s "$CAKEY" -a -s certs/ca.key -a ! -s "$CACERT" -a -s certs/ca.crt ] && {
-	cat certs/ca.key > "$CAKEY"
-	openssl x509 -in certs/ca.crt -out "$CACERT"
+    [ ! -s "$CAKEY" -a -s "$CERT_DIR"/ca.key -a ! -s "$CACERT" -a -s "$CERT_DIR"/ca.crt ] && {
+	cat "$CERT_DIR"/ca.key > "$CAKEY"
+	openssl x509 -in "$CERT_DIR"/ca.crt -out "$CACERT"
     }
 
     # Now add the other files.
@@ -149,11 +152,11 @@ fix_demoCA() {
     [ -f demoCA/index.txt ] || {
 	touch demoCA/index.txt
 
-	if [ -s certs/ca.crt ]
+	if [ -s "$CERT_DIR"/ca.crt ]
 	then
 	    > demoCA/crl.txt
-	    [ -s certs/ca.crl ] && openssl crl -in certs/ca.crl -noout -text > demoCA/crl.txt
-	    for i in certs/*.crt
+	    [ -s "$CERT_DIR"/ca.crl ] && openssl crl -in "$CERT_DIR"/ca.crl -noout -text > demoCA/crl.txt
+	    for i in "$CERT_DIR"/*.crt
 	    do
 		SUBJECT=$(openssl x509 -subject -noout -in "$i" | sed 's:^[^/]*= *::')
 		SERIAL=$(openssl x509 -serial -noout -in "$i" | sed 's/.*= *//')
@@ -243,27 +246,27 @@ fix_demoCA() {
 
 	# Checking ...
 	if [ "$(openssl x509 -in "$CACERT" 2>&1 | openssl dgst)" != \
-	     "$(openssl x509 -in certs/ca.crt 2>&1 | openssl dgst)" ]
-	then rm -f certs/ca.crt ||:
+	     "$(openssl x509 -in "$CERT_DIR"/ca.crt 2>&1 | openssl dgst)" ]
+	then rm -f "$CERT_DIR"/ca.crt ||:
 	fi
 	if [ "$(openssl x509 -in "$CACERT" 2>&1 | openssl dgst)" != \
-	     "$(openssl x509 -in certs/ca.pem 2>&1 | openssl dgst)" ]
-	then rm -f certs/ca.pem ||:
+	     "$(openssl x509 -in "$CERT_DIR"/ca.pem 2>&1 | openssl dgst)" ]
+	then rm -f "$CERT_DIR"/ca.pem ||:
 	fi
 	if [ "$(openssl pkey -in "$CAKEY" 2>&1 | openssl dgst)" != \
-	     "$(openssl pkey -in certs/ca.pem 2>&1 | openssl dgst)" ]
-	then rm -f certs/ca.pem ||:
+	     "$(openssl pkey -in "$CERT_DIR"/ca.pem 2>&1 | openssl dgst)" ]
+	then rm -f "$CERT_DIR"/ca.pem ||:
 	fi
 
 	# Recreating.
-	[ -s certs/ca.crt ] || openssl x509 -in "$CACERT" -out certs/ca.crt
-	[ -s certs/ca.pem ] || {
+	[ -s "$CERT_DIR"/ca.crt ] || openssl x509 -in "$CACERT" -out "$CERT_DIR"/ca.crt
+	[ -s "$CERT_DIR"/ca.pem ] || {
 	    openssl x509 -subject -serial -dates -in "$CACERT"
 	    if [ "$NOPKEY" != yes ] ;then
 		openssl pkey -in "$CAKEY"
 	    else cat "$CAKEY"
 	    fi
-	} > certs/ca.pem
+	} > "$CERT_DIR"/ca.pem
     }
 
     # Finally create a current CRL file
@@ -283,7 +286,7 @@ fix_demoCA() {
 	    -cert "$CACERT" \
 	    -out demoCA/crl.pem
 
-	cp demoCA/crl.pem certs/ca.crl
+	cp demoCA/crl.pem "$CERT_DIR"/ca.crl
     }
     return 0
 }
@@ -331,23 +334,23 @@ create_cert() {
     # If an EC key doesn't have a name "newkey param:" can still copy it.
     # Note: "newkey param:" fails for RSA keys.
     # Note: If there's no CN openssl/req prompts without properly saving the key.
-    make_a_key certs/"$F".key
+    make_a_key "$CERT_DIR"/"$F".key
 
     # Make the CSR
-    if [ ! -s certs/"$F".key ]
+    if [ ! -s "$CERT_DIR"/"$F".key ]
     then
        # Create a request on a new key (like the CA).
        openssl req -config <(mk_reqconfig) -nodes -new \
 	     -newkey param:"$CACERT" \
 	     ${SUBJ:+-subj "$SUBJ"} \
-	     -keyout certs/"$F".tmpkey -out demoCA/certs/"$F".csr || exit
+	     -keyout "$CERT_DIR"/"$F".tmpkey -out demoCA/certs/"$F".csr || exit
 
-       mv certs/"$F".tmpkey certs/"$F".key
+       mv "$CERT_DIR"/"$F".tmpkey "$CERT_DIR"/"$F".key
     else
        # Create a request on an existing key.
        openssl req -config <(mk_reqconfig) -nodes -new \
 	     ${SUBJ:+-subj "$SUBJ"} \
-	     -key certs/"$F".key -out demoCA/certs/"$F".csr || exit
+	     -key "$CERT_DIR"/"$F".key -out demoCA/certs/"$F".csr || exit
     fi
 
     # For a 'real' CA the SANLIST will be copied from the request
@@ -361,7 +364,7 @@ create_cert() {
 
 	if [ "$F" != "$NEWF" -a "$NEWF" != "" ]
 	then
-		mv certs/"$F".key certs/"$NEWF".key
+		mv "$CERT_DIR"/"$F".key "$CERT_DIR"/"$NEWF".key
 		mv demoCA/certs/"$F".csr demoCA/certs/"$NEWF".csr
 		F="$NEWF"
 	fi
@@ -407,37 +410,37 @@ create_cert() {
     [ -f demoCA/serial.tmp ] && mv demoCA/serial.tmp demoCA/serial
     [ "$RV" -ne 0 ] && exit $RV
 
-    cp -p demoCA/certs/"$F".crt certs/"$F".crt
+    cp -p demoCA/certs/"$F".crt "$CERT_DIR"/"$F".crt
 }
 
 create_extras() {
     # This seems to be how you make a combined PEM
     {
-	openssl x509 -subject -serial -dates -in certs/"$F".crt
+	openssl x509 -subject -serial -dates -in "$CERT_DIR"/"$F".crt
     #   openssl x509 -subject -serial -dates -in "$CACERT"
 	if [ "$NOPKEY" != yes ] ;then
-	    openssl pkey -in certs/"$F".key
-	else cat certs/"$F".key
+	    openssl pkey -in "$CERT_DIR"/"$F".key
+	else cat "$CERT_DIR"/"$F".key
 	fi
-    } > certs/"$F".pem
+    } > "$CERT_DIR"/"$F".pem
 
     # Make a p12 or Windows pfx file (with a blank password!)
 
     # If the CA certificate is already installed don't include it in the PFX
     openssl pkcs12 \
-	-export -passout pass: -out certs/"$F".pfx \
-	-name "PFX $CN $(openssl x509 -noout -enddate -in certs/"$F".crt | sed 's/notAfter=/until /')" \
-	-inkey certs/"$F".key -in certs/"$F".crt
+	-export -passout pass: -out "$CERT_DIR"/"$F".pfx \
+	-name "PFX $CN $(openssl x509 -noout -enddate -in "$CERT_DIR"/"$F".crt | sed 's/notAfter=/until /')" \
+	-inkey "$CERT_DIR"/"$F".key -in "$CERT_DIR"/"$F".crt
 
     # It's not strictly correct to include the CA certificate in the PFX.
     # But Windows will load it into the trusted store when the PFX is
     # loaded into Machine store.
     openssl pkcs12 \
-	-export -passout pass: -out certs/"$F".plus-ca.pfx \
-	-name "PFX $CN $(openssl x509 -noout -enddate -in certs/"$F".crt | sed 's/notAfter=/until /')" \
-	-inkey certs/"$F".key -in certs/"$F".crt \
+	-export -passout pass: -out "$CERT_DIR"/"$F".plus-ca.pfx \
+	-name "PFX $CN $(openssl x509 -noout -enddate -in "$CERT_DIR"/"$F".crt | sed 's/notAfter=/until /')" \
+	-inkey "$CERT_DIR"/"$F".key -in "$CERT_DIR"/"$F".crt \
 	-certfile "$CACERT" \
-	-caname "$(openssl x509 -noout -in certs/ca.crt \
+	-caname "$(openssl x509 -noout -in "$CERT_DIR"/ca.crt \
 		-subject -nameopt multiline | sed -n 's/ *commonName *= //p')"
 }
 

@@ -2,6 +2,7 @@
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 set -e
 export OPENSSL_CONF=/dev/null
+CERT_DIR="${CERT_DIR:-certs}"
 
 mkkey() { openssl ecparam -name prime256v1 -genkey -out "$1" ;}
 V3OPTS=
@@ -70,14 +71,15 @@ done
     [ "$CN" = "" ] && { CN="${SUBJ/*\/CN=/}" ; CN="${CN/\/*/}"; }
     FN="$CN"
     case "$FN" in \*.* ) FN=${FN#??} ;; esac
+    FN=$(echo "$FN" | tr -c '[a-zA-Z0-9\.\-\012]' _)
     FN="${FN:-ca}"
 }
 
 umask 077
-mkdir -p certs 
-CAKEY=certs/"$FN.key"
-CACRT=certs/"$FN.crt"
-CAPEM=certs/"$FN.pem"
+mkdir -p "$CERT_DIR"
+CAKEY="$CERT_DIR"/"$FN.key"
+CACRT="$CERT_DIR"/"$FN.crt"
+CAPEM="$CERT_DIR"/"$FN.pem"
 
 [ -s "$CAPEM" ] &&
     { echo ERROR: File $CAPEM already exists ; exit 1 ; }

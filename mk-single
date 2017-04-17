@@ -2,6 +2,7 @@
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 set -e
 export OPENSSL_CONF=/dev/null
+CERT_DIR="${CERT_DIR:-certs}"
 
 if [ "$#" -lt 1 ]
 then
@@ -10,7 +11,6 @@ then
 fi
 
 CN="$1"
-
 F="$CN"
 case "$F" in \*.* ) F=${F#??} ;; esac
 F="${F:-cert}"
@@ -18,13 +18,10 @@ F=$(echo "$F" | tr -c '[a-zA-Z0-9\.\-\012]' _)
 
 SANLIST="${*// /,}"
 
-CERTSERIAL=$(openssl rand -hex 8)
-export CERTSERIAL
+export CERTSERIAL=$(openssl rand -hex 8)
 
-[ -s certs/ca.crt ] && { echo ERROR: CA already exists ; exit 1 ; }
-[ -s certs/"$F".crt ] && { echo "ERROR: Certificate for '$CN' already exists" ; exit 1 ; }
-
-mkdir -p certs
+[ -s "$CERT_DIR"/ca.crt ] && { echo ERROR: CA already exists ; exit 1 ; }
+[ -s "$CERT_DIR"/"$F".crt ] && { echo "ERROR: Certificate for '$CN' already exists" ; exit 1 ; }
 
 build_xt() {
 
@@ -65,9 +62,9 @@ export CRLURL="http://$CN/CertEnroll/${F//_./}.ca.crl"
 
 bash cmd.02.make-crt ${SANLIST//,/ }
 
-[ -s "$F.crt" ] && {
-    rm certs/ca.pem certs/ca.key
-    mv certs/ca.crt certs/"$F.ca.crt"
-    mv certs/ca.crl certs/"$F.ca.crl"
+[ -s "$CERT_DIR"/"$F.crt" ] && {
+    rm "$CERT_DIR"/ca.pem "$CERT_DIR"/ca.key
+    mv "$CERT_DIR"/ca.crt "$CERT_DIR"/"$F.ca.crt"
+    mv "$CERT_DIR"/ca.crl "$CERT_DIR"/"$F.ca.crl"
     rm -rf demoCA
 }

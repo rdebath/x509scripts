@@ -1,10 +1,11 @@
 #!/bin/bash -
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 
-[ -d certs ] || { echo >&2 ERROR: Certificate directory missing ; exit 1;}
-
 umask 077
 export OPENSSL_CONF=/dev/null
+CERT_DIR="${CERT_DIR:-certs}"
+
+[ -d "$CERT_DIR" ] || { echo >&2 ERROR: Certificate directory missing ; exit 1;}
 
 build_files() {
 
@@ -15,7 +16,7 @@ SERVERNAME=
 SERVEROU=
 
 # Add all the server CA certificates.
-for CA in certs/*.ca.cer
+for CA in "$CERT_DIR"/*.ca.cer
 do
     [ -s "$CA" ] && {
 	openssl x509 -subject -serial -dates -in "$CA"
@@ -35,23 +36,23 @@ do
     }
 done > tmp/servers.ca-list.pem
 
-try_file certs servers.ca-list.pem
+try_file "$CERT_DIR" servers.ca-list.pem
 
-[ -s certs/servers.ca-list.pem ] || {
+[ -s "$CERT_DIR"/servers.ca-list.pem ] || {
     echo >&2 ERROR: No servers have been defined.
     exit 1
 }
 
 # Protect the TLS handshake from s-kiddies.
-[ -f certs/tls-crypt.pvk ] ||
-    openvpn --genkey --secret certs/tls-crypt.pvk
+[ -f "$CERT_DIR"/tls-crypt.pvk ] ||
+    openvpn --genkey --secret "$CERT_DIR"/tls-crypt.pvk
 
 # For all the client CA certificates
-for cert in certs/*.ca.crt
+for cert in "$CERT_DIR"/*.ca.crt
 do
     CN="$(basename "$cert" .ca.crt)"
-    CA="certs/$CN.ca.crt"
-    [ -s certs/"$CN".key -a -s "$CA" ] && {
+    CA="$CERT_DIR/$CN.ca.crt"
+    [ -s "$CERT_DIR"/"$CN".key -a -s "$CA" ] && {
 
 	echo Client $CN
 
@@ -82,25 +83,25 @@ do
 		fi
 		echo
 
-		[ -s certs/tls-crypt.pvk ] && {
+		[ -s "$CERT_DIR"/tls-crypt.pvk ] && {
 		    if ! grep -q tls-auth "$file"
 		    then
 			echo '<tls-crypt>'
-			cat certs/tls-crypt.pvk
+			cat "$CERT_DIR"/tls-crypt.pvk
 			echo '</tls-crypt>'
 		    fi
 		}
 
 		echo '<cert>'
-		openssl x509 -subject -serial -dates -in certs/"$CN".crt
+		openssl x509 -subject -serial -dates -in "$CERT_DIR"/"$CN".crt
 		echo '</cert>'
 
 		echo '<key>'
-		openssl pkey -in certs/"$CN".key
+		openssl pkey -in "$CERT_DIR"/"$CN".key
 		echo '</key>'
 
 		echo '<ca>'
-		cat certs/servers.ca-list.pem
+		cat "$CERT_DIR"/servers.ca-list.pem
 		echo '</ca>'
 
 	    } > tmp/"$tfile"
@@ -111,39 +112,39 @@ do
 done
 
 # Add all the client CA certificates
-for cert in certs/*.ca.crt
+for cert in "$CERT_DIR"/*.ca.crt
 do
     CN="$(basename "$cert" .ca.crt)"
-    CA="certs/$CN.ca.crt"
-    [ -s certs/"$CN".crt -a -s "$CA" ] && {
+    CA="$CERT_DIR/$CN.ca.crt"
+    [ -s "$CERT_DIR"/"$CN".crt -a -s "$CA" ] && {
 	openssl x509 -subject -serial -dates -in "$CA"
 	echo
     }
 done > tmp/clients.ca-list.pem
 
-try_file certs clients.ca-list.pem
+try_file "$CERT_DIR" clients.ca-list.pem
 
 # Copy all the certificates and keys for the servers.
-for cert in certs/*.ca.cer
+for cert in "$CERT_DIR"/*.ca.cer
 do
     CN="$(basename "$cert" .ca.cer)"
-    [ -s certs/"$CN".key ] && {
+    [ -s "$CERT_DIR"/"$CN".key ] && {
 	echo Server $CN
 
-	openssl x509 -subject -serial -dates -in certs/"$CN".crt > tmp/"$CN".crt
-	openssl pkey -in certs/"$CN".key > tmp/"$CN".key
+	openssl x509 -subject -serial -dates -in "$CERT_DIR"/"$CN".crt > tmp/"$CN".crt
+	openssl pkey -in "$CERT_DIR"/"$CN".key > tmp/"$CN".key
 
-	cp -p certs/clients.ca-list.pem tmp/"$CN".ca-list.pem
+	cp -p "$CERT_DIR"/clients.ca-list.pem tmp/"$CN".ca-list.pem
 
-	cp -p certs/tls-crypt.pvk tmp/"$CN".tls-crypt.pvk
+	cp -p "$CERT_DIR"/tls-crypt.pvk tmp/"$CN".tls-crypt.pvk
 
 	try_file ovpn-conf "$CN".crt
 	try_file ovpn-conf "$CN".key
 	try_file ovpn-conf "$CN".ca-list.pem
 	try_file ovpn-conf "$CN".tls-crypt.pvk
 
-	[ -f certs/dhparam.pem ] && {
-	    cp -p certs/dhparam.pem tmp/"$CN".dhparam.pem
+	[ -f "$CERT_DIR"/dhparam.pem ] && {
+	    cp -p "$CERT_DIR"/dhparam.pem tmp/"$CN".dhparam.pem
 	    try_file ovpn-conf "$CN".dhparam.pem
 	}
     }

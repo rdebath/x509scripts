@@ -11,12 +11,13 @@ set -e
 # I recommend that new CA's are created for small numbers of related hosts
 # in the event of a compromise the CA should be replaced.
 export OPENSSL_CONF=/dev/null
+CERT_DIR="${CERT_DIR:-certs}"
 
 main() {
 
-    mkdir -p certs
-    CAKEY=certs/ca.pem
-    CACERT=certs/ca.crt
+    mkdir -p "$CERT_DIR"
+    CAKEY="$CERT_DIR"/ca.pem
+    CACERT="$CERT_DIR"/ca.crt
     CTYPE=default
     SANS=
 
@@ -45,7 +46,7 @@ main() {
 	case "$fname" in
 	\*.* ) fname=${fname#??} ;;
 	esac
-	fname="certs/${fname:-qik}"
+	fname="$CERT_DIR/${fname:-qik}"
 
 	# Fix RSA keylength bug for param:crtfile
 	KPARAM="param:$CACERT"

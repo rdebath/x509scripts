@@ -2,8 +2,10 @@
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 
 export OPENSSL_CONF=/dev/null
-[ -s certs/ca.pem ] && { echo ERROR: CA already exists ; exit 1 ; }
-mkdir -p certs
+CERT_DIR="${CERT_DIR:-certs}"
+
+[ -s "$CERT_DIR"/ca.pem ] && { echo ERROR: CA already exists ; exit 1 ; }
+mkdir -p "$CERT_DIR"
 
 # Default insecurity
 case "$1" in
@@ -17,7 +19,7 @@ case "$1" in
 esac
 
 # Copy CA key
-openssl pkcs12 -nodes ${PASS:+-passin pass:$PASS} -in "$PFX" -out certs/ca.pem ||
+openssl pkcs12 -nodes ${PASS:+-passin pass:$PASS} -in "$PFX" -out "$CERT_DIR"/ca.pem ||
     exit
 
 if [ "$#" -gt 0 ]
