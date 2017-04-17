@@ -81,13 +81,13 @@ mkconfig() {
     echo '[ req_distinguished_name ]'
 }
 
-# The CA key
-openssl ecparam -name $ECPARAM -genkey -out "$CERT_DIR"/"$CN".ca.key
+# Generate the CA key, don't save it to disk.
+CAKEY="$(openssl ecparam -name $ECPARAM -genkey)"
 
 # Self sign the CA
 openssl req -new -x509 -days "$CERT_DAYS" \
     -subj "$CASUBJ" \
-    -key "$CERT_DIR"/"$CN".ca.key -config <(mkconfig ca) |
+    -key <(echo "$CAKEY") -config <(mkconfig ca) |
 openssl x509 -subject > "$CAFILE"
 
 # Make system key, matching the CA type
@@ -102,8 +102,5 @@ openssl x509 -req -days "$CERT_DAYS" \
     -set_serial 0x$(openssl rand -hex 8) \
     -out "$CERT_DIR"/$CN.crt \
     -CA "$CAFILE" \
-    -CAkey "$CERT_DIR"/"$CN".ca.key \
+    -CAkey <(echo "$CAKEY") \
     ${V3CERT:+-extfile <(echo "$V3CERT")}
-
-# Remove the CA key
-rm "$CERT_DIR"/"$CN".ca.key

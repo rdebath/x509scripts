@@ -2,7 +2,7 @@
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 set -e
 export OPENSSL_CONF=/dev/null
-CERT_DIR="${CERT_DIR:-certs}"
+CERT_DIR="${CERT_DIR:-.}"
 
 mkkey() { openssl ecparam -name prime256v1 -genkey -out "$1" ;}
 V3OPTS=
@@ -53,7 +53,15 @@ do  case "$ar" in
 	    V3OPTS="$V3OPTS
 	    subjectKeyIdentifier=hash
 	    authorityKeyIdentifier=keyid:always,issuer
-	    basicConstraints = CA:true
+	    basicConstraints = CA:TRUE
+	    "
+	    ;;
+
+    -v3usr ) [ "$V3OPTS" = "" ] && V3OPTS="$V3INIT"
+	    V3OPTS="$V3OPTS
+	    basicConstraints = CA:FALSE
+	    subjectKeyIdentifier=hash
+	    authorityKeyIdentifier=keyid,issuer
 	    "
 	    ;;
 

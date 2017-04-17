@@ -2,7 +2,7 @@
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 set -e
 export OPENSSL_CONF=/dev/null
-CERT_DIR="${CERT_DIR:-certs}"
+export CERT_DIR="${CERT_DIR:-navcert}"
 
 if [ "$#" -lt 1 ]
 then
@@ -13,8 +13,8 @@ fi
 CN="$1"
 F="$CN"
 case "$F" in \*.* ) F=${F#??} ;; esac
-F="${F:-cert}"
 F=$(echo "$F" | tr -c '[a-zA-Z0-9\.\-\012]' _)
+F="${F:-cert}"
 
 SANLIST="${*// /,}"
 
