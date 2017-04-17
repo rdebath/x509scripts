@@ -136,11 +136,11 @@ fix_demoCA() {
 	    openssl rsa -in certs/ca.pem -out "$CAKEY" 2>/dev/null &&
 	    openssl x509 -in certs/ca.pem -out "$CACERT" 2>/dev/null
 	fi
+    }
 
-	[ ! -s "$CAKEY" -a -s certs/ca.key ] &&
-	    cat certs/ca.key > "$CAKEY"
-	[ ! -s "$CACERT" -a -s certs/ca.crt ] &&
-	    openssl x509 -in certs/ca.crt -out "$CACERT"
+    [ ! -s "$CAKEY" -a -s certs/ca.key -a ! -s "$CACERT" -a -s certs/ca.crt ] && {
+	cat certs/ca.key > "$CAKEY"
+	openssl x509 -in certs/ca.crt -out "$CACERT"
     }
 
     # Now add the other files.

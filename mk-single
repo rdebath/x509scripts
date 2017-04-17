@@ -9,23 +9,19 @@ then
     exit 1
 fi
 
-F="$1"
-case "$F" in
-*: )
-    CN="${F%:}"
-    F="$CN"
-    ;;
-*:* )
-    CN="${F%:*}"
-    CATAG="${F##*:}"
-    F="$CN"
-   ;;
-* ) CN="$F" ;;
-esac
+CN="$1"
 
+F="$CN"
+case "$F" in \*.* ) F=${F#??} ;; esac
+F="${F:-cert}"
 F=$(echo "$F" | tr -c '[a-zA-Z0-9\.\-\012]' _)
 
-[ -s certs/ca.pem ] && { echo ERROR: CA already exists ; exit 1 ; }
+SANLIST="${*// /,}"
+
+CERTSERIAL=$(openssl rand -hex 8)
+export CERTSERIAL
+
+[ -s certs/ca.crt ] && { echo ERROR: CA already exists ; exit 1 ; }
 [ -s certs/"$F".crt ] && { echo "ERROR: Certificate for '$CN' already exists" ; exit 1 ; }
 
 mkdir -p certs
@@ -34,52 +30,54 @@ mkdir -p certs
 # openssl dsaparam -genkey -out certs/ca.key 2048
 # openssl ecparam -name secp256k1 -genkey -out certs/ca.key
 openssl ecparam -name prime256v1 -genkey -out certs/ca.key
-openssl ecparam -name prime256v1 -genkey -out certs/"$F.key"
 
-SERIAL=0x$(openssl rand -hex 8)
-CERTSERIAL=$(openssl rand -hex 8)
-export CERTSERIAL
+build_reqsettings() {
+
+    cat <<-!
+	[req]
+	distinguished_name=req_distinguished_name
+	x509_extensions=req_x509
+	[ req_distinguished_name ]
+	[ req_x509 ]
+	basicConstraints=critical,CA:TRUE, pathlen:0
+	keyUsage=keyCertSign
+	extendedKeyUsage=serverAuth
+	certificatePolicies=@x509_pol
+	[ x509_pol ]
+	policyIdentifier =  2.5.29.32.0
+	userNotice=@notice
+	[ notice ]
+!
+
+    {
+	echo
+	echo 'Only one certificate was signed by this CA.'
+	echo 'The serial number of that certificate is:'
+	echo "$CERTSERIAL"
+	echo
+	echo 'The common name and alternative names on the certificate are:'
+	for h in ${SANLIST//,/ }
+	do echo '    '$h
+	done
+
+    } | sed -e '1s/^/explicitText=/' -e 's:$:\\r\\n\\:'
+
+    echo
+}
 
 openssl req -new -x509 -days 3652 \
-    -set_serial $SERIAL \
+    -set_serial 0x$(openssl rand -hex 8) \
     -subj "/CN=Private CA for $CN/" \
-    -key certs/ca.key -out certs/ca.crt -config <(
-    
-echo '
-[req]
-distinguished_name=req_distinguished_name
-x509_extensions=req_x509
-[ req_distinguished_name ]
-[ req_x509 ]
-basicConstraints=critical,CA:TRUE, pathlen:0
-keyUsage=keyCertSign
-extendedKeyUsage=serverAuth
-certificatePolicies=@x509_pol
-[ x509_pol ]
-policyIdentifier =  2.5.29.32.0
-userNotice=@notice
-[ notice ]
-explicitText=\r\n\
-Only one certificate was signed by this CA.\r\n\
-The serial number of that certificate is:\r\n\'
-echo "$CERTSERIAL"'\r\n\r\n\'
-echo 'The common name and alternative names on the certificate are:\r\n\'
-for h
-do echo $h'\r\n\'
-done
-echo
-)
-
-{
-    openssl x509 -in certs/ca.crt
-    cat certs/ca.key
-}> certs/ca.pem
+    -key certs/ca.key -out certs/ca.crt \
+    -config <(build_reqsettings)
 
 export CRLURL="http://$CN/CertEnroll/${F//_./}.ca.crl"
 
-bash cmd.02.make-crt "$@"
+bash cmd.02.make-crt ${SANLIST//,/ }
 
-rm certs/ca.pem certs/ca.key
-mv certs/ca.crt certs/"$F.ca.crt"
-mv certs/ca.crl certs/"$F.ca.crl"
-rm -rf demoCA
+[ -s "$F.crt" ] && {
+    rm certs/ca.pem certs/ca.key
+    mv certs/ca.crt certs/"$F.ca.crt"
+    mv certs/ca.crl certs/"$F.ca.crl"
+    rm -rf demoCA
+}

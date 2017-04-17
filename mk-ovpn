@@ -10,12 +10,10 @@ if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 # Note the nsCertType flag is not required to make this secure.
 
 export OPENSSL_CONF=/dev/null
-CN="$1" ; shift
 V3CA=""
 V3CERT=""
 SERVER=no
 ECPARAM=prime256v1
-CAFILE=certs/"$CN".ca.crt
 CAOU='Private CA'
 SERVEROU="OpenVPN Server TLS"
 CERTOU=""
@@ -35,19 +33,19 @@ authorityKeyIdentifier=keyid:always,issuer
 
 # Some options...
 for v
-do
-    case "$v" in
-    s|server ) SERVER=yes ; CAOU='OpenVPN server CA' ;;
-    c|client ) SERVER=client ; CAOU='OpenVPN client CA' ;;
-    v3 )
-	V3CERT="${V3BASECERT}"
+do  case "$v" in
+    -s|-server ) SERVER=yes ; CAOU='OpenVPN server CA' ;;
+    -c|-client ) SERVER=client ; CAOU='OpenVPN client CA' ;;
+    -v3 )
+	V3CERT="$V3BASECERT"
 	V3CA="$V3BASECA"
 	;;
-    [1-9]*[0-9] )
-	CERT_DAYS="$v" ;;
-    ca=* ) CASUBJ="${v#ca=}" ;;
-    ou=*|OU=* ) CERTOU="${v#??=}" ;;
-    * ) echo >&2 "Option $v not recognised"; exit 1;;
+    -days=[1-9]*[0-9] ) CERT_DAYS="${v#*=}" ;;
+    -ca=* )		CASUBJ="${v#*=}" ;;
+    -ou=*|-OU=* )	CERTOU="${v#*=}" ;;
+    -* ) echo >&2 "Option $v not recognised"; exit 1;;
+
+    * ) CN="$v" ;;
     esac
 done
 
@@ -55,6 +53,8 @@ done
     V3CERT="${V3BASECERT} nsCertType = server "
 [ "$V3CERT" != "" -a "$SERVER" = client ] &&
     V3CERT="${V3BASECERT} nsCertType = client "
+
+CAFILE=certs/"$CN".ca.crt
 
 [ "$SERVER" = yes ] &&
     CAFILE=certs/"$CN".ca.cer
@@ -74,7 +74,8 @@ set -e
 mkconfig() {
     echo '[req]'
     echo 'distinguished_name = req_distinguished_name'
-    echo "$V3CA"
+    [ "$1" = ca ] &&
+	echo "$V3CA"
     echo '[ req_distinguished_name ]'
 }
 
@@ -84,7 +85,7 @@ openssl ecparam -name $ECPARAM -genkey -out certs/"$CN".ca.key
 # Self sign the CA
 openssl req -new -x509 -days "$CERT_DAYS" \
     -subj "$CASUBJ" \
-    -key certs/"$CN".ca.key -config <(mkconfig) |
+    -key certs/"$CN".ca.key -config <(mkconfig ca) |
 openssl x509 -subject > "$CAFILE"
 
 # Make system key, matching the CA type
