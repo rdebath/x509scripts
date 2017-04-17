@@ -90,14 +90,16 @@ make_cakey() {
 	ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in "$CAKEY" | sed 's/^[^=]*=//')")"
 	TODAY="$(date +%s)"
 	[ "$ENDDAY" = "" ] && ENDDAY=2147126400
-	CERT_DAYS=$(echo $ENDDAY/86400 - $TODAY/86400 | bc)
+	CERT_DAYS=$((ENDDAY/86400 - TODAY/86400))
     }
 
-    if [ "$(openssl pkey -in "$CAKEY" -pubout | openssl dgst)" != \
-	 "$(openssl x509 -in "$CAKEY" -noout -pubkey | openssl dgst)" ]
-    then
-	echo "The private key and certificate key in $CAKEY do NOT match." >&2
-	exit 99
+    if ! openssl no-pkey >/dev/null ; then
+	if [ "$(openssl pkey -in "$CAKEY" -pubout | openssl dgst)" != \
+	     "$(openssl x509 -in "$CAKEY" -noout -pubkey | openssl dgst)" ]
+	then
+	    echo "The private key and certificate key in $CAKEY do NOT match." >&2
+	    exit 99
+	fi
     fi
 
     [ -s "$CACERT" ] || openssl x509 -in "$CAKEY" -out "$CACERT"

@@ -60,8 +60,8 @@ CAKEY=certs/"$FN.key"
 CACRT=certs/"$FN.crt"
 CAPEM=certs/"$FN.pem"
 
-[ -s "$CAPEM" -o -s "$CAKEY" ] &&
-    { echo ERROR: File $CAPEM or .key already exists ; exit 1 ; }
+[ -s "$CAPEM" ] &&
+    { echo ERROR: File $CAPEM already exists ; exit 1 ; }
 
 mkkey "$CAKEY"
 openssl req -new -x509 $DGST -days "${CERT_DAYS:-3652}" \
@@ -76,5 +76,8 @@ commonName = Common Name' )
 
 {
     openssl x509 -subject -serial -dates -in "$CACRT"
-    openssl pkey -in "$CAKEY"
+    if ! openssl no-pkey >/dev/null
+    then openssl pkey -in "$CAKEY"
+    else cat "$CAKEY"
+    fi
 }> "$CAPEM"

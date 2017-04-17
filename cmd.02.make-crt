@@ -2,6 +2,10 @@
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 set -e
 export OPENSSL_CONF=/dev/null
+if openssl no-pkey >/dev/null ;then
+    NOPKEY=yes
+    CERT_DAYS=${CERT_DAYS:-3650}
+else NOPKEY=no ; fi
 
 main() {
     CAKEY=demoCA/private/cakey.pem
@@ -47,13 +51,15 @@ main() {
 
     F=$(echo "$F" | tr -c '[a-zA-Z0-9\.\-\012]' _)
 
+    if [ "$NOPKEY" = yes ] ;then DIGEST=sha256 ;else DIGEST=default ; fi
+
     CONF='-config '"$TMP"'.cnf'
     cat <<-! > "$TMP".cnf
 	[ca]
 	default_ca = CA_default
 	[ CA_default ]
 	database = demoCA/index.txt
-	default_md = default
+	default_md = $DIGEST
 	serial = demoCA/serial
 	default_days = 
 	cert_opt = 
@@ -122,11 +128,16 @@ fix_demoCA() {
 
     # Recover an existing CA cert & key from the certs directory
     [ ! -s "$CAKEY" -a -s certs/ca.pem ] && {
-	openssl pkey -in certs/ca.pem -out "$CAKEY" &&
-	openssl x509 -in certs/ca.pem -out "$CACERT" 2>/dev/null
+	if [ "$NOPKEY" != yes ] ; then
+	    openssl pkey -in certs/ca.pem -out "$CAKEY" &&
+	    openssl x509 -in certs/ca.pem -out "$CACERT" 2>/dev/null
+	else
+	    openssl rsa -in certs/ca.pem -out "$CAKEY" 2>/dev/null &&
+	    openssl x509 -in certs/ca.pem -out "$CACERT" 2>/dev/null
+	fi
 
 	[ ! -s "$CAKEY" -a -s certs/ca.key ] &&
-	    openssl pkey -in certs/ca.pem -out "$CAKEY"
+	    cat certs/ca.key > "$CAKEY"
 	[ ! -s "$CACERT" -a -s certs/ca.crt ] &&
 	    openssl x509 -in certs/ca.crt -out "$CACERT"
     }
@@ -181,12 +192,17 @@ fix_demoCA() {
 	[ ! -s "$CAKEY" ] &&
 	    openssl ecparam -name prime256v1 -genkey -out "$CAKEY"
 
-	# No dates, make it huge.
-	CERTSTART=${CERTSTART:-19700101000000Z}
-	CERTEND=${CERTEND:-99991231235959Z}
+	[ "$CERT_DAYS" = "" ] && {
+	    # No dates, make it huge.
+	    CERTSTART=${CERTSTART:-19700101000000Z}
+	    CERTEND=${CERTEND:-99991231235959Z}
+	}
 
 	# Choose a serial number for the new key
-	openssl pkey -pubout -in "$CAKEY" | openssl md5 | sed 's/.* //' > demoCA/serial
+	if [ "$NOPKEY" != yes ]
+	then openssl pkey -pubout -in "$CAKEY" | openssl md5 | sed 's/.* //' > demoCA/serial
+	else openssl rand -hex 16 > demoCA/serial
+	fi
 
 	# Create a cert request
 	openssl req -new -nodes -config <(mk_reqconfig) \
@@ -204,20 +220,24 @@ fix_demoCA() {
 		-outdir demoCA/newcerts \
 		-extensions x \
 		-extfile <(echo '[x]'; choose_cert_type v3_ca) \
-		-startdate $CERTSTART  -enddate $CERTEND
+		${CERTSTART:+-startdate $CERTSTART} \
+		${CERTEND:+-enddate $CERTEND} \
+		${CERT_DAYS:+-days $CERT_DAYS}
 
 	# Don't need the csr
 	rm demoCA/private/ca.csr
     }
 
-    # Check the CA files match.
-    PRVKEYID=$(openssl pkey -in "$CAKEY" -pubout | openssl dgst)
-    PUBKEYID=$(openssl x509 -in "$CACERT" -noout -pubkey | openssl dgst)
+    if [ "$NOPKEY" != yes ] ;then
+	# Check the CA files match.
+	PRVKEYID=$(openssl pkey -in "$CAKEY" -pubout | openssl dgst)
+	PUBKEYID=$(openssl x509 -in "$CACERT" -noout -pubkey | openssl dgst)
 
-    if [ "$PRVKEYID" != "$PUBKEYID" ]
-    then
-	echo "The public keys in the CA key and CA certificate do NOT match" >&2
-	exit 99
+	if [ "$PRVKEYID" != "$PUBKEYID" ]
+	then
+	    echo "The public keys in the CA key and CA certificate do NOT match" >&2
+	    exit 99
+	fi
     fi
 
     # Save an existing CA in a new certs directory
@@ -241,7 +261,10 @@ fix_demoCA() {
 	[ -s certs/ca.crt ] || openssl x509 -in "$CACERT" -out certs/ca.crt
 	[ -s certs/ca.pem ] || {
 	    openssl x509 -subject -serial -dates -in "$CACERT"
-	    openssl pkey -in "$CAKEY"
+	    if [ "$NOPKEY" != yes ] ;then
+		openssl pkey -in "$CAKEY"
+	    else cat "$CAKEY"
+	    fi
 	} > certs/ca.pem
     }
 
@@ -346,25 +369,28 @@ create_cert() {
 	fi
     }
 
-    # Extract the start and end date from the CA key.
-    STRDATE=$(TZ=UTC date +%Y%m%d%H%M%SZ --date="$(openssl x509 -noout -in "$CACERT" -startdate | sed 's/.*=//')" ||:)
-    ENDDATE=$(TZ=UTC date +%Y%m%d%H%M%SZ --date="$(openssl x509 -noout -in "$CACERT" -enddate | sed 's/.*=//')" ||:)
+    [ "$CERT_DAYS" = "" ] && {
+	# Extract the start and end date from the CA key.
+	CERTSTART=$(TZ=UTC date +%Y%m%d%H%M%SZ --date="$(openssl x509 -noout -in "$CACERT" -startdate | sed 's/.*=//')" ||:)
+	CERTEND=$(TZ=UTC date +%Y%m%d%H%M%SZ --date="$(openssl x509 -noout -in "$CACERT" -enddate | sed 's/.*=//')" ||:)
 
-    # 32bit unix time trapper.
-    [ "$STRDATE" = "" ] && STRDATE=20000101000000Z
-    [ "$ENDDATE" = "" ] && ENDDATE=20380119031400Z
+	# 32bit unix time trapper.
+	[ "$CERTSTART" = "" ] && CERTSTART=20000101000000Z
+	[ "$CERTEND" = "" ] && CERTEND=20380119031400Z
+    }
 
     [ -f demoCA/serial ] && mv demoCA/serial demoCA/serial.tmp
 
     if [ "$CERTSERIAL" != "" ]
     then
 	echo "$CERTSERIAL" > demoCA/serial
-    else
-	# # Generate a random serial number.
-	# openssl rand -hex 16 > demoCA/serial
-
+    elif [ "$NOPKEY" != yes ]
+    then
 	# Generate a pseudo random serial number.
 	openssl pkey -pubout -in certs/"$F".key | openssl md5 | sed 's/.* //' > demoCA/serial
+    else
+	# Generate a random serial number.
+	openssl rand -hex 16 > demoCA/serial
     fi
 
     # Sign the request with the CA key.
@@ -376,7 +402,9 @@ create_cert() {
 	-noemailDN \
 	-keyfile "$CAKEY" \
 	-cert "$CACERT" \
-	-startdate $STRDATE -enddate $ENDDATE \
+	${CERTSTART:+-startdate $CERTSTART} \
+	${CERTEND:+-enddate $CERTEND} \
+	${CERT_DAYS:+-days $CERT_DAYS} \
 	-in demoCA/certs/"$F".csr \
 	-out demoCA/certs/"$F".crt \
 	-outdir demoCA/newcerts
@@ -391,9 +419,12 @@ create_cert() {
 create_extras() {
     # This seems to be how you make a combined PEM
     {
-       openssl x509 -subject -serial -dates -in certs/"$F".crt
-    #  openssl x509 -subject -serial -dates -in "$CACERT"
-       openssl pkey -in certs/"$F".key
+	openssl x509 -subject -serial -dates -in certs/"$F".crt
+    #   openssl x509 -subject -serial -dates -in "$CACERT"
+	if [ "$NOPKEY" != yes ] ;then
+	    openssl pkey -in certs/"$F".key
+	else cat certs/"$F".key
+	fi
     } > certs/"$F".pem
 
     # Make a p12 or Windows pfx file (with a blank password!)
