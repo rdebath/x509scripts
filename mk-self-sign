@@ -9,6 +9,8 @@ V3INIT='x509_extensions = req_x509
 [ req_x509 ]
 '
 
+V3EXTRAS=
+
 for ar
 do  case "$ar" in
     /*=* )
@@ -34,6 +36,13 @@ do  case "$ar" in
 
     -v3=* ) [ "$V3OPTS" = "" ] && V3OPTS="$V3INIT"
 	    V3OPTS="$V3OPTS
+	    ${ar#*=}
+	    "
+	    ;;
+
+    -v3xt=* )
+	    [ "$V3OPTS" = "" ] && V3OPTS="$V3INIT"
+	    V3EXTRAS="$V3EXTRAS
 	    ${ar#*=}
 	    "
 	    ;;
@@ -82,7 +91,8 @@ distinguished_name = req_distinguished_name
 '"$V3OPTS"'
 [ req_distinguished_name ]
 organizationalUnitName = Organizational Unit Name
-commonName = Common Name' )
+commonName = Common Name
+'"$V3EXTRAS" )
 
 {
     openssl x509 -subject -serial -dates -in "$CACRT"

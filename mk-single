@@ -26,23 +26,9 @@ export CERTSERIAL
 
 mkdir -p certs
 
-# openssl genrsa -out certs/ca.key 2048
-# openssl dsaparam -genkey -out certs/ca.key 2048
-# openssl ecparam -name secp256k1 -genkey -out certs/ca.key
-openssl ecparam -name prime256v1 -genkey -out certs/ca.key
-
-build_reqsettings() {
+build_xt() {
 
     cat <<-!
-	[req]
-	distinguished_name=req_distinguished_name
-	x509_extensions=req_x509
-	[ req_distinguished_name ]
-	[ req_x509 ]
-	basicConstraints=critical,CA:TRUE, pathlen:0
-	keyUsage=keyCertSign
-	extendedKeyUsage=serverAuth
-	certificatePolicies=@x509_pol
 	[ x509_pol ]
 	policyIdentifier =  2.5.29.32.0
 	userNotice=@notice
@@ -65,11 +51,15 @@ build_reqsettings() {
     echo
 }
 
-openssl req -new -x509 -days 3652 \
-    -set_serial 0x$(openssl rand -hex 8) \
-    -subj "/CN=Private CA for $CN/" \
-    -key certs/ca.key -out certs/ca.crt \
-    -config <(build_reqsettings)
+bash mk-self-sign \
+    "/CN=Private CA for $CN/" \
+    -out=ca \
+    -days=3652 \
+    -v3='basicConstraints=critical,CA:TRUE, pathlen:0' \
+    -v3='keyUsage=keyCertSign' \
+    -v3='extendedKeyUsage=serverAuth' \
+    -v3='certificatePolicies=@x509_pol' \
+    -v3xt="$(build_xt)"
 
 export CRLURL="http://$CN/CertEnroll/${F//_./}.ca.crl"
 
