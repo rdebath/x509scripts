@@ -73,6 +73,7 @@ main() {
 	organizationalUnitName  = optional
 	commonName 				= supplied
 	emailAddress            = optional
+	dnQualifier		= optional
 
 !
 
@@ -199,15 +200,12 @@ fix_demoCA() {
 	}
 
 	# Choose a serial number for the new key
-	if [ "$NOPKEY" != yes ]
-	then openssl pkey -pubout -in "$CAKEY" | openssl md5 | sed 's/.* //' > demoCA/serial
-	else openssl rand -hex 16 > demoCA/serial
-	fi
+	openssl rand -hex 8 > demoCA/serial
 
 	# Create a cert request
 	openssl req -new -nodes -config <(mk_reqconfig) \
 		-key "$CAKEY" \
-		-subj "/CN=Private CA/" \
+		-subj "/CN=Private CA/dnQualifier=$(date -u +%Y%m%d-%H%M%S)/" \
 		-out demoCA/private/ca.csr
 
 	# Self-sign the CA-certificate
@@ -384,13 +382,9 @@ create_cert() {
     if [ "$CERTSERIAL" != "" ]
     then
 	echo "$CERTSERIAL" > demoCA/serial
-    elif [ "$NOPKEY" != yes ]
-    then
-	# Generate a pseudo random serial number.
-	openssl pkey -pubout -in certs/"$F".key | openssl md5 | sed 's/.* //' > demoCA/serial
     else
 	# Generate a random serial number.
-	openssl rand -hex 16 > demoCA/serial
+	openssl rand -hex 8 > demoCA/serial
     fi
 
     # Sign the request with the CA key.

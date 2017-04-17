@@ -3,25 +3,25 @@ if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 set -e
 export OPENSSL_CONF=/dev/null
 
-if [ "$#" -gt 0 ]
+if [ "$#" -lt 1 ]
 then
-    F="$1"
-    case "$F" in
-    *: )
-	CN="${F%:}"
-	F="$CN"
-	;;
-    *:* )
-	CN="${F%:*}"
-	CATAG="${F##*:}"
-	F="$CN"
-       ;;
-    * ) CN="$F" ;;
-    esac
-else
-    F=cert
-    unset CN CATAG
+    echo >&2 Usage: "$0: commonName [SAN names]"
+    exit 1
 fi
+
+F="$1"
+case "$F" in
+*: )
+    CN="${F%:}"
+    F="$CN"
+    ;;
+*:* )
+    CN="${F%:*}"
+    CATAG="${F##*:}"
+    F="$CN"
+   ;;
+* ) CN="$F" ;;
+esac
 
 F=$(echo "$F" | tr -c '[a-zA-Z0-9\.\-\012]' _)
 
@@ -36,13 +36,13 @@ mkdir -p certs
 openssl ecparam -name prime256v1 -genkey -out certs/ca.key
 openssl ecparam -name prime256v1 -genkey -out certs/"$F.key"
 
-SERIAL=0x$(openssl pkey -pubout -in certs/ca.key | openssl md5 | sed 's/.* //')
-CERTSERIAL=$(openssl pkey -pubout -in certs/"$F".key | openssl md5 | sed 's/.* //')
+SERIAL=0x$(openssl rand -hex 8)
+CERTSERIAL=$(openssl rand -hex 8)
 export CERTSERIAL
 
 openssl req -new -x509 -days 3652 \
     -set_serial $SERIAL \
-    -subj "/OU=$CN/CN=Private CA/" \
+    -subj "/CN=Private CA for $CN/" \
     -key certs/ca.key -out certs/ca.crt -config <(
     
 echo '
@@ -72,10 +72,10 @@ echo
 
 {
     openssl x509 -in certs/ca.crt
-    openssl pkey -in certs/ca.key
+    cat certs/ca.key
 }> certs/ca.pem
 
-export CRLURL="http://${F//_./}/CertEnroll/${F//_./}.ca.crl"
+export CRLURL="http://$CN/CertEnroll/${F//_./}.ca.crl"
 
 bash cmd.02.make-crt "$@"
 

@@ -63,7 +63,7 @@ main() {
 
 	# Sign it
 	openssl x509 -req ${CERT_DAYS:+-days "$CERT_DAYS"} \
-	    -set_serial 0x$(openssl rand -hex 16) \
+	    -set_serial 0x$(openssl rand -hex 8) \
 	    -out "$fname".crt \
 	    -CA "$CAKEY" -issuer \
 	    -extfile <(choose_cert_type "$CTYPE")
@@ -80,7 +80,7 @@ make_cakey() {
 	openssl req -new -nodes -x509 \
 	    ${RSABITS:+-newkey rsa:$RSABITS} \
 	    -days ${CERT_DAYS:-7300} \
-	    -subj '/CN=Private CA/' \
+	    -subj "/CN=Private CA/dnQualifier=$(date -u +%Y%m%d-%H%M%S)/" \
 	    -keyout "$CAKEY.tmp" -out "$CAKEY.tmp" \
 	    -config <(mk_caconfig)
 	mv "$CAKEY.tmp" "$CAKEY"

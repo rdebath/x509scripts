@@ -11,7 +11,13 @@ V3INIT='x509_extensions = req_x509
 
 for ar
 do  case "$ar" in
-    /*=* ) SUBJ="$ar" ;;
+    /*=* )
+	if [ "$SUBJ" != "" ] ; then
+	    echo >&1 Duplicate subject name definition ; exit 1
+	fi
+	SUBJ="$ar"
+	;;
+
     -days=* ) CERT_DAYS=${ar#*=} ;;
     -ca ) FN=ca ;;
     -out=* ) FN="${ar#*=}" ;;
@@ -42,7 +48,11 @@ do  case "$ar" in
 	    ;;
 
     -*|*/*) echo >&2 "Unknown option: $ar" ; exit 1 ;;
-    * ) SUBJ="/CN=$ar/" ; CN="$ar";;
+
+    * ) if [ "$SUBJ" != "" ] ; then
+	    echo >&1 Duplicate subject name definition ; exit 1
+	fi
+	SUBJ="/CN=$ar/" ; CN="$ar";;
     esac
 done
 # openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) -out "$CAKEY"
