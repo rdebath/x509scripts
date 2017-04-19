@@ -209,7 +209,7 @@ fix_demoCA() {
 	openssl req -new -nodes -config <(mk_reqconfig) \
 		-key "$CAKEY" \
 		-subj "/CN=Private CA/dnQualifier=$(date -u +%Y%m%d-%H%M%S)/" \
-		-out demoCA/private/ca.csr
+		-out demoCA/ca.csr
 
 	# Self-sign the CA-certificate
 	openssl ca $CONF -batch \
@@ -217,7 +217,7 @@ fix_demoCA() {
 		-noemailDN \
 		-keyfile "$CAKEY" \
 		-out "$CACERT" \
-		-in demoCA/private/ca.csr \
+		-in demoCA/ca.csr \
 		-outdir demoCA/newcerts \
 		-extensions x \
 		-extfile <(echo '[x]'; choose_cert_type v3_ca) \
@@ -226,7 +226,7 @@ fix_demoCA() {
 		${CERT_DAYS:+-days $CERT_DAYS}
 
 	# Don't need the csr
-	rm demoCA/private/ca.csr
+	rm demoCA/ca.csr
     }
 
     if [ "$NOPKEY" != yes ] ;then

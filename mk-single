@@ -22,6 +22,7 @@ export CERTSERIAL=$(openssl rand -hex 8)
 
 [ -s "$CERT_DIR"/ca.crt ] && { echo ERROR: CA already exists ; exit 1 ; }
 [ -s "$CERT_DIR"/"$F".crt ] && { echo "ERROR: Certificate for '$CN' already exists" ; exit 1 ; }
+[ -d demoCA ] && { echo ERROR: The directory demoCA needs to be removed first ; exit 1 ; }
 
 build_xt() {
 
@@ -48,9 +49,12 @@ build_xt() {
     echo
 }
 
+umask 077
+mkdir -p "$CERT_DIR"
+
 bash mk-self-sign \
     "/CN=Private CA for $CN/" \
-    -out=ca \
+    -out="$CERT_DIR/ca.pem" \
     -days=3652 \
     -v3='basicConstraints=critical,CA:TRUE, pathlen:0' \
     -v3='keyUsage=keyCertSign' \
@@ -63,8 +67,8 @@ export CRLURL="http://$CN/CertEnroll/${F//_./}.ca.crl"
 bash cmd.02.make-crt ${SANLIST//,/ }
 
 [ -s "$CERT_DIR"/"$F.crt" ] && {
-    rm "$CERT_DIR"/ca.pem "$CERT_DIR"/ca.key
+    rm -f "$CERT_DIR"/ca.pem "$CERT_DIR"/ca.key ||:
     mv "$CERT_DIR"/ca.crt "$CERT_DIR"/"$F.ca.crt"
     mv "$CERT_DIR"/ca.crl "$CERT_DIR"/"$F.ca.crl"
-    rm -rf demoCA
+    rm -rf demoCA ||:
 }

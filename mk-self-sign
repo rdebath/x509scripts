@@ -4,13 +4,17 @@ set -e
 export OPENSSL_CONF=/dev/null
 CERT_DIR="${CERT_DIR:-.}"
 
-mkkey() { openssl ecparam -name prime256v1 -genkey -out "$1" ;}
+# This is my default for making a key file.
+mkkey() { openssl ecparam -name prime256v1 -genkey ;}
+# See also:
+# mkkey() { openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) ;}
+
+FN=
 V3OPTS=
+V3EXTRAS=
 V3INIT='x509_extensions = req_x509
 [ req_x509 ]
 '
-
-V3EXTRAS=
 
 for ar
 do  case "$ar" in
@@ -21,16 +25,15 @@ do  case "$ar" in
 	SUBJ="$ar"
 	;;
 
-    -days=* ) CERT_DAYS=${ar#*=} ;;
-    -ca ) FN=ca ;;
+    -days=* ) CERT_DAYS="${ar#*=}" ;;
     -out=* ) FN="${ar#*=}" ;;
 
-    -rsa ) eval "mkkey() { openssl genrsa -out \"\$1\" 3072 ; }" ;;
-    -rsa=* ) eval "mkkey() { openssl genrsa -out \"\$1\" ${ar#*=} ; }" ;;
-    -dsa ) eval "mkkey() { openssl dsaparam -genkey -out \"\$1\" 3072 ; }" ;;
-    -dsa=* ) eval "mkkey() { openssl dsaparam -genkey -out \"\$1\" ${ar#*=} ; }" ;;
-    -ec ) eval "mkkey() { openssl ecparam -name prime256v1 -genkey -out \"\$1\" ; }" ;;
-    -ec=* ) eval "mkkey() { openssl ecparam -name ${ar#*=} -genkey -out \"\$1\" ; }" ;;
+    -rsa ) eval "mkkey() { openssl genrsa 3072 ; }" ;;
+    -rsa=* ) eval "mkkey() { openssl genrsa '${ar#*=}' ; }" ;;
+    -dsa ) eval "mkkey() { openssl dsaparam -genkey 3072 ; }" ;;
+    -dsa=* ) eval "mkkey() { openssl dsaparam -genkey '${ar#*=}' ; }" ;;
+    -ec ) eval "mkkey() { openssl ecparam -name prime256v1 -genkey ; }" ;;
+    -ec=* ) eval "mkkey() { openssl ecparam -name '${ar#*=}' -genkey ; }" ;;
 
     -md4|-md5|-ripemd160|-sha|-sha1|-sha224|-sha256|-sha384|-sha512|-whirlpool)
 	DGST=$ar ;;
@@ -49,7 +52,6 @@ do  case "$ar" in
 	    ;;
 
     -v3ca ) [ "$V3OPTS" = "" ] && V3OPTS="$V3INIT"
-	    FN=ca
 	    V3OPTS="$V3OPTS
 	    subjectKeyIdentifier=hash
 	    authorityKeyIdentifier=keyid:always,issuer
@@ -73,29 +75,15 @@ do  case "$ar" in
 	SUBJ="/CN=$ar/" ; CN="$ar";;
     esac
 done
-# openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) -out "$CAKEY"
 
-[ "$FN" = "" ] && {
-    [ "$CN" = "" ] && { CN="${SUBJ/*\/CN=/}" ; CN="${CN/\/*/}"; }
-    FN="$CN"
-    case "$FN" in \*.* ) FN=${FN#??} ;; esac
-    FN=$(echo "$FN" | tr -c '[a-zA-Z0-9\.\-\012]' _)
-    FN="${FN:-ca}"
-}
+[ -s "$FN" ] &&
+    { echo ERROR: File $FN already exists ; exit 1 ; }
 
-umask 077
-mkdir -p "$CERT_DIR"
-CAKEY="$CERT_DIR"/"$FN.key"
-CACRT="$CERT_DIR"/"$FN.crt"
-CAPEM="$CERT_DIR"/"$FN.pem"
-
-[ -s "$CAPEM" ] &&
-    { echo ERROR: File $CAPEM already exists ; exit 1 ; }
-
-mkkey "$CAKEY"
+CAKEY="$(mkkey)"
+CACERT="$(
 openssl req -new -x509 $DGST -days "${CERT_DAYS:-3652}" \
     ${SUBJ:+-subj "$SUBJ"} \
-    -key "$CAKEY" -out "$CACRT" -config <(echo '
+    -key <(echo "$CAKEY") -config <(echo '
 [req]
 distinguished_name = req_distinguished_name
 '"$V3OPTS"'
@@ -104,10 +92,14 @@ organizationalUnitName = Organizational Unit Name
 commonName = Common Name
 '"$V3EXTRAS" )
 
-{
-    openssl x509 -subject -serial -dates -in "$CACRT"
+)"
+
+outp() {
+    echo "$CACERT" | openssl x509 -subject -serial -dates
     if ! openssl no-pkey >/dev/null
-    then openssl pkey -in "$CAKEY"
-    else cat "$CAKEY"
+    then echo "$CAKEY" | openssl pkey
+    else echo "$CAKEY"
     fi
-}> "$CAPEM"
+}
+
+if [ "$FN" != '' ] ; then umask 077 ; outp > "$FN" ; else outp ; fi
