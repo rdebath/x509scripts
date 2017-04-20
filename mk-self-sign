@@ -25,33 +25,35 @@ do  case "$ar" in
 	SUBJ="$ar"
 	;;
 
-    -days=* ) CERT_DAYS="${ar#*=}" ;;
-    -out=* ) FN="${ar#*=}" ;;
+    -days[=:]* ) CERT_DAYS="${ar#*[=:]}" ;;
+    -out[=:]* ) FN="${ar#*[=:]}" ;;
 
-    -rsa ) eval "mkkey() { openssl genrsa 3072 ; }" ;;
-    -rsa=* ) eval "mkkey() { openssl genrsa '${ar#*=}' ; }" ;;
-    -dsa ) eval "mkkey() { openssl dsaparam -genkey 3072 ; }" ;;
-    -dsa=* ) eval "mkkey() { openssl dsaparam -genkey '${ar#*=}' ; }" ;;
-    -ec ) eval "mkkey() { openssl ecparam -name prime256v1 -genkey ; }" ;;
-    -ec=* ) eval "mkkey() { openssl ecparam -name '${ar#*=}' -genkey ; }" ;;
+    -rsa[=:]* ) eval "mkkey() { openssl genrsa '${ar#*[=:]}' ; }" ;;
+    -dsa[=:]* ) eval "mkkey() { openssl dsaparam -genkey '${ar#*[=:]}' ; }" ;;
+    -ec[=:]* ) 
+	    ar="${ar#*[=:]}:" ; curve="${ar%%:*}"
+	    ar="${ar#*:}:" ; param="${ar%%:*}"
+	    ar="${ar#*:}:" ; noseed="${ar%%:*}"
+	    eval "mkkey() { openssl ecparam -name '$curve' ${param:+-param_enc $param} ${noseed:+-no_seed} -genkey -noout ; }"
+	    ;;
 
     -md4|-md5|-ripemd160|-sha|-sha1|-sha224|-sha256|-sha384|-sha512|-whirlpool)
 	DGST=$ar ;;
 
-    -v3=* ) [ "$V3OPTS" = "" ] && V3OPTS="$V3INIT"
+    -v3[=:]* ) [ "$V3OPTS" = "" ] && V3OPTS="$V3INIT"
 	    V3OPTS="$V3OPTS
-	    ${ar#*=}
+	    ${ar#*[=:]}
 	    "
 	    ;;
 
-    -v3xt=* )
+    -v3xt[=:]* )
 	    [ "$V3OPTS" = "" ] && V3OPTS="$V3INIT"
 	    V3EXTRAS="$V3EXTRAS
-	    ${ar#*=}
+	    ${ar#*[=:]}
 	    "
 	    ;;
 
-    -v3ca ) [ "$V3OPTS" = "" ] && V3OPTS="$V3INIT"
+    -ca|-v3ca ) [ "$V3OPTS" = "" ] && V3OPTS="$V3INIT"
 	    V3OPTS="$V3OPTS
 	    subjectKeyIdentifier=hash
 	    authorityKeyIdentifier=keyid:always,issuer
@@ -59,7 +61,7 @@ do  case "$ar" in
 	    "
 	    ;;
 
-    -v3usr ) [ "$V3OPTS" = "" ] && V3OPTS="$V3INIT"
+    -v3|-v3usr ) [ "$V3OPTS" = "" ] && V3OPTS="$V3INIT"
 	    V3OPTS="$V3OPTS
 	    basicConstraints = CA:FALSE
 	    subjectKeyIdentifier=hash
@@ -79,20 +81,22 @@ done
 [ -s "$FN" ] &&
     { echo ERROR: File $FN already exists ; exit 1 ; }
 
-CAKEY="$(mkkey)"
-CACERT="$(
-openssl req -new -x509 $DGST -days "${CERT_DAYS:-3652}" \
-    ${SUBJ:+-subj "$SUBJ"} \
-    -key <(echo "$CAKEY") -config <(echo '
-[req]
-distinguished_name = req_distinguished_name
-'"$V3OPTS"'
-[ req_distinguished_name ]
-organizationalUnitName = Organizational Unit Name
-commonName = Common Name
-'"$V3EXTRAS" )
+mkreqconf() {
+    echo '[req]'
+    echo 'distinguished_name = req_distinguished_name'
+    echo "$V3OPTS"
+    echo '[ req_distinguished_name ]'
+    echo 'organizationalUnitName = Organizational Unit Name'
+    echo 'commonName = Common Name'
+    echo "$V3EXTRAS"
+}
 
-)"
+CAKEY="$(mkkey)"
+CACERT="$(openssl req -new -x509 $DGST \
+	-days "${CERT_DAYS:-3652}" \
+	${SUBJ:+-subj "$SUBJ"} \
+	-key <(echo "$CAKEY") \
+	-config <(mkreqconf) )"
 
 outp() {
     echo "$CACERT" | openssl x509 -subject -serial -dates
