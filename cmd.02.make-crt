@@ -4,10 +4,14 @@ set -e
 export OPENSSL_CONF=/dev/null
 CERT_DIR="${CERT_DIR:-certs}"
 
+DIGEST=default
+NOPKEY=no
+
 if openssl no-pkey >/dev/null ;then
     NOPKEY=yes
     CERT_DAYS=${CERT_DAYS:-3650}
-else NOPKEY=no ; fi
+    DIGEST=sha256
+fi
 
 main() {
     CAKEY=demoCA/private/cakey.pem
@@ -53,8 +57,6 @@ main() {
     echo Creating CN="$CN"
 
     F=$(echo "$F" | tr -c '[a-zA-Z0-9\.\-\012]' _)
-
-    if [ "$NOPKEY" = yes ] ;then DIGEST=sha256 ;else DIGEST=default ; fi
 
     CONF='-config '"$TMP"'.cnf'
     cat <<-! > "$TMP".cnf
@@ -208,7 +210,7 @@ fix_demoCA() {
 	# Create a cert request
 	openssl req -new -nodes -config <(mk_reqconfig) \
 		-key "$CAKEY" \
-		-subj "/CN=Private CA/dnQualifier=$(date -u +%Y%m%d-%H%M%S)/" \
+		-subj "/CN=Private CA/dnQualifier=$(cat demoCA/serial)/" \
 		-out demoCA/ca.csr
 
 	# Self-sign the CA-certificate

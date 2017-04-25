@@ -5,11 +5,12 @@ export OPENSSL_CONF=/dev/null
 CERT_DIR="${CERT_DIR:-.}"
 
 # This is my default for making a key file.
-mkkey() { openssl ecparam -name prime256v1 -genkey ;}
+mkkey() { openssl ecparam -name prime256v1 -genkey -noout ;}
 # See also:
 # mkkey() { openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) ;}
 
 FN=
+SERIAL=
 V3OPTS=
 V3EXTRAS=
 V3INIT='x509_extensions = req_x509
@@ -18,15 +19,11 @@ V3INIT='x509_extensions = req_x509
 
 for ar
 do  case "$ar" in
-    /*=* )
-	if [ "$SUBJ" != "" ] ; then
-	    echo >&1 Duplicate subject name definition ; exit 1
-	fi
-	SUBJ="$ar"
-	;;
 
     -days[=:]* ) CERT_DAYS="${ar#*[=:]}" ;;
     -out[=:]* ) FN="${ar#*[=:]}" ;;
+
+    -ser[=:]??*|-serial[=:]??* ) SERIAL="${ar#*[=:]}" ;;
 
     -rsa[=:]* ) eval "mkkey() { openssl genrsa '${ar#*[=:]}' ; }" ;;
     -dsa[=:]* ) eval "mkkey() { openssl dsaparam -genkey '${ar#*[=:]}' ; }" ;;
@@ -69,6 +66,13 @@ do  case "$ar" in
 	    "
 	    ;;
 
+    /*=* )
+	if [ "$SUBJ" != "" ] ; then
+	    echo >&1 Duplicate subject name definition ; exit 1
+	fi
+	SUBJ="$ar"
+	;;
+
     -*|*/*) echo >&2 "Unknown option: $ar" ; exit 1 ;;
 
     * ) if [ "$SUBJ" != "" ] ; then
@@ -94,6 +98,7 @@ mkreqconf() {
 CAKEY="$(mkkey)"
 CACERT="$(openssl req -new -x509 $DGST \
 	-days "${CERT_DAYS:-3652}" \
+	${SERIAL:+-set_serial 0x"$SERIAL"} \
 	${SUBJ:+-subj "$SUBJ"} \
 	-key <(echo "$CAKEY") \
 	-config <(mkreqconf) )"

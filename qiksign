@@ -78,10 +78,12 @@ main() {
 
 make_cakey() {
     [ -s "$CAKEY" ] || {
+	CASERIAL="$(openssl rand -hex 8)"
 	openssl req -new -nodes -x509 \
+	    -set_serial 0x$CASERIAL \
 	    ${RSABITS:+-newkey rsa:$RSABITS} \
 	    -days ${CERT_DAYS:-7300} \
-	    -subj "/CN=Private CA/dnQualifier=$(date -u +%Y%m%d-%H%M%S)/" \
+	    -subj "/CN=Private CA/dnQualifier=$CASERIAL/" \
 	    -keyout "$CAKEY.tmp" -out "$CAKEY.tmp" \
 	    -config <(mk_caconfig)
 	mv "$CAKEY.tmp" "$CAKEY"
