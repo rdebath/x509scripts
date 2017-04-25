@@ -11,8 +11,11 @@ mkkey() { openssl ecparam -name prime256v1 -genkey -noout ;}
 
 FN=
 SERIAL=
+V3HEAD=
+SANLIST=
 V3OPTS=
 V3EXTRAS=
+
 V3INIT='x509_extensions = req_x509
 [ req_x509 ]
 '
@@ -37,20 +40,22 @@ do  case "$ar" in
     -md4|-md5|-ripemd160|-sha|-sha1|-sha224|-sha256|-sha384|-sha512|-whirlpool)
 	DGST=$ar ;;
 
-    -v3[=:]* ) [ "$V3OPTS" = "" ] && V3OPTS="$V3INIT"
+    -v3[=:]* )
+	    V3HEAD="$V3INIT"
 	    V3OPTS="$V3OPTS
 	    ${ar#*[=:]}
 	    "
 	    ;;
 
     -v3xt[=:]* )
-	    [ "$V3OPTS" = "" ] && V3OPTS="$V3INIT"
+	    V3HEAD="$V3INIT"
 	    V3EXTRAS="$V3EXTRAS
 	    ${ar#*[=:]}
 	    "
 	    ;;
 
-    -ca|-v3ca ) [ "$V3OPTS" = "" ] && V3OPTS="$V3INIT"
+    -ca|-v3ca )
+	    V3HEAD="$V3INIT"
 	    V3OPTS="$V3OPTS
 	    subjectKeyIdentifier=hash
 	    authorityKeyIdentifier=keyid:always,issuer
@@ -58,12 +63,24 @@ do  case "$ar" in
 	    "
 	    ;;
 
-    -v3|-v3usr ) [ "$V3OPTS" = "" ] && V3OPTS="$V3INIT"
+    -v3|-v3usr )
+	    V3HEAD="$V3INIT"
 	    V3OPTS="$V3OPTS
 	    basicConstraints = CA:FALSE
 	    subjectKeyIdentifier=hash
 	    authorityKeyIdentifier=keyid,issuer
 	    "
+	    ;;
+
+    -san[=:]* )
+	    V3HEAD="$V3INIT"
+	    san="${ar#*[=:]}"
+	    [ "$SANLIST" != "" ] && SANLIST="$SANLIST,"
+	    case "$san" in
+	    [0-9]*.*[0-9] ) SANLIST="${SANLIST}IP:$san" ;;
+	    *@* ) SANLIST="${SANLIST}email:$san" ;;
+	    * ) SANLIST="${SANLIST}DNS:$san" ;;
+	    esac
 	    ;;
 
     /*=* )
@@ -76,11 +93,20 @@ do  case "$ar" in
     -*|*/*) echo >&2 "Unknown option: $ar" ; exit 1 ;;
 
     * ) if [ "$SUBJ" != "" ] ; then
-	    echo >&1 Duplicate subject name definition ; exit 1
+	    SUBJ="${SUBJ%/}/OU=$ar/"
+	else
+	    SUBJ="/CN=$ar/" ; CN="$ar"
 	fi
-	SUBJ="/CN=$ar/" ; CN="$ar";;
+	;;
     esac
 done
+
+[ "$SANLIST" != "" ] && {
+    if [ "$CN" = "" ]
+    then SANLIST="subjectAltName=$SANLIST"
+    else SANLIST="subjectAltName=DNS:$CN,$SANLIST"
+    fi
+}
 
 [ -s "$FN" ] &&
     { echo ERROR: File $FN already exists ; exit 1 ; }
@@ -88,6 +114,8 @@ done
 mkreqconf() {
     echo '[req]'
     echo 'distinguished_name = req_distinguished_name'
+    echo "$V3HEAD"
+    echo "$SANLIST"
     echo "$V3OPTS"
     echo '[ req_distinguished_name ]'
     echo 'organizationalUnitName = Organizational Unit Name'
