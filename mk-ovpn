@@ -14,6 +14,7 @@ CERT_DIR="${CERT_DIR:-certs}"
 
 V3CA=""
 V3CERT=""
+V3EXTENDED=no
 SERVER=no
 ECPARAM=prime256v1
 CAOU='Private CA'
@@ -42,6 +43,11 @@ do  case "$v" in
 	V3CERT="$V3BASECERT"
 	V3CA="$V3BASECA"
 	;;
+    -v3ext )
+	V3EXTENDED=yes
+	V3CERT="$V3BASECERT"
+	V3CA="$V3BASECA"
+	;;
     -days=[1-9]*[0-9] ) CERT_DAYS="${v#*=}" ;;
     -ca=* )		CASUBJ="${v#*=}" ;;
     -ou=*|-OU=* )	CERTOU="${v#*=}" ;;
@@ -51,10 +57,29 @@ do  case "$v" in
     esac
 done
 
-[ "$V3CERT" != "" -a "$SERVER" = yes ] &&
-    V3CERT="${V3BASECERT} nsCertType = server "
-[ "$V3CERT" != "" -a "$SERVER" = client ] &&
-    V3CERT="${V3BASECERT} nsCertType = client "
+[ "$V3CERT" != "" -a "$SERVER" = yes ] && {
+    if [ "$V3EXTENDED" = yes ] 
+    then
+	V3CERT="${V3BASECERT}
+	keyUsage = keyEncipherment
+	extendedKeyUsage = serverAuth
+	"
+    else
+	V3CERT="${V3BASECERT} nsCertType = server "
+    fi
+}
+
+[ "$V3CERT" != "" -a "$SERVER" = client ] && {
+    if [ "$V3EXTENDED" = yes ] 
+    then
+	V3CERT="${V3BASECERT}
+	keyUsage = digitalSignature
+	extendedKeyUsage = clientAuth
+	"
+    else
+	V3CERT="${V3BASECERT} nsCertType = client "
+    fi
+}
 
 CAFILE="$CERT_DIR"/"$CN".ca.crt
 
@@ -104,3 +129,7 @@ openssl x509 -req -days "$CERT_DAYS" \
     -CA "$CAFILE" \
     -CAkey <(echo "$CAKEY") \
     ${V3CERT:+-extfile <(echo "$V3CERT")}
+
+# Reduce the file list
+cat "$CERT_DIR"/$CN.crt "$CERT_DIR"/$CN.key > "$CERT_DIR"/$CN.pem
+rm "$CERT_DIR"/$CN.crt "$CERT_DIR"/$CN.key

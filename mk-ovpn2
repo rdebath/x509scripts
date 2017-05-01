@@ -18,27 +18,27 @@ SERVEROU=
 # Add all the server CA certificates.
 for CA in "$CERT_DIR"/*.ca.cer
 do
-    [ -s "$CA" ] && {
-	openssl x509 -subject -serial -dates -in "$CA"
+    [ -s "$CA" ] || continue
 
-	SERVERCOUNT=$((SERVERCOUNT+1))
-	SERVERNAME="$(openssl x509 -noout -in "${CA/.ca.cer/.crt}" \
-	    -subject -nameopt multiline | sed -n 's/ *commonName *= //p')"
+    openssl x509 -subject -serial -dates -in "$CA"
 
-	OU="$(openssl x509 -noout -in "${CA/.ca.cer/.crt}" -subject \
-	    -nameopt multiline | sed -n 's/ *organizationalUnitName *= //p')"
+    SERVERCOUNT=$((SERVERCOUNT+1))
+    SERVERNAME="$(openssl x509 -noout -in "${CA/.ca.cer/.crt}" \
+	-subject -nameopt multiline | sed -n 's/ *commonName *= //p')"
 
-	# If they have a common OU
-	if [ "$SERVERCOUNT" = 1 ]
-	then SERVEROU="$OU"
-	else [ "$OU" != "$SERVEROU" ] && SERVEROU=""
-	fi
-    }
-done > tmp/servers.ca-list.pem
+    OU="$(openssl x509 -noout -in "${CA/.ca.cer/.crt}" -subject \
+	-nameopt multiline | sed -n 's/ *organizationalUnitName *= //p')"
 
-try_file "$CERT_DIR" servers.ca-list.pem
+    # If they have a common OU
+    if [ "$SERVERCOUNT" = 1 ]
+    then SERVEROU="$OU"
+    else [ "$OU" != "$SERVEROU" ] && SERVEROU=""
+    fi
 
-[ -s "$CERT_DIR"/servers.ca-list.pem ] || {
+done > tmp/servers.CA-list.pem
+
+[ -s tmp/servers.CA-list.pem ] || {
+    rm -rf tmp
     echo >&2 ERROR: No servers have been defined.
     exit 1
 }
@@ -47,82 +47,126 @@ try_file "$CERT_DIR" servers.ca-list.pem
 [ -f "$CERT_DIR"/tls-crypt.pvk ] ||
     openvpn --genkey --secret "$CERT_DIR"/tls-crypt.pvk
 
+rm -f tmp/clients.CA-list.pem ||:
+
 # For all the client CA certificates
 for cert in "$CERT_DIR"/*.ca.crt
 do
     CN="$(basename "$cert" .ca.crt)"
     CA="$CERT_DIR/$CN.ca.crt"
-    [ -s "$CERT_DIR"/"$CN".key -a -s "$CA" ] && {
 
-	echo Client $CN
+    [ -s "$CA" ] || continue
+    rm -f tmp/client.key tmp/client.crt ||:
 
-	for file in pattern*.ovpn
-	do
-	    if [ -f "$file" ]
-	    then tfile="$CN${file/pattern/}"
-	    else file=/dev/null
-		 tfile="$CN.ovpn"
-	    fi
-
-	    {
-		cat "$file"
-		echo
-
-		# Stop the deamon whinging.
-		# This has NO security effect as the CAs are unique.
-		# (Even if the clients are the same OU)
-		if [ "$SERVERCOUNT" -eq 1 -a "$SERVERNAME" != "" ]
-		then
-		    # Not on 2.4.1 Windows, ENABLE_X509ALTUSERNAME missing
-		    # echo x509-username-field CN
-		    echo "verify-x509-name '$SERVERNAME' name"
-		elif [ "$SERVEROU" != "" ]
-		then
-		    echo x509-username-field OU
-		    echo "verify-x509-name '$SERVEROU' name"
-		fi
-		echo
-
-		[ -s "$CERT_DIR"/tls-crypt.pvk ] && {
-		    if ! grep -q tls-auth "$file"
-		    then
-			echo '<tls-crypt>'
-			cat "$CERT_DIR"/tls-crypt.pvk
-			echo '</tls-crypt>'
-		    fi
-		}
-
-		echo '<cert>'
-		openssl x509 -subject -serial -dates -in "$CERT_DIR"/"$CN".crt
-		echo '</cert>'
-
-		echo '<key>'
-		openssl pkey -in "$CERT_DIR"/"$CN".key
-		echo '</key>'
-
-		echo '<ca>'
-		cat "$CERT_DIR"/servers.ca-list.pem
-		echo '</ca>'
-
-	    } > tmp/"$tfile"
-
-	    try_file ovpn-conf "$tfile"
-	done
+    [ -s "$CERT_DIR"/"$CN".key ] && {
+	openssl pkey -in "$CERT_DIR"/"$CN".key > tmp/client.key 2>/dev/null ||:
     }
-done
+    [ -s "$CERT_DIR"/"$CN".pem -a ! -s tmp/client.key ] && {
+	openssl pkey -in "$CERT_DIR"/"$CN".pem > tmp/client.key 2>/dev/null ||:
+    }
+    [ -s "$CA" -a ! -s tmp/client.key ] && {
+	openssl pkey -in "$CA" > tmp/client.key 2>/dev/null &&
+	openssl x509 -in "$CA" > tmp/client.crt 2>/dev/null ||:
+    }
 
-# Add all the client CA certificates
-for cert in "$CERT_DIR"/*.ca.crt
-do
-    CN="$(basename "$cert" .ca.crt)"
-    CA="$CERT_DIR/$CN.ca.crt"
-    [ -s "$CERT_DIR"/"$CN".crt -a -s "$CA" ] && {
+    [ -s "$CERT_DIR"/"$CN".crt -a ! -s tmp/client.crt ] && {
+	openssl x509 -in "$CERT_DIR"/"$CN".crt > tmp/client.crt 2>/dev/null ||:
+    }
+    [ -s "$CERT_DIR"/"$CN".pem -a ! -s tmp/client.crt ] && {
+	openssl x509 -in "$CERT_DIR"/"$CN".pem > tmp/client.crt 2>/dev/null ||:
+    }
+
+    [ -s tmp/client.key ] || continue
+    [ -s tmp/client.crt ] || continue
+
+    # Check them.
+    CERTPUB="$(openssl x509 -pubkey -noout < tmp/client.crt 2>/dev/null)"
+    PKEYPUB="$(openssl pkey -pubout < tmp/client.key 2>/dev/null)"
+    SUBJ="$(openssl x509 -subject_hash -noout < "$CA" 2>/dev/null)"
+    ISSU="$(openssl x509 -issuer_hash -noout < tmp/client.crt 2>/dev/null)"
+
+    if [ "$CERTPUB" != "$PKEYPUB" ]
+    then echo "WARNING: Skipped $CA, public keys don't match"
+	 continue
+    fi
+
+    if [ "$SUBJ" != "$ISSU" ]
+    then echo "WARNING: Skipped $CA, issuer doesn't match signer subject"
+	 continue
+    fi
+
+    VERIFYED=$(openssl verify -x509_strict -check_ss_sig -purpose sslclient \
+	    -CAfile "$CA" tmp/client.crt >/dev/null 2>&1 &&
+	echo yes || echo no
+	)
+
+    if [ "$VERIFYED" = no ]
+    then echo "WARNING: Skipped $CA, openssl verify failed."
+	 continue
+    fi
+
+    echo Client $CN
+
+    {
 	openssl x509 -subject -serial -dates -in "$CA"
 	echo
-    }
-done > tmp/clients.ca-list.pem
+    } >> tmp/clients.CA-list.pem
 
-try_file "$CERT_DIR" clients.ca-list.pem
+    for file in pattern*.ovpn
+    do
+	if [ -f "$file" ]
+	then tfile="$CN${file/pattern/}"
+	else file=/dev/null
+	     tfile="$CN.ovpn"
+	fi
+
+	{
+	    cat "$file"
+	    echo
+
+	    # Stop the deamon whinging.
+	    # This has NO security effect as the CAs are unique.
+	    # (Even if the clients are the same OU)
+	    if [ "$SERVERCOUNT" -eq 1 -a "$SERVERNAME" != "" ]
+	    then
+		# Not on 2.4.1 Windows, ENABLE_X509ALTUSERNAME missing
+		# echo x509-username-field CN
+		echo "verify-x509-name '$SERVERNAME' name"
+	    elif [ "$SERVEROU" != "" ]
+	    then
+		echo x509-username-field OU
+		echo "verify-x509-name '$SERVEROU' name"
+	    fi
+	    echo
+
+	    [ -s "$CERT_DIR"/tls-crypt.pvk ] && {
+		if ! grep -q tls-auth "$file"
+		then
+		    echo '<tls-crypt>'
+		    cat "$CERT_DIR"/tls-crypt.pvk
+		    echo '</tls-crypt>'
+		fi
+	    }
+
+	    echo '<cert>'
+	    openssl x509 -subject -serial -dates -in tmp/client.crt
+	    echo '</cert>'
+
+	    echo '<key>'
+	    openssl pkey -in tmp/client.key
+	    echo '</key>'
+
+	    echo '<ca>'
+	    cat tmp/servers.CA-list.pem
+	    echo '</ca>'
+
+	} > tmp/"$tfile"
+
+	rm -f tmp/client.key tmp/client.crt ||:
+	try_file ovpn-conf "$tfile"
+    done
+
+done
 
 # Copy all the certificates and keys for the servers.
 for cert in "$CERT_DIR"/*.ca.cer
@@ -134,7 +178,7 @@ do
 	openssl x509 -subject -serial -dates -in "$CERT_DIR"/"$CN".crt > tmp/"$CN".crt
 	openssl pkey -in "$CERT_DIR"/"$CN".key > tmp/"$CN".key
 
-	cp -p "$CERT_DIR"/clients.ca-list.pem tmp/"$CN".ca-list.pem
+	cp -p tmp/clients.CA-list.pem tmp/"$CN".ca-list.pem
 
 	cp -p "$CERT_DIR"/tls-crypt.pvk tmp/"$CN".tls-crypt.pvk
 
