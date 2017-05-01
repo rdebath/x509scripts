@@ -19,6 +19,8 @@ SERVEROU=
 for CA in "$CERT_DIR"/*.ca.cer
 do
     [ -s "$CA" ] || continue
+    [ -s "${CA/.ca.cer/.crt}" ] || continue
+    [ -s "${CA/.ca.cer/.key}" ] || continue
 
     openssl x509 -subject -serial -dates -in "$CA"
 
@@ -97,11 +99,19 @@ do
 
     VERIFYED=$(openssl verify -x509_strict -check_ss_sig -purpose sslclient \
 	    -CAfile "$CA" tmp/client.crt >/dev/null 2>&1 &&
-	echo yes || echo no
-	)
+	echo yes || echo no)
 
     if [ "$VERIFYED" = no ]
     then echo "WARNING: Skipped $CA, openssl verify failed."
+	 continue
+    fi
+
+    USAGE=$(openssl x509 -purpose -noout -in tmp/client.crt 2>/dev/null |
+	    grep -q 'SSL client *: *Yes' &&
+	echo yes || echo no)
+
+    if [ "$USAGE" = no ]
+    then echo "WARNING: Skipped $CA, not usable as client certificate"
 	 continue
     fi
 
@@ -171,26 +181,28 @@ done
 # Copy all the certificates and keys for the servers.
 for cert in "$CERT_DIR"/*.ca.cer
 do
+    [ -s "$cert" ] || continue
+    [ -s "${cert/.ca.cer/.crt}" ] || continue
+    [ -s "${cert/.ca.cer/.key}" ] || continue
+
     CN="$(basename "$cert" .ca.cer)"
-    [ -s "$CERT_DIR"/"$CN".key ] && {
-	echo Server $CN
+    echo Server $CN
 
-	openssl x509 -subject -serial -dates -in "$CERT_DIR"/"$CN".crt > tmp/"$CN".crt
-	openssl pkey -in "$CERT_DIR"/"$CN".key > tmp/"$CN".key
+    openssl x509 -subject -serial -dates -in "$CERT_DIR"/"$CN".crt > tmp/"$CN".crt
+    openssl pkey -in "$CERT_DIR"/"$CN".key > tmp/"$CN".key
 
-	cp -p tmp/clients.CA-list.pem tmp/"$CN".ca-list.pem
+    cp -p tmp/clients.CA-list.pem tmp/"$CN".ca-list.pem
 
-	cp -p "$CERT_DIR"/tls-crypt.pvk tmp/"$CN".tls-crypt.pvk
+    cp -p "$CERT_DIR"/tls-crypt.pvk tmp/"$CN".tls-crypt.pvk
 
-	try_file ovpn-conf "$CN".crt
-	try_file ovpn-conf "$CN".key
-	try_file ovpn-conf "$CN".ca-list.pem
-	try_file ovpn-conf "$CN".tls-crypt.pvk
+    try_file ovpn-conf "$CN".crt
+    try_file ovpn-conf "$CN".key
+    try_file ovpn-conf "$CN".ca-list.pem
+    try_file ovpn-conf "$CN".tls-crypt.pvk
 
-	[ -f "$CERT_DIR"/dhparam.pem ] && {
-	    cp -p "$CERT_DIR"/dhparam.pem tmp/"$CN".dhparam.pem
-	    try_file ovpn-conf "$CN".dhparam.pem
-	}
+    [ -f "$CERT_DIR"/dhparam.pem ] && {
+	cp -p "$CERT_DIR"/dhparam.pem tmp/"$CN".dhparam.pem
+	try_file ovpn-conf "$CN".dhparam.pem
     }
 done
 
