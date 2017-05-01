@@ -58,25 +58,26 @@ do
     CA="$CERT_DIR/$CN.ca.crt"
 
     [ -s "$CA" ] || continue
-    rm -f tmp/client.key tmp/client.crt ||:
 
-    [ -s "$CERT_DIR"/"$CN".key ] && {
-	openssl pkey -in "$CERT_DIR"/"$CN".key > tmp/client.key 2>/dev/null ||:
-    }
-    [ -s "$CERT_DIR"/"$CN".pem -a ! -s tmp/client.key ] && {
-	openssl pkey -in "$CERT_DIR"/"$CN".pem > tmp/client.key 2>/dev/null ||:
-    }
-    [ -s "$CA" -a ! -s tmp/client.key ] && {
-	openssl pkey -in "$CA" > tmp/client.key 2>/dev/null &&
-	openssl x509 -in "$CA" > tmp/client.crt 2>/dev/null ||:
-    }
+    echo Client $CN
 
-    [ -s "$CERT_DIR"/"$CN".crt -a ! -s tmp/client.crt ] && {
-	openssl x509 -in "$CERT_DIR"/"$CN".crt > tmp/client.crt 2>/dev/null ||:
-    }
-    [ -s "$CERT_DIR"/"$CN".pem -a ! -s tmp/client.crt ] && {
-	openssl x509 -in "$CERT_DIR"/"$CN".pem > tmp/client.crt 2>/dev/null ||:
-    }
+    rm -f tmp/client.key tmp/client.crt tmp/client.ca tmp/client.pfx tmp/client.pem
+
+    [ -s "$CERT_DIR"/"$CN".key ] && cat "$CERT_DIR"/"$CN".key >> tmp/client.pem
+    [ -s "$CERT_DIR"/"$CN".crt ] && cat "$CERT_DIR"/"$CN".crt >> tmp/client.pem
+    [ -s "$CERT_DIR"/"$CN".pem ] && cat "$CERT_DIR"/"$CN".pem >> tmp/client.pem
+    cat "$CA" >> tmp/client.pem
+
+    # This checks the certificates and allows us to put them anywhere
+    openssl pkcs12 -export -in tmp/client.pem -CAfile tmp/client.pem -chain -passout pass: -out tmp/client.pfx
+
+    [ -s tmp/client.pfx ] || continue
+
+    openssl pkcs12 -in tmp/client.pfx -passin pass: -clcerts -nokeys -nodes -nomacver > tmp/client.crt
+    openssl pkcs12 -in tmp/client.pfx -passin pass: -cacerts -nokeys -nodes -nomacver > tmp/client.ca
+    openssl pkcs12 -in tmp/client.pfx -passin pass: -nocerts -nodes -nomacver > tmp/client.key
+
+    [ -s tmp/client.ca ] || cp tmp/client.crt tmp/client.ca
 
     [ -s tmp/client.key ] || continue
     [ -s tmp/client.crt ] || continue
@@ -84,7 +85,8 @@ do
     # Check them.
     CERTPUB="$(openssl x509 -pubkey -noout < tmp/client.crt 2>/dev/null)"
     PKEYPUB="$(openssl pkey -pubout < tmp/client.key 2>/dev/null)"
-    SUBJ="$(openssl x509 -subject_hash -noout < "$CA" 2>/dev/null)"
+    SUBJ="$(openssl x509 -subject_hash -noout < tmp/client.ca 2>/dev/null)"
+    CASER="$(openssl x509 -serial -noout < tmp/client.ca 2>/dev/null)"
     ISSU="$(openssl x509 -issuer_hash -noout < tmp/client.crt 2>/dev/null)"
 
     if [ "$CERTPUB" != "$PKEYPUB" ]
@@ -98,7 +100,7 @@ do
     fi
 
     VERIFYED=$(openssl verify -x509_strict -check_ss_sig -purpose sslclient \
-	    -CAfile "$CA" tmp/client.crt 2>&1 | grep -iq ^error &&
+	    -CAfile tmp/client.ca tmp/client.crt 2>&1 | grep -iq ^error &&
 	echo no || echo yes)
 
     if [ "$VERIFYED" = no ]
@@ -115,12 +117,14 @@ do
 	 continue
     fi
 
-    echo Client $CN
-
-    {
-	openssl x509 -subject -serial -dates -in "$CA"
-	echo
-    } >> tmp/clients.CA-list.pem
+    if [ ! -f "tmp/$SUBJ.$CASER.flg" ]
+    then
+	{
+	    openssl x509 -subject -serial -dates -in tmp/client.ca
+	    echo
+	} >> tmp/clients.CA-list.pem
+	touch "tmp/$SUBJ.$CASER.flg"
+    fi
 
     for file in pattern*.ovpn
     do
@@ -177,6 +181,12 @@ do
     done
 
 done
+
+[ -s tmp/clients.CA-list.pem ] || {
+    rm -rf tmp
+    echo >&2 ERROR: No clients have been defined.
+    exit 1
+}
 
 # Copy all the certificates and keys for the servers.
 for cert in "$CERT_DIR"/*.ca.cer

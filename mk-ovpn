@@ -93,7 +93,7 @@ CAFILE="$CERT_DIR"/"$CN".ca.crt
 
 CERT_DAYS="${CERT_DAYS:-3652}"
 
-[ -s "$CERT_DIR"/"$CN".pem -o -s "$CERT_DIR"/"$CN".key ] &&
+[ -s "$CAFILE" -o -s "$CERT_DIR"/"$CN".pem -o -s "$CERT_DIR"/"$CN".key ] &&
     { echo "ERROR: Name '$CN' already exists" ; exit 1 ; }
 
 umask 077
@@ -134,6 +134,8 @@ openssl x509 -req -days "$CERT_DAYS" \
 
 [ "$SERVER" != yes ] && {
     # Reduce the file list
-    cat "$CERT_DIR"/$CN.crt "$CERT_DIR"/$CN.key > "$CERT_DIR"/$CN.pem
-    rm "$CERT_DIR"/$CN.crt "$CERT_DIR"/$CN.key
+    openssl x509 -subject -issuer -serial -dates -in "$CERT_DIR"/$CN.crt |
+    cat - "$CAFILE" "$CERT_DIR"/$CN.key > "$CERT_DIR"/$CN.pem
+    rm "$CERT_DIR"/$CN.crt "$CAFILE" "$CERT_DIR"/$CN.key
+    mv "$CERT_DIR"/$CN.pem "$CAFILE"
 }
