@@ -90,7 +90,7 @@ make_cakey() {
     }
 
     [ "$CERT_DAYS" = "" ] && {
-	ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in "$CAKEY" | sed 's/^[^=]*=//')")"
+	ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in "$CAKEY" | sed 's/^[^=]*=//')" ||:)"
 	TODAY="$(date +%s)"
 	[ "$ENDDAY" = "" ] && ENDDAY=2147126400
 	CERT_DAYS=$((ENDDAY/86400 - TODAY/86400))
