@@ -4,17 +4,24 @@ set -e
 export OPENSSL_CONF=/dev/null
 CERT_DIR="${CERT_DIR:-.}"
 
-# This is my default for making a key file.
-mkkey() { openssl ecparam -name prime256v1 -genkey -noout ;}
-# See also:
-# mkkey() { openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) ;}
-
 FN=
 SERIAL=
 V3HEAD=
 SANLIST=
 V3OPTS=
 V3EXTRAS=
+NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
+NOECPARAM="$(openssl no-ecparam >/dev/null 2>&1 && echo yes || echo no)"
+
+# This is my default for making a key file.
+if [ "$NOECPARAM" = no ] ; then
+    mkkey() { openssl ecparam -name prime256v1 -genkey ;}
+else
+    echo "$NOECPARAM"
+    mkkey() { openssl genrsa 3072 ; }
+fi
+# See also:
+# mkkey() { openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) ;}
 
 V3INIT='x509_extensions = req_x509
 [ req_x509 ]
@@ -34,8 +41,10 @@ do  case "$ar" in
 	    ar="${ar#*[=:]}:" ; curve="${ar%%:*}"
 	    ar="${ar#*:}:" ; param="${ar%%:*}"
 	    ar="${ar#*:}:" ; noseed="${ar%%:*}"
-	    eval "mkkey() { openssl ecparam -name '$curve' ${param:+-param_enc $param} ${noseed:+-no_seed} -genkey -noout ; }"
+	    eval "mkkey() { openssl ecparam -name '$curve' ${param:+-param_enc $param} ${noseed:+-no_seed} -genkey ; }"
 	    ;;
+
+    -ecp ) NOPKEY=yes ;;
 
     -md4|-md5|-ripemd160|-sha|-sha1|-sha224|-sha256|-sha384|-sha512|-whirlpool)
 	DGST=$ar ;;
@@ -123,19 +132,19 @@ mkreqconf() {
     echo "$V3EXTRAS"
 }
 
-CAKEY="$(mkkey)"
-CACERT="$(openssl req -new -x509 $DGST \
+SSKEY="$(mkkey)"
+SSCERT="$(openssl req -new -x509 $DGST \
 	-days "${CERT_DAYS:-3652}" \
 	${SERIAL:+-set_serial 0x"$SERIAL"} \
 	${SUBJ:+-subj "$SUBJ"} \
-	-key <(echo "$CAKEY") \
+	-key <(echo "$SSKEY") \
 	-config <(mkreqconf) )"
 
 outp() {
-    echo "$CACERT" | openssl x509 -subject -serial -dates
-    if ! openssl no-pkey >/dev/null
-    then echo "$CAKEY" | openssl pkey
-    else echo "$CAKEY"
+    echo "$SSCERT" | openssl x509 -subject -serial -dates
+    if [ "$NOPKEY" = no ]
+    then echo "$SSKEY" | openssl pkey
+    else echo "$SSKEY"
     fi
 }
 
