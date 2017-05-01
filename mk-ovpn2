@@ -98,11 +98,11 @@ do
     fi
 
     VERIFYED=$(openssl verify -x509_strict -check_ss_sig -purpose sslclient \
-	    -CAfile "$CA" tmp/client.crt >/dev/null 2>&1 &&
-	echo yes || echo no)
+	    -CAfile "$CA" tmp/client.crt 2>&1 | grep -iq ^error &&
+	echo no || echo yes)
 
     if [ "$VERIFYED" = no ]
-    then echo "WARNING: Skipped $CA, openssl verify failed."
+    then echo "WARNING: Skipped $CA, openssl verify gave error"
 	 continue
     fi
 
