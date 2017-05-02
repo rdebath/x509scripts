@@ -132,10 +132,8 @@ openssl x509 -req -days "$CERT_DAYS" \
     -CAkey <(echo "$CAKEY") \
     ${V3CERT:+-extfile <(echo "$V3CERT")}
 
-[ "$SERVER" != yes ] && {
-    # Reduce the file list
-    openssl x509 -subject -issuer -serial -dates -in "$CERT_DIR"/$CN.crt |
-    cat - "$CAFILE" "$CERT_DIR"/$CN.key > "$CERT_DIR"/$CN.pem
-    rm "$CERT_DIR"/$CN.crt "$CAFILE" "$CERT_DIR"/$CN.key
-    mv "$CERT_DIR"/$CN.pem "$CAFILE"
-}
+# Reduce the file list
+openssl x509 -subject -issuer -serial -dates -in "$CERT_DIR"/$CN.crt |
+cat - "$CAFILE" "$CERT_DIR"/$CN.key > "$CERT_DIR"/$CN.pem
+rm "$CERT_DIR"/$CN.crt "$CAFILE" "$CERT_DIR"/$CN.key
+mv "$CERT_DIR"/$CN.pem "$CAFILE"

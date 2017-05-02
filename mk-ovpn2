@@ -16,19 +16,19 @@ SERVERNAME=
 SERVEROU=
 
 # Add all the server CA certificates.
-for CA in "$CERT_DIR"/*.ca.cer
+for cert in "$CERT_DIR"/*.ca.cer
 do
-    [ -s "$CA" ] || continue
-    [ -s "${CA/.ca.cer/.crt}" ] || continue
-    [ -s "${CA/.ca.cer/.key}" ] || continue
+    CN="$(basename "$cert" .ca.cer)"
+    fetch_pems "$CN"
+    [ -s tmp/client.ca ] || continue
 
-    openssl x509 -subject -serial -dates -in "$CA"
+    openssl x509 -subject -serial -dates -in tmp/client.ca
 
     SERVERCOUNT=$((SERVERCOUNT+1))
-    SERVERNAME="$(openssl x509 -noout -in "${CA/.ca.cer/.crt}" \
+    SERVERNAME="$(openssl x509 -noout -in tmp/client.crt \
 	-subject -nameopt multiline | sed -n 's/ *commonName *= //p')"
 
-    OU="$(openssl x509 -noout -in "${CA/.ca.cer/.crt}" -subject \
+    OU="$(openssl x509 -noout -in tmp/client.crt -subject \
 	-nameopt multiline | sed -n 's/ *organizationalUnitName *= //p')"
 
     # If they have a common OU
@@ -55,56 +55,17 @@ rm -f tmp/clients.CA-list.pem ||:
 for cert in "$CERT_DIR"/*.ca.crt
 do
     CN="$(basename "$cert" .ca.crt)"
-    CA="$CERT_DIR/$CN.ca.crt"
-
-    [ -s "$CA" ] || continue
 
     echo Client $CN
-
-    rm -f tmp/client.key tmp/client.crt tmp/client.ca tmp/client.pfx tmp/client.pem
-
-    [ -s "$CERT_DIR"/"$CN".key ] && cat "$CERT_DIR"/"$CN".key >> tmp/client.pem
-    [ -s "$CERT_DIR"/"$CN".crt ] && cat "$CERT_DIR"/"$CN".crt >> tmp/client.pem
-    [ -s "$CERT_DIR"/"$CN".pem ] && cat "$CERT_DIR"/"$CN".pem >> tmp/client.pem
-    cat "$CA" >> tmp/client.pem
-
-    # This checks the certificates and allows us to put them anywhere
-    openssl pkcs12 -export -in tmp/client.pem -CAfile tmp/client.pem -chain -passout pass: -out tmp/client.pfx
-
-    [ -s tmp/client.pfx ] || continue
-
-    openssl pkcs12 -in tmp/client.pfx -passin pass: -clcerts -nokeys -nodes -nomacver > tmp/client.crt
-    openssl pkcs12 -in tmp/client.pfx -passin pass: -cacerts -nokeys -nodes -nomacver > tmp/client.ca
-    openssl pkcs12 -in tmp/client.pfx -passin pass: -nocerts -nodes -nomacver > tmp/client.key
-
-    [ -s tmp/client.ca ] || cp tmp/client.crt tmp/client.ca
-
-    [ -s tmp/client.key ] || continue
-    [ -s tmp/client.crt ] || continue
-
-    # Check them.
-    CERTPUB="$(openssl x509 -pubkey -noout < tmp/client.crt 2>/dev/null)"
-    PKEYPUB="$(openssl pkey -pubout < tmp/client.key 2>/dev/null)"
-    SUBJ="$(openssl x509 -subject_hash -noout < tmp/client.ca 2>/dev/null)"
-    CASER="$(openssl x509 -serial -noout < tmp/client.ca 2>/dev/null)"
-    ISSU="$(openssl x509 -issuer_hash -noout < tmp/client.crt 2>/dev/null)"
-
-    if [ "$CERTPUB" != "$PKEYPUB" ]
-    then echo "WARNING: Skipped $CA, public keys don't match"
-	 continue
-    fi
-
-    if [ "$SUBJ" != "$ISSU" ]
-    then echo "WARNING: Skipped $CA, issuer doesn't match signer subject"
-	 continue
-    fi
+    fetch_pems "$CN"
+    [ -s tmp/client.ca ] || continue
 
     VERIFYED=$(openssl verify -x509_strict -check_ss_sig -purpose sslclient \
 	    -CAfile tmp/client.ca tmp/client.crt 2>&1 | grep -iq ^error &&
 	echo no || echo yes)
 
     if [ "$VERIFYED" = no ]
-    then echo "WARNING: Skipped $CA, openssl verify gave error"
+    then echo "WARNING: Skipped $CN, openssl verify gave error"
 	 continue
     fi
 
@@ -113,7 +74,7 @@ do
 	echo yes || echo no)
 
     if [ "$USAGE" = no ]
-    then echo "WARNING: Skipped $CA, not usable as client certificate"
+    then echo "WARNING: Skipped $CN, not usable as client certificate"
 	 continue
     fi
 
@@ -191,15 +152,21 @@ done
 # Copy all the certificates and keys for the servers.
 for cert in "$CERT_DIR"/*.ca.cer
 do
-    [ -s "$cert" ] || continue
-    [ -s "${cert/.ca.cer/.crt}" ] || continue
-    [ -s "${cert/.ca.cer/.key}" ] || continue
-
     CN="$(basename "$cert" .ca.cer)"
     echo Server $CN
+    fetch_pems "$CN"
+    [ -s tmp/client.ca ] || continue
 
-    openssl x509 -subject -serial -dates -in "$CERT_DIR"/"$CN".crt > tmp/"$CN".crt
-    openssl pkey -in "$CERT_DIR"/"$CN".key > tmp/"$CN".key
+    USAGE=$(openssl x509 -purpose -noout -in tmp/client.crt 2>/dev/null |
+	    grep -q 'SSL server *: *Yes' &&
+	echo yes || echo no)
+
+    if [ "$USAGE" = no ]
+    then echo "WARNING: $CN may not usable as server certificate"
+    fi
+
+    openssl x509 -subject -serial -dates -in tmp/client.crt > tmp/"$CN".crt
+    openssl pkey -in tmp/client.key > tmp/"$CN".key
 
     cp -p tmp/clients.CA-list.pem tmp/"$CN".ca-list.pem
 
@@ -217,6 +184,63 @@ do
 done
 
 rm -rf tmp
+}
+
+fetch_pems() {
+    CN="$1"
+    # This checks the certificates and allows us to put them anywhere
+
+    rm -f tmp/client.key tmp/client.crt tmp/client.ca tmp/client.pfx tmp/client.pem tmp/client.ca.pem
+
+    for i in "$CERT_DIR"/"$CN".key "$CERT_DIR"/"$CN".crt "$CERT_DIR"/"$CN".pem "$CERT_DIR"/"$CN".ca.crt "$CERT_DIR"/"$CN".ca.cer
+    do
+	[ -s "$i" ] || continue
+	[ -s tmp/client.crt ] || {
+	    openssl x509 -in "$i" > tmp/client.crt 2>/dev/null ||:
+	}
+	[ -s tmp/client.key ] || {
+	    openssl pkey -in "$i" > tmp/client.key 2>/dev/null ||:
+	}
+
+	cat "$i" >> tmp/client.ca.pem
+    done
+
+    [ -s "$CERT_DIR"/ca.crt ] && cat "$CERT_DIR"/ca.crt >> tmp/client.ca.pem
+
+    openssl pkcs12 -export \
+	-in tmp/client.crt -inkey tmp/client.key -CAfile tmp/client.ca.pem \
+	-chain -passout pass: -out tmp/client.pfx ||:
+
+    [ -s tmp/client.pfx ] || {
+	rm -f tmp/client.key tmp/client.crt tmp/client.ca.pem tmp/client.pfx
+	return
+    }
+
+    openssl pkcs12 -in tmp/client.pfx -passin pass: -clcerts -nokeys -nodes -nomacver > tmp/client.crt
+    openssl pkcs12 -in tmp/client.pfx -passin pass: -cacerts -nokeys -nodes -nomacver > tmp/client.ca
+    openssl pkcs12 -in tmp/client.pfx -passin pass: -nocerts -nodes -nomacver > tmp/client.key
+
+    [ -s tmp/client.ca ] || cp tmp/client.crt tmp/client.ca
+    rm -f tmp/client.pfx tmp/client.pem tmp/client.ca.pem
+
+    # Check them.
+    CERTPUB="$(openssl x509 -pubkey -noout < tmp/client.crt 2>/dev/null)"
+    PKEYPUB="$(openssl pkey -pubout < tmp/client.key 2>/dev/null)"
+    SUBJ="$(openssl x509 -subject_hash -noout < tmp/client.ca 2>/dev/null)"
+    CASER="$(openssl x509 -serial -noout < tmp/client.ca 2>/dev/null)"
+    ISSU="$(openssl x509 -issuer_hash -noout < tmp/client.crt 2>/dev/null)"
+
+    if [ "$CERTPUB" != "$PKEYPUB" ]
+    then echo "WARNING: Skipped $CN, public keys don't match"
+	 rm -f tmp/client.crt tmp/client.ca tmp/client.key
+         return
+    fi
+
+    if [ "$SUBJ" != "$ISSU" ]
+    then echo "WARNING: Skipped $CN, issuer doesn't match signer subject"
+	 rm -f tmp/client.crt tmp/client.ca tmp/client.key
+         return
+    fi
 }
 
 try_file() {
