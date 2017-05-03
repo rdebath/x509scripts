@@ -60,7 +60,7 @@ do
     fetch_pems "$CN"
     [ -s tmp/client.ca ] || continue
 
-    VERIFYED=$(openssl verify -x509_strict -check_ss_sig -purpose sslclient \
+    VERIFYED=$(openssl verify -check_ss_sig -purpose sslclient \
 	    -CAfile tmp/client.ca tmp/client.crt 2>&1 | grep -iq ^error &&
 	echo no || echo yes)
 
