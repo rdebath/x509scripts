@@ -13,6 +13,7 @@ V3EXTRAS=
 NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
 NOECPARAM="$(openssl no-ecparam >/dev/null 2>&1 && echo yes || echo no)"
 KEYPASS=
+KEYPARAM=no
 
 # This is my default for making a key file.
 if [ "$NOECPARAM" = no ] ; then
@@ -45,26 +46,18 @@ do  case "$ar" in
 	    eval "mkkey() { openssl ecparam -name '$curve' ${param:+-param_enc $param} ${noseed:+-no_seed} -genkey ; }"
 	    ;;
 
-    -param ) NOPKEY=yes ;;
+    -list[-_]curves|-show[_-]curves )
+	openssl ecparam -list_curves ; exit ;;
+
+    -keyfile[=:]* ) eval "mkkey() { cat < '${ar#*[=:]}' ; }" ;;
+
+    -param ) KEYPARAM=yes ;;
+
     -pass[=:]*:* ) KEYPASS="${ar#*[=:]}" ;;
     -pass[=:]* ) KEYPASS="pass:${ar#*[=:]}" ;;
 
     -md4|-md5|-ripemd160|-sha|-sha1|-sha224|-sha256|-sha384|-sha512|-whirlpool)
 	DGST=$ar ;;
-
-    -v3[=:]* )
-	    V3HEAD="$V3INIT"
-	    V3OPTS="$V3OPTS
-	    ${ar#*[=:]}
-	    "
-	    ;;
-
-    -v3xt[=:]* )
-	    V3HEAD="$V3INIT"
-	    V3EXTRAS="$V3EXTRAS
-	    ${ar#*[=:]}
-	    "
-	    ;;
 
     -ca|-v3ca )
 	    V3HEAD="$V3INIT"
@@ -81,6 +74,20 @@ do  case "$ar" in
 	    basicConstraints = CA:FALSE
 	    subjectKeyIdentifier=hash
 	    authorityKeyIdentifier=keyid,issuer
+	    "
+	    ;;
+
+    -v3[=:]* )
+	    V3HEAD="$V3INIT"
+	    V3OPTS="$V3OPTS
+	    ${ar#*[=:]}
+	    "
+	    ;;
+
+    -v3xt[=:]* )
+	    V3HEAD="$V3INIT"
+	    V3EXTRAS="$V3EXTRAS
+	    ${ar#*[=:]}
 	    "
 	    ;;
 
@@ -145,9 +152,9 @@ SSCERT="$(openssl req -new -x509 $DGST \
 
 outp() {
     echo "$SSCERT" | openssl x509 -subject -serial -dates
-    if [ "$NOPKEY" = no -o "$KEYPASS" != "" ]
-    then [ "$NOPKEY" = no ] ||
-	    echo "$SSKEY" | openssl pkeyparam
+    if [ "$NOPKEY" = no -o "$KEYPASS" != "" -o "$KEYPARAM" = yes ]
+    then [ "$KEYPARAM" = no ] ||
+	    echo "$SSKEY" | openssl pkeyparam 2>/dev/null ||:
 	 echo "$SSKEY" | openssl pkey ${KEYPASS:+-des3 -passout "$KEYPASS"}
     else echo "$SSKEY"
     fi
