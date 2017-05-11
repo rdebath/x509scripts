@@ -3,13 +3,16 @@ if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 
 umask 077
 export OPENSSL_CONF=/dev/null
+[ "$CERT_DIR" = "" -a "$1" != "" -a -d "$1" ] && CERT_DIR="$1"
 CERT_DIR="${CERT_DIR:-certs}"
+
+CONF_DIR="$CERT_DIR-conf"
 
 [ -d "$CERT_DIR" ] || { echo >&2 ERROR: Certificate directory missing ; exit 1;}
 
 build_files() {
 
-mkdir -p tmp ovpn-conf
+mkdir -p tmp "$CONF_DIR"
 
 SERVERCOUNT=0
 SERVERNAME=
@@ -55,8 +58,9 @@ rm -f tmp/clients.CA-list.pem ||:
 for cert in "$CERT_DIR"/*.ca.crt
 do
     CN="$(basename "$cert" .ca.crt)"
+    [ "$CN" = "*" ] && continue
 
-    echo Client $CN
+    echo Client "$CN"
     fetch_pems "$CN"
     [ -s tmp/client.ca ] || continue
 
@@ -87,15 +91,16 @@ do
 	touch "tmp/$SUBJ.$CASER.flg"
     fi
 
-    for file in pattern*.ovpn
+    for file in "$CERT_DIR"/*pattern*.ovpn
     do
 	if [ -f "$file" ]
-	then tfile="$CN${file/pattern/}"
-	else file=/dev/null
-	     tfile="$CN.ovpn"
+	then tfile="$(basename "$file")"
+	     tfile="${tfile/pattern/$CN}"
+	else continue
 	fi
 
 	{
+	    echo "# Name: $CN"
 	    cat "$file"
 	    echo
 
@@ -138,7 +143,7 @@ do
 	} > tmp/"$tfile"
 
 	rm -f tmp/client.key tmp/client.crt ||:
-	try_file ovpn-conf "$tfile"
+	try_file "$CONF_DIR" "$tfile"
     done
 
 done
@@ -172,14 +177,14 @@ do
 
     cp -p "$CERT_DIR"/tls-crypt.pvk tmp/"$CN".tls-crypt.pvk
 
-    try_file ovpn-conf "$CN".crt
-    try_file ovpn-conf "$CN".key
-    try_file ovpn-conf "$CN".ca-list.pem
-    try_file ovpn-conf "$CN".tls-crypt.pvk
+    try_file "$CONF_DIR" "$CN".crt
+    try_file "$CONF_DIR" "$CN".key
+    try_file "$CONF_DIR" "$CN".ca-list.pem
+    try_file "$CONF_DIR" "$CN".tls-crypt.pvk
 
     [ -f "$CERT_DIR"/dhparam.pem ] && {
 	cp -p "$CERT_DIR"/dhparam.pem tmp/"$CN".dhparam.pem
-	try_file ovpn-conf "$CN".dhparam.pem
+	try_file "$CONF_DIR" "$CN".dhparam.pem
     }
 done
 

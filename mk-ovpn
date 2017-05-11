@@ -51,6 +51,7 @@ do  case "$v" in
     -days=[1-9]*[0-9] ) CERT_DAYS="${v#*=}" ;;
     -ca=* )		CASUBJ="${v#*=}" ;;
     -ou=*|-OU=* )	CERTOU="${v#*=}" ;;
+    -dir=* )		CERT_DIR="${v#*=}" ;;
     -* ) echo >&2 "Option $v not recognised"; exit 1;;
 
     * ) CN="$v" ;;
