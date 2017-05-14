@@ -5,6 +5,7 @@ export OPENSSL_CONF=/dev/null
 CERT_DIR="${CERT_DIR:-.}"
 
 FN=
+KFN=
 SERIAL=
 V3HEAD=
 SANLIST=
@@ -33,7 +34,8 @@ for ar
 do  case "$ar" in
 
     -days[=:]* ) CERT_DAYS="${ar#*[=:]}" ;;
-    -out[=:]* ) FN="${ar#*[=:]}" ;;
+    -out[=:]* ) FN="${ar#*[=:]}" ; [ "$KFN" = "" ] && KFN="$FN" ;;
+    -keyout[=:]* ) KFN="${ar#*[=:]}" ;;
 
     -ser[=:]??*|-serial[=:]??* ) SERIAL="${ar#*[=:]}" ;;
 
@@ -152,6 +154,14 @@ SSCERT="$(openssl req -new -x509 $DGST \
 
 outp() {
     echo "$SSCERT" | openssl x509 -subject -serial -dates
+    if [ "$KFN" != '' ]
+    then umask 077
+         outk > "$KFN"
+    else outk
+    fi
+}
+
+outk() {
     if [ "$NOPKEY" = no -o "$KEYPASS" != "" -o "$KEYPARAM" = yes ]
     then [ "$KEYPARAM" = no ] ||
 	    echo "$SSKEY" | openssl pkeyparam 2>/dev/null ||:
@@ -160,4 +170,6 @@ outp() {
     fi
 }
 
-if [ "$FN" != '' ] ; then umask 077 ; outp > "$FN" ; else outp ; fi
+[ "$FN" = "$KFN" ] && KFN=''
+[ "$KFN" = '' ] && umask 077
+if [ "$FN" != '' ] ; then outp > "$FN" ; else outp ; fi
