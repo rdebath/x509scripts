@@ -15,12 +15,14 @@ CERT_DIR="${CERT_DIR:-certs}"
 V3CA=""
 V3CERT=""
 V3EXTENDED=no
+V1CERT=no
 SERVER=no
 ECPARAM=prime256v1
 CAOU='Private CA'
 SERVEROU="OpenVPN Server TLS"
 CERTOU=""
 CASUBJ=""
+CN=
 
 V3BASECERT='basicConstraints = critical,CA:FALSE
 subjectKeyIdentifier=hash
@@ -39,24 +41,23 @@ for v
 do  case "$v" in
     -s|-server ) SERVER=yes ; CAOU='OpenVPN server CA' ;;
     -c|-client ) SERVER=client ; CAOU='OpenVPN client CA' ;;
-    -v3 )
-	V3CERT="$V3BASECERT"
-	V3CA="$V3BASECA"
-	;;
-    -v3ext )
-	V3EXTENDED=yes
-	V3CERT="$V3BASECERT"
-	V3CA="$V3BASECA"
-	;;
+    -v1 ) V1CERT=yes ;;
+    -v3 ) V1CERT=no ;;
+    -v3ext ) V1CERT=no ; V3EXTENDED=yes ;;
     -days=[1-9]*[0-9] ) CERT_DAYS="${v#*=}" ;;
     -ca=* )		CASUBJ="${v#*=}" ;;
     -ou=*|-OU=* )	CERTOU="${v#*=}" ;;
     -dir=* )		CERT_DIR="${v#*=}" ;;
     -* ) echo >&2 "Option $v not recognised"; exit 1;;
 
-    * ) CN="$v" ;;
+    * ) [ "$CN" != '' ] && CN="$CN $v" || CN="$v" ;;
     esac
 done
+
+[ "$V1CERT" = no -o "$V3EXTENDED" = yes ] && {
+    V3CERT="$V3BASECERT"
+    V3CA="$V3BASECA"
+}
 
 [ "$V3CERT" != "" -a "$SERVER" = yes ] && {
     if [ "$V3EXTENDED" = yes ] 
@@ -122,19 +123,19 @@ openssl x509 -subject > "$CAFILE"
 openssl req -new -nodes \
     -newkey param:"$CAFILE" \
     -subj "${CERTOU:+/OU=$CERTOU}/CN=$CN/" \
-    -keyout "$CERT_DIR"/$CN.key \
+    -keyout "$CERT_DIR"/"$CN".key \
     -config <(mkconfig) |
 
 # Sign it
 openssl x509 -req -days "$CERT_DAYS" \
     -set_serial 0x$(openssl rand -hex 8) \
-    -out "$CERT_DIR"/$CN.crt \
+    -out "$CERT_DIR"/"$CN".crt \
     -CA "$CAFILE" \
     -CAkey <(echo "$CAKEY") \
     ${V3CERT:+-extfile <(echo "$V3CERT")}
 
 # Reduce the file list
-openssl x509 -subject -issuer -serial -dates -in "$CERT_DIR"/$CN.crt |
-cat - "$CAFILE" "$CERT_DIR"/$CN.key > "$CERT_DIR"/$CN.pem
-rm "$CERT_DIR"/$CN.crt "$CAFILE" "$CERT_DIR"/$CN.key
-mv "$CERT_DIR"/$CN.pem "$CAFILE"
+openssl x509 -subject -issuer -serial -dates -in "$CERT_DIR"/"$CN".crt |
+cat - "$CAFILE" "$CERT_DIR"/"$CN".key > "$CERT_DIR"/"$CN".pem
+rm "$CERT_DIR"/"$CN".crt "$CAFILE" "$CERT_DIR"/"$CN".key
+mv "$CERT_DIR"/"$CN".pem "$CAFILE"

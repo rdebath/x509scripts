@@ -48,6 +48,23 @@ done > tmp/servers.CA-list.pem
     exit 1
 }
 
+FLG=1
+for file in "$CERT_DIR"/*pattern*.ovpn
+do
+    if [ -f "$file" ]
+    then tfile="$(basename "$file")"
+	 tfile="${tfile/pattern/$CN}"
+    else continue
+    fi
+    FLG=0
+done
+
+[ "$FLG" = 0 ] || {
+    rm -rf tmp
+    echo >&2 ERROR: No ovpn pattern files defined.
+    exit 1
+}
+
 # Protect the TLS handshake from s-kiddies.
 [ -f "$CERT_DIR"/tls-crypt.pvk ] ||
     openvpn --genkey --secret "$CERT_DIR"/tls-crypt.pvk
