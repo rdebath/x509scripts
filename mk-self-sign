@@ -34,7 +34,7 @@ for ar
 do  case "$ar" in
 
     -days[=:]* ) CERT_DAYS="${ar#*[=:]}" ;;
-    -out[=:]* ) FN="${ar#*[=:]}" ; [ "$KFN" = "" ] && KFN="$FN" ;;
+    -out[=:]* ) FN="${ar#*[=:]}" ;;
     -keyout[=:]* ) KFN="${ar#*[=:]}" ;;
 
     -ser[=:]??*|-serial[=:]??* ) SERIAL="${ar#*[=:]}" ;;
@@ -51,7 +51,10 @@ do  case "$ar" in
     -list[-_]curves|-show[_-]curves )
 	openssl ecparam -list_curves ; exit ;;
 
-    -keyfile[=:]* ) eval "mkkey() { cat < '${ar#*[=:]}' ; }" ;;
+    -keyfile[=:]* )
+	eval "mkkey() { cat < '${ar#*[=:]}' ; }"
+	[ "$KFN" = "" ] && KFN=/dev/null
+	;;
 
     -param ) KEYPARAM=yes ;;
 
@@ -154,7 +157,9 @@ SSCERT="$(openssl req -new -x509 $DGST \
 
 outp() {
     echo "$SSCERT" | openssl x509 -subject -serial -dates
-    if [ "$KFN" != '' ]
+    if [ "$KFN" = '/dev/null' ]
+    then :
+    elif [ "$KFN" != '' ]
     then umask 077
          outk > "$KFN"
     else outk
@@ -170,6 +175,5 @@ outk() {
     fi
 }
 
-[ "$FN" = "$KFN" ] && KFN=''
 [ "$KFN" = '' ] && umask 077
 if [ "$FN" != '' ] ; then outp > "$FN" ; else outp ; fi
