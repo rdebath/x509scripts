@@ -7,7 +7,16 @@ if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 # is designed so that any machine only has the CA certificates for the
 # machines that it is allowed to connect to.
 #
-# Note the nsCertType flag is not required to make this secure.
+# Note none of ns-cert-type, remote-cert-tls or verify-x509-name are required
+# to make this secure. But it is suggested that verify-x509-name is used to
+# stop OpenVPN complaining.
+#
+# The certificates can be V1 or V3, but note that V1 certificates can be
+# used as intermediate CA certificates or direct validation. If this is
+# a problem the V3 certificates with the CA constraint should be used.
+#
+# OpenSSL (and so OpenVPN) can also use self-signed certificates directly
+# in which case the CA and the Client certificate are the same one.
 
 export OPENSSL_CONF=/dev/null
 CERT_DIR="${CERT_DIR:-certs}"
@@ -15,7 +24,7 @@ CERT_DIR="${CERT_DIR:-certs}"
 V3CA=""
 V3CERT=""
 V3EXTENDED=no
-V1CERT=no
+V1CERT=yes
 SERVER=no
 ECPARAM=prime256v1
 CAOU='Private CA'
