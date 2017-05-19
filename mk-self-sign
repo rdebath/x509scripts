@@ -15,20 +15,24 @@ NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
 NOECPARAM="$(openssl no-ecparam >/dev/null 2>&1 && echo yes || echo no)"
 KEYPASS=
 KEYPARAM=no
+WANTCSR=no
+SIGNFN=
+RSABITS=2048
 
 # This is my default for making a key file.
 if [ "$NOECPARAM" = no ] ; then
     mkkey() { openssl ecparam -name prime256v1 -genkey ;}
 else
     echo "$NOECPARAM"
-    mkkey() { openssl genrsa 3072 ; }
+    mkkey() { openssl genrsa $RSABITS ; }
 fi
 # See also:
 # mkkey() { openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) ;}
 
-V3INIT='x509_extensions = req_x509
-[ req_x509 ]
-'
+X509SECT=req_x509
+V3INIT="x509_extensions = $X509SECT
+[ $X509SECT ]
+"
 
 for ar
 do  case "$ar" in
@@ -47,6 +51,7 @@ do  case "$ar" in
 	    ar="${ar#*:}:" ; noseed="${ar%%:*}"
 	    eval "mkkey() { openssl ecparam -name '$curve' ${param:+-param_enc $param} ${noseed:+-no_seed} -genkey ; }"
 	    ;;
+    -rsa ) eval "mkkey() { openssl genrsa $RSABITS ; }" ;;
 
     -list[-_]curves|-show[_-]curves )
 	openssl ecparam -list_curves ; exit ;;
@@ -57,6 +62,19 @@ do  case "$ar" in
 	;;
 
     -param ) KEYPARAM=yes ;;
+
+    -csr ) WANTCSR=yes ;;
+    -csrin[=:]* )
+	eval "mkkey() { :; }"
+	CSRFN="${ar#*[=:]}"
+	WANTCSR=yes
+	KFN=/dev/null
+	;;
+
+    -sign[=:]* )
+	SIGNFN="${ar#*[=:]}"
+	WANTCSR=yes
+	;;
 
     -pass[=:]*:* ) KEYPASS="${ar#*[=:]}" ;;
     -pass[=:]* ) KEYPASS="pass:${ar#*[=:]}" ;;
@@ -135,6 +153,8 @@ done
 [ -s "$FN" ] &&
     { echo ERROR: File $FN already exists ; exit 1 ; }
 
+[ "$WANTCSR" = yes ] && X509= || X509=-x509
+
 mkreqconf() {
     echo '[req]'
     echo 'distinguished_name = req_distinguished_name'
@@ -148,15 +168,34 @@ mkreqconf() {
 }
 
 SSKEY="$(mkkey)"
-SSCERT="$(openssl req -new -x509 $DGST \
+if [ "$SCRFN" != "" ]
+then SSCERT="$(cat "$CSRFN")"
+else SSCERT="$(openssl req -new $X509 $DGST \
 	-days "${CERT_DAYS:-3652}" \
 	${SERIAL:+-set_serial 0x"$SERIAL"} \
 	${SUBJ:+-subj "$SUBJ"} \
 	-key <(echo "$SSKEY") \
 	-config <(mkreqconf) )"
+fi
+
+[ "$SIGNFN" != "" ] && {
+    [ "$SERIAL" = "" ] && SERIAL="$(openssl rand -hex 8)"
+
+    SSCERT="$(echo "$SSCERT" |
+	openssl x509 -req \
+	    -days "${CERT_DAYS:-3652}" \
+	    ${SERIAL:+-set_serial 0x"$SERIAL"} \
+	    -CA "$SIGNFN" \
+	    ${V3HEAD:+-extfile <(mkreqconf) -extensions "$X509SECT"} )"
+
+    WANTCSR=no
+}
 
 outp() {
-    echo "$SSCERT" | openssl x509 -subject -serial -dates
+    if [ "$WANTCSR" = yes ]
+    then echo "$SSCERT" | openssl req -subject
+    else echo "$SSCERT" | openssl x509 -subject -issuer -serial -dates
+    fi
     if [ "$KFN" = '/dev/null' ]
     then :
     elif [ "$KFN" != '' ]
