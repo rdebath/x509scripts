@@ -7,17 +7,30 @@ CERT_DIR="${CERT_DIR:-.}"
 FN=
 KFN=
 SERIAL=
+
+V3=no
 V3HEAD=
 SANLIST=
 V3OPTS=
+V3LIST=
 V3EXTRAS=
+V3CERTONLY=
+V3CA=
+V3CAPATH=
+V3CLIENT=no
+V3SERVER=no
+V3CRITICAL=no
+V3NS=no
+
 NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
 NOECPARAM="$(openssl no-ecparam >/dev/null 2>&1 && echo yes || echo no)"
 KEYPASS=
 KEYPARAM=no
 WANTCSR=no
+ADDDNQ=no
 SIGNFN=
 RSABITS=2048
+PKCS12FN=
 
 # This is my default for making a key file.
 if [ "$NOECPARAM" = no ] ; then
@@ -29,10 +42,10 @@ fi
 # See also:
 # mkkey() { openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) ;}
 
+NL='
+'
 X509SECT=req_x509
-V3INIT="x509_extensions = $X509SECT
-[ $X509SECT ]
-"
+V3INIT="x509_extensions = $X509SECT$NL[ $X509SECT ]$NL"
 
 for ar
 do  case "$ar" in
@@ -42,6 +55,7 @@ do  case "$ar" in
     -keyout[=:]* ) KFN="${ar#*[=:]}" ;;
 
     -ser[=:]??*|-serial[=:]??* ) SERIAL="${ar#*[=:]}" ;;
+    -dnq ) ADDDNQ=yes ;;
 
     -rsa[=:]* ) eval "mkkey() { openssl genrsa '${ar#*[=:]}' ; }" ;;
     -dsa[=:]* ) eval "mkkey() { openssl dsaparam -genkey '${ar#*[=:]}' ; }" ;;
@@ -76,46 +90,35 @@ do  case "$ar" in
 	WANTCSR=yes
 	;;
 
+    -pkcs12[=:]* ) PKCS12FN="${ar#*[=:]}" ;;
+
     -pass[=:]*:* ) KEYPASS="${ar#*[=:]}" ;;
     -pass[=:]* ) KEYPASS="pass:${ar#*[=:]}" ;;
 
     -md4|-md5|-ripemd160|-sha|-sha1|-sha224|-sha256|-sha384|-sha512|-whirlpool)
 	DGST=$ar ;;
 
-    -ca|-v3ca )
-	    V3HEAD="$V3INIT"
-	    V3OPTS="$V3OPTS
-	    subjectKeyIdentifier=hash
-	    authorityKeyIdentifier=keyid:always,issuer
-	    basicConstraints = CA:TRUE
-	    "
-	    ;;
-
-    -v3|-v3usr )
-	    V3HEAD="$V3INIT"
-	    V3OPTS="$V3OPTS
-	    basicConstraints = CA:FALSE
-	    subjectKeyIdentifier=hash
-	    authorityKeyIdentifier=keyid,issuer
-	    "
-	    ;;
+    -v3 ) V3=yes ;;
+    -ca|-v3ca ) V3=yes ; V3CA=yes ;;
+    -lastca|-v3lastca ) V3=yes ; V3CA=yes ; V3CAPATH=0 ;;
+    -v3usr ) V3=yes ; V3CA=no ;;
+    -server ) V3=yes ; V3CA=${V3CA:-no} ; V3SERVER=yes ;;
+    -client ) V3=yes ; V3CA=${V3CA:-no} ; V3CLIENT=yes ;;
+    -v3ns ) V3=yes ; V3NS=yes ;;
+    -v3crit|-v3critical|-critical ) V3=yes ; V3CRITICAL=yes ; V3CA=${V3CA:-no} ;;
 
     -v3[=:]* )
-	    V3HEAD="$V3INIT"
-	    V3OPTS="$V3OPTS
-	    ${ar#*[=:]}
-	    "
+	    V3=yes
+	    V3LIST="$V3LIST$NL${ar#*[=:]}"
 	    ;;
 
     -v3xt[=:]* )
-	    V3HEAD="$V3INIT"
-	    V3EXTRAS="$V3EXTRAS
-	    ${ar#*[=:]}
-	    "
+	    V3=yes
+	    V3EXTRAS="$V3EXTRAS$NL${ar#*[=:]}$NL"
 	    ;;
 
     -san[=:]* )
-	    V3HEAD="$V3INIT"
+	    V3=yes
 	    san="${ar#*[=:]}"
 	    [ "$SANLIST" != "" ] && SANLIST="$SANLIST,"
 	    case "$san" in
@@ -150,17 +153,66 @@ done
     fi
 }
 
+# Build some V3 certificate extension sets.
+# 
+[ "$V3" = yes ] && {
+    V3HEAD="$V3INIT"
+    V3XKU=
+    [ "$V3CRITICAL" = yes ] && CR=critical, || CR=
+
+    V3CAPATH=${V3CAPATH:+, pathlen:$V3CAPATH}
+
+    [ "$V3CA" = yes ] && {
+	V3OPTS="$V3OPTS${NL}basicConstraints = ${CR}CA:TRUE${V3CAPATH}"
+	V3XKU=keyCertSign,cRLSign,
+    }
+    [ "$V3CA" = no ] && V3OPTS="$V3OPTS${NL}basicConstraints = ${CR}CA:FALSE"
+
+    # keyAgreement seems to be a little used replacement for digitalSignature
+    # that can only be used on a server.
+
+    if [ "$V3CLIENT" = yes -a "$V3SERVER" = yes ]
+    then
+        V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}keyEncipherment,digitalSignature,keyAgreement"
+        V3OPTS="$V3OPTS${NL}extendedKeyUsage = serverAuth,clientAuth"
+	[ "$V3NS" = yes ] && V3OPTS="$V3OPTS${NL}nsCertType = client,server"
+    elif [ "$V3SERVER" = yes ]
+    then
+        V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}keyEncipherment,digitalSignature,keyAgreement"
+        V3OPTS="$V3OPTS${NL}extendedKeyUsage = serverAuth"
+	[ "$V3NS" = yes ] && V3OPTS="$V3OPTS${NL}nsCertType = server"
+    elif [ "$V3CLIENT" = yes ]
+    then
+        V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}digitalSignature"
+        V3OPTS="$V3OPTS${NL}extendedKeyUsage = clientAuth"
+	[ "$V3NS" = yes ] && V3OPTS="$V3OPTS${NL}nsCertType = client"
+    fi
+
+    [ "$V3CA" != '' ] && {
+	V3OPTS="$V3OPTS${NL}subjectKeyIdentifier=hash"
+	V3CERTONLY="$V3CERTONLY${NL}authorityKeyIdentifier=keyid,issuer${NL}"
+    }
+}
+
 [ -s "$FN" ] &&
     { echo ERROR: File $FN already exists ; exit 1 ; }
 
 [ "$WANTCSR" = yes ] && X509= || X509=-x509
 
+[ "$ADDDNQ" = yes ] && {
+    [ "$SERIAL" = "" ] &&
+	SERIAL="$(openssl rand -hex 8)"
+    SUBJ="${SUBJ%/}/dnQualifier=$SERIAL/"
+}
+
 mkreqconf() {
     echo '[req]'
     echo 'distinguished_name = req_distinguished_name'
     echo "$V3HEAD"
-    echo "$SANLIST"
     echo "$V3OPTS"
+    [ "$1" != yes ] && echo "$V3CERTONLY"
+    echo "$SANLIST"
+    echo "$V3LIST"
     echo '[ req_distinguished_name ]'
     echo 'organizationalUnitName = Organizational Unit Name'
     echo 'commonName = Common Name'
@@ -175,7 +227,8 @@ else SSCERT="$(openssl req -new $X509 $DGST \
 	${SERIAL:+-set_serial 0x"$SERIAL"} \
 	${SUBJ:+-subj "$SUBJ"} \
 	-key <(echo "$SSKEY") \
-	-config <(mkreqconf) )"
+	-config <(mkreqconf $WANTCSR) \
+	${V3HEAD:+-reqexts "$X509SECT"} )"
 fi
 
 [ "$SIGNFN" != "" ] && {
@@ -189,6 +242,16 @@ fi
 	    ${V3HEAD:+-extfile <(mkreqconf) -extensions "$X509SECT"} )"
 
     WANTCSR=no
+}
+
+[ "$PKCS12FN" != "" ] && {
+    [ "$WANTCSR" = yes ] && { echo >&2 "PKCS12 files can't hold csr's"; exit 1;}
+    openssl pkcs12 -export -passout pass: \
+	-out "$PKCS12FN" \
+	-name "$CN `date`" \
+	-inkey <(echo "$SSKEY") \
+	-in <(echo "$SSCERT") \
+	${SIGNFN:+-certfile <(openssl x509 -in "$SIGNFN") }
 }
 
 outp() {
