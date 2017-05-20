@@ -274,6 +274,14 @@ fi
     SIGNPEM="$(cat "$SIGNFN")"
     [ "$SERIAL" = "" ] && SERIAL="$(openssl rand -hex 8)"
 
+    # Default to days left on CA certificate
+    [ "$CERT_DAYS" = "" ] && {
+        ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in <(echo "$SIGNPEM") | sed 's/^[^=]*=//')" ||:)"
+        TODAY="$(date +%s)"
+        [ "$ENDDAY" = "" ] && ENDDAY=2147126400
+        CERT_DAYS=$((ENDDAY/86400 - TODAY/86400))
+    }
+
     SSCERT="$(echo "$SSCERT" |
 	openssl x509 -req $DGST \
 	    -days "${CERT_DAYS:-3652}" \
