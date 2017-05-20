@@ -129,13 +129,15 @@ do  case "$ar" in
 	    V3=yes
 	    sanlst="${ar#*[=:]}"
 	    for san in ${sanlst//,/ }
-	    do  [ "$SANLIST" != "" ] && SANLIST="$SANLIST,"
+	    do  [ "$SANLIST" != "" ] && SANLIST="${SANLIST%,},"
+		[ "$san" = '' -o "$san" = "$CN" ] && continue
 		case "$san" in
 		[0-9]*.*[0-9] ) SANLIST="${SANLIST}IP:$san" ;;
 		*@* ) SANLIST="${SANLIST}email:$san" ;;
 		* ) SANLIST="${SANLIST}DNS:$san" ;;
 		esac
 	    done
+	    SANLIST="${SANLIST%,}"
 	    ;;
 
     /*=* )
