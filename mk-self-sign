@@ -16,9 +16,11 @@ V3LIST=
 V3EXTRAS=
 V3CERTONLY=
 V3CA=
+V3CRL=
 V3CAPATH=
 V3CLIENT=no
 V3SERVER=no
+V3EMAIL=no
 V3CRITICAL=no
 V3NS=no
 
@@ -45,7 +47,10 @@ fi
 NL='
 '
 X509SECT=req_x509
-V3INIT="x509_extensions = $X509SECT$NL[ $X509SECT ]$NL"
+V3INIT="x509_extensions = $X509SECT
+req_extensions = $X509SECT
+[ $X509SECT ]
+"
 
 for ar
 do  case "$ar" in
@@ -99,12 +104,14 @@ do  case "$ar" in
 	DGST=$ar ;;
 
     -v3 ) V3=yes ;;
-    -ca|-v3ca ) V3=yes ; V3CA=yes ;;
-    -lastca|-v3lastca ) V3=yes ; V3CA=yes ; V3CAPATH=0 ;;
-    -v3usr ) V3=yes ; V3CA=no ;;
-    -server ) V3=yes ; V3CA=${V3CA:-no} ; V3SERVER=yes ;;
-    -client ) V3=yes ; V3CA=${V3CA:-no} ; V3CLIENT=yes ;;
-    -v3ns ) V3=yes ; V3NS=yes ;;
+    -v3ca|-ca ) V3=yes ; V3CA=yes ;;
+    -v3crlsign|-crlsign|-v3crl ) V3=yes ; V3CRL=yes ;;
+    -v3lastca|-lastca ) V3=yes ; V3CA=yes ; V3CAPATH=0 ;;
+    -v3usr|-usr|-user ) V3=yes ; V3CA=no ;;
+    -v3server|-server ) V3=yes ; V3CA=${V3CA:-no} ; V3SERVER=yes ;;
+    -v3client|-client ) V3=yes ; V3CA=${V3CA:-no} ; V3CLIENT=yes ;;
+    -v3email|-email ) V3=yes ; V3CA=${V3CA:-no} ; V3EMAIL=yes ;;
+    -v3ns|-ns ) V3=yes ; V3NS=yes ;;
     -v3crit|-v3critical|-critical ) V3=yes ; V3CRITICAL=yes ; V3CA=${V3CA:-no} ;;
 
     -v3[=:]* )
@@ -112,12 +119,12 @@ do  case "$ar" in
 	    V3LIST="$V3LIST$NL${ar#*[=:]}"
 	    ;;
 
-    -v3xt[=:]* )
+    -v3xt[=:]*|-xt[=:]* )
 	    V3=yes
 	    V3EXTRAS="$V3EXTRAS$NL${ar#*[=:]}$NL"
 	    ;;
 
-    -san[=:]* )
+    -v3san[=:]*|-san[=:]* )
 	    V3=yes
 	    san="${ar#*[=:]}"
 	    [ "$SANLIST" != "" ] && SANLIST="$SANLIST,"
@@ -154,39 +161,67 @@ done
 }
 
 # Build some V3 certificate extension sets.
-# 
+# Like the certificate extensions themselves this is very complex.
+# Your best option is probably:
+#   No option: 	A v1 certificate, usually perfectly acceptable.
+#   -v3ca	A v3 CA certificate
+#   -v3		An unlabeled v3 certificate; must not be used as a CA
+#   -v3usr	A v3 certificate labeled as NOT a CA.
+#
+# This ignores the worst of the complexity, most of which was designed to
+# allow CA's to charge more for "special" certificates.
+#
+# NOTE: Using the SAN fields forces this to be a v3 certificate.
+
 [ "$V3" = yes ] && {
     V3HEAD="$V3INIT"
-    V3XKU=
+    V3XKU= ; V3EKU=
     [ "$V3CRITICAL" = yes ] && CR=critical, || CR=
 
-    V3CAPATH=${V3CAPATH:+, pathlen:$V3CAPATH}
+    V3P=${V3CAPATH:+, pathlen:$V3CAPATH}
 
     [ "$V3CA" = yes ] && {
-	V3OPTS="$V3OPTS${NL}basicConstraints = ${CR}CA:TRUE${V3CAPATH}"
-	V3XKU=keyCertSign,cRLSign,
+	V3OPTS="$V3OPTS${NL}basicConstraints = ${CR}CA:TRUE${V3P}"
+	V3XKU=keyCertSign,${V3CRL:+cRLSign,}
     }
     [ "$V3CA" = no ] && V3OPTS="$V3OPTS${NL}basicConstraints = ${CR}CA:FALSE"
 
-    # keyAgreement seems to be a little used replacement for digitalSignature
-    # that can only be used on a server.
-
-    if [ "$V3CLIENT" = yes -a "$V3SERVER" = yes ]
+    if [ "$V3SERVER" = yes -a "$V3CA" != yes ]
     then
         V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}keyEncipherment,digitalSignature,keyAgreement"
-        V3OPTS="$V3OPTS${NL}extendedKeyUsage = serverAuth,clientAuth"
-	[ "$V3NS" = yes ] && V3OPTS="$V3OPTS${NL}nsCertType = client,server"
-    elif [ "$V3SERVER" = yes ]
+    elif [ "$V3EMAIL" = yes -a "$V3CA" != yes ]
     then
-        V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}keyEncipherment,digitalSignature,keyAgreement"
-        V3OPTS="$V3OPTS${NL}extendedKeyUsage = serverAuth"
-	[ "$V3NS" = yes ] && V3OPTS="$V3OPTS${NL}nsCertType = server"
-    elif [ "$V3CLIENT" = yes ]
+        V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}keyEncipherment,digitalSignature"
+    elif [ "$V3CLIENT" = yes -a "$V3CA" != yes ]
     then
         V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}digitalSignature"
-        V3OPTS="$V3OPTS${NL}extendedKeyUsage = clientAuth"
-	[ "$V3NS" = yes ] && V3OPTS="$V3OPTS${NL}nsCertType = client"
+    elif [ "$V3XKU" != '' ]
+    then
+        V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU%,}"
     fi
+
+    [ "$V3SERVER" = yes ] && V3EKU=$V3EKU,serverAuth
+    [ "$V3CLIENT" = yes ] && V3EKU=$V3EKU,clientAuth
+    [ "$V3EMAIL" = yes ] && V3EKU=$V3EKU,emailProtection
+
+    if [ "$V3CA" = yes ]
+    then
+	[ "$V3SERVER" = yes ] && V3ENS=$V3ENS,sslCA
+	[ "$V3CLIENT" = yes ] && V3ENS=$V3ENS,sslCA
+	[ "$V3EMAIL" = yes ] && V3ENS=$V3ENS,emailCA
+	[ "$V3SERVER" = no -a "$V3CLIENT" = no -a "$V3EMAIL" = no ] &&
+	    V3ENS=$V3ENS,sslCA,emailCA
+    else
+	[ "$V3SERVER" = yes ] && V3ENS=$V3ENS,server
+	[ "$V3CLIENT" = yes ] && V3ENS=$V3ENS,client
+	[ "$V3EMAIL" = yes ] && V3ENS=$V3ENS,email
+    fi
+
+    [ "$V3EKU" != '' ] &&
+	V3OPTS="$V3OPTS${NL}extendedKeyUsage = ${V3EKU#,}"
+
+    [ "$V3NS" = yes -a "$V3ENS" != '' ] &&
+	V3OPTS="$V3OPTS${NL}nsCertType = ${V3ENS#,}"
 
     [ "$V3CA" != '' ] && {
 	V3OPTS="$V3OPTS${NL}subjectKeyIdentifier=hash"
@@ -212,23 +247,22 @@ mkreqconf() {
     echo "$V3OPTS"
     [ "$1" != yes ] && echo "$V3CERTONLY"
     echo "$SANLIST"
-    echo "$V3LIST"
+    [ "$1" != yes ] && echo "$V3LIST"
+    [ "$1" != yes ] && echo "$V3EXTRAS"
     echo '[ req_distinguished_name ]'
-    echo 'organizationalUnitName = Organizational Unit Name'
     echo 'commonName = Common Name'
-    echo "$V3EXTRAS"
+    echo 'organizationalUnitName = Organizational Unit Name'
 }
 
 SSKEY="$(mkkey)"
-if [ "$SCRFN" != "" ]
+if [ "$CSRFN" != "" ]
 then SSCERT="$(cat "$CSRFN")"
 else SSCERT="$(openssl req -new $X509 $DGST \
 	-days "${CERT_DAYS:-3652}" \
 	${SERIAL:+-set_serial 0x"$SERIAL"} \
 	${SUBJ:+-subj "$SUBJ"} \
 	-key <(echo "$SSKEY") \
-	-config <(mkreqconf $WANTCSR) \
-	${V3HEAD:+-reqexts "$X509SECT"} )"
+	-config <(mkreqconf $WANTCSR) )"
 fi
 
 [ "$SIGNFN" != "" ] && {
