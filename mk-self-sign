@@ -31,6 +31,7 @@ KEYPARAM=no
 WANTCSR=no
 ADDDNQ=no
 SIGNFN=
+SIGNPEM=
 RSABITS=2048
 PKCS12FN=
 
@@ -126,13 +127,15 @@ do  case "$ar" in
 
     -v3san[=:]*|-san[=:]* )
 	    V3=yes
-	    san="${ar#*[=:]}"
-	    [ "$SANLIST" != "" ] && SANLIST="$SANLIST,"
-	    case "$san" in
-	    [0-9]*.*[0-9] ) SANLIST="${SANLIST}IP:$san" ;;
-	    *@* ) SANLIST="${SANLIST}email:$san" ;;
-	    * ) SANLIST="${SANLIST}DNS:$san" ;;
-	    esac
+	    sanlst="${ar#*[=:]}"
+	    for san in ${sanlst//,/ }
+	    do  [ "$SANLIST" != "" ] && SANLIST="$SANLIST,"
+		case "$san" in
+		[0-9]*.*[0-9] ) SANLIST="${SANLIST}IP:$san" ;;
+		*@* ) SANLIST="${SANLIST}email:$san" ;;
+		* ) SANLIST="${SANLIST}DNS:$san" ;;
+		esac
+	    done
 	    ;;
 
     /*=* )
@@ -266,13 +269,14 @@ else SSCERT="$(openssl req -new $X509 $DGST \
 fi
 
 [ "$SIGNFN" != "" ] && {
+    SIGNPEM="$(cat "$SIGNFN")"
     [ "$SERIAL" = "" ] && SERIAL="$(openssl rand -hex 8)"
 
     SSCERT="$(echo "$SSCERT" |
-	openssl x509 -req \
+	openssl x509 -req $DGST \
 	    -days "${CERT_DAYS:-3652}" \
 	    ${SERIAL:+-set_serial 0x"$SERIAL"} \
-	    -CA "$SIGNFN" \
+	    -CA <(echo "$SIGNPEM") -CAkey <(echo "$SIGNPEM") \
 	    ${V3HEAD:+-extfile <(mkreqconf) -extensions "$X509SECT"} )"
 
     WANTCSR=no
@@ -285,7 +289,7 @@ fi
 	-name "$CN `date`" \
 	-inkey <(echo "$SSKEY") \
 	-in <(echo "$SSCERT") \
-	${SIGNFN:+-certfile <(openssl x509 -in "$SIGNFN") }
+	${SIGNPEM:+-certfile <(echo "$SIGNPEM" | openssl x509) }
 }
 
 outp() {
