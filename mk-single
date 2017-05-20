@@ -1,8 +1,6 @@
 #!/bin/bash -
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 set -e
-export OPENSSL_CONF=/dev/null
-export CERT_DIR="${CERT_DIR:-navcert}"
 
 if [ "$#" -lt 1 ]
 then
@@ -11,18 +9,12 @@ then
 fi
 
 CN="$1"
-F="$CN"
-case "$F" in \*.* ) F=${F#??} ;; esac
+SANLIST="$*"
+F="${CN:-_}"
+case "$F" in \*.?* ) F=${F#??} ;; esac
 F=$(echo "$F" | tr -c '[a-zA-Z0-9\.\-\012]' _)
-F="${F:-cert}"
 
-SANLIST="${*// /,}"
-
-export CERTSERIAL=$(openssl rand -hex 8)
-
-[ -s "$CERT_DIR"/ca.crt ] && { echo ERROR: CA already exists ; exit 1 ; }
-[ -s "$CERT_DIR"/"$F".crt ] && { echo "ERROR: Certificate for '$CN' already exists" ; exit 1 ; }
-[ -d demoCA ] && { echo ERROR: The directory demoCA needs to be removed first ; exit 1 ; }
+CERTSERIAL=$(openssl rand -hex 8)
 
 build_xt() {
 
@@ -40,7 +32,7 @@ build_xt() {
 	echo "$CERTSERIAL"
 	echo
 	echo 'The common name and alternative names on the certificate are:'
-	for h in ${SANLIST//,/ }
+	for h in ${SANLIST}
 	do echo '    '$h
 	done
 
@@ -49,26 +41,53 @@ build_xt() {
     echo
 }
 
-umask 077
-mkdir -p "$CERT_DIR"
-
-bash mk-self-sign \
+CAPEM="$(bash mk-self-sign \
     "/CN=Private CA for $CN/" \
-    -out="$CERT_DIR/ca.pem" \
     -days=3652 \
-    -v3='basicConstraints=critical,CA:TRUE, pathlen:0' \
+    -rsa \
+    -serial="01$CERTSERIAL" \
+    -v3='basicConstraints=CA:TRUE, pathlen:0' \
     -v3='keyUsage=keyCertSign' \
-    -v3='extendedKeyUsage=serverAuth' \
     -v3='certificatePolicies=@x509_pol' \
-    -v3xt="$(build_xt)"
+    -v3xt="$(build_xt)" )"
 
-export CRLURL="http://$CN/CertEnroll/${F//_./}.ca.crl"
+PEMFILE="$(bash mk-self-sign -rsa \
+    -sign=<(echo "$CAPEM") \
+    -serial="$CERTSERIAL" \
+    "$CN" -san="${SANLIST// /,}" )"
 
-bash cmd.02.make-crt ${SANLIST//,/ }
+################################################################################
 
-[ -s "$CERT_DIR"/"$F.crt" ] && {
-    rm -f "$CERT_DIR"/ca.pem "$CERT_DIR"/ca.key ||:
-    mv "$CERT_DIR"/ca.crt "$CERT_DIR"/"$F.ca.crt"
-    mv "$CERT_DIR"/ca.crl "$CERT_DIR"/"$F.ca.crl"
-    rm -rf demoCA ||:
+TMP=x_tmp
+
+mkcacrlconf() {
+    echo '[ca]'
+    echo 'default_ca = CA_default'
+    echo '[CA_default]'
+    echo "database = $TMP.index.txt"
+    echo 'default_md = default'
 }
+
+touch $TMP.index.txt
+touch $TMP.index.txt.attr
+
+CRLFILE="$(
+    openssl ca \
+	-config <(mkcacrlconf) \
+	-gencrl \
+	-crldays 3652 \
+	-keyfile <(echo "$CAPEM") \
+	-cert <(echo "$CAPEM") )"
+
+rm "$TMP".*
+
+################################################################################
+
+mkdir -p navcert
+echo "$CAPEM" | openssl x509 -subject -serial -dates > navcert/"$F".ca.crt
+echo "$CRLFILE" > navcert/"$F".crl
+echo "$PEMFILE" > navcert/"$F".pem
+
+openssl pkcs12 -export -in navcert/"$F".pem -certfile navcert/"$F".ca.crt \
+    -passout pass: -out navcert/"$F".pfx
+
