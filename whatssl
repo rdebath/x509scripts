@@ -1,4 +1,8 @@
-#!/bin/sh
+#!/bin/bash
+if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
+
+NL='
+'
 
 for file
 do
@@ -15,6 +19,7 @@ do
     FIRSTPKEYPUB="$PKEYPUB"
     FIRSTREQPUB="$REQPUB"
     ISSU=
+    CHAIN=""
 
     k=0
     while :
@@ -43,14 +48,25 @@ do
 
 	    ISSU="$(echo "$ITEM" | openssl x509 -issuer_hash -noout 2>/dev/null)"
 
-	    [ "$SUBJ" = "$ISSU" ] && {
-		if openssl verify -CAfile <(echo "$ITEM") <(echo "$ITEM")
+	    if [ "$SUBJ" = "$ISSU" ]
+	    then
+		if openssl verify -CAfile <(echo "$ITEM") <(echo "$ITEM") >/dev/null 2>&1
 		then
-		    echo '    This certificate is self signed'
+
+		    if openssl verify -CAfile <(echo "$ITEM" ; echo "$CHAIN" ) <(echo "$DATA") >/dev/null 2>&1
+		    then
+			echo '    This self signed certificate successfully verifies the chain'
+		    else
+			echo '    This certificate is self signed'
+		    fi
+
 		else
-		    echo "    This certificate self signed certificate fails validation"
+		    echo "    This self signed certificate fails validation"
 		fi
-	    }
+	    elif [ "$CERTPUB" != "$FIRSTCERTPUB" ]
+	    then
+		CHAIN="$CHAIN$NL$ITEM"
+	    fi
 
 	elif [ "$REQPUB" != "" ]
 	then
