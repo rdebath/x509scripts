@@ -1,5 +1,6 @@
 #!/bin/bash
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
+[ $# -eq 0 ] && set -- -
 
 NL='
 '
@@ -32,6 +33,7 @@ do
 	CERTPUB="$(echo "$ITEM" | openssl x509 -pubkey -noout 2>/dev/null)"
 	REQPUB="$(echo "$ITEM" | openssl req -pubkey -noout 2>/dev/null)"
 	PKEYPUB="$(echo "$ITEM" | openssl pkey -pubout 2>/dev/null)"
+	PKEYPARAM="$(echo "$ITEM" | openssl pkeyparam -text -noout 2>/dev/null)"
 
 	[ "$CERTPUB" != "" ] && CERTPUB="$(echo "$CERTPUB" | openssl md5 | awk '{print $2;}')"
 	[ "$PKEYPUB" != "" ] && PKEYPUB="$(echo "$PKEYPUB" | openssl md5 | awk '{print $2;}')"
@@ -53,12 +55,24 @@ do
 
 	    if [ "$SUBJ" = "$ISSU" ]
 	    then
-		if openssl verify -CAfile <(echo "$ITEM") <(echo "$ITEM") >/dev/null 2>&1
+		if ! openssl verify -CAfile <(echo "$ITEM") <(echo "$ITEM") 2>&1 | grep -iq ^error
 		then
+		    success=
+		    for purpose in sslclient sslserver nssslserver smimesign smimeencrypt
+		    do
+			if ! (  openssl verify -x509_strict -purpose $purpose \
+				    -CAfile <(echo "$ITEM" ; echo "$CHAIN" ) <(echo "$DATA") 2>&1 |
+				grep -iq ^error )
+			then success="$success $purpose"
+			fi
+		    done
 
-		    if openssl verify -CAfile <(echo "$ITEM" ; echo "$CHAIN" ) <(echo "$DATA") >/dev/null 2>&1
+		    if [ "$success" != "" ]
 		    then
-			echo '    This self signed certificate successfully verifies the chain'
+			echo '    This self signed certificate verifies the chain for:' $success
+		    elif ! openssl verify -CAfile <(echo "$ITEM" ; echo "$CHAIN" ) <(echo "$DATA") 2>&1 | grep -iq ^error
+		    then
+			echo '    This self signed certificate verifies the chain when not strict'
 		    else
 			echo '    This certificate is self signed'
 		    fi
@@ -84,6 +98,10 @@ do
 	elif [ "$PKEYPUB" != "" ]
 	then
 	    echo "$ITEM" | openssl pkey -noout -text -pubout
+	elif [ "$PKEYPARAM" != "" ]
+	then
+	    echo Parameter file for genpkey:
+	    echo "$PKEYPARAM"
 	else
 	    echo Item $k not identified
 	fi

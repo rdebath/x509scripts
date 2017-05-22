@@ -30,6 +30,7 @@ KEYPASS=
 KEYPARAM=no
 WANTCSR=no
 ADDDNQ=no
+CSRTEXT=
 SIGNPEM=
 SINGLEUSECA=
 RSABITS=2048
@@ -111,9 +112,9 @@ do  case "$ar" in
     -v3crlsign|-crlsign|-v3crl ) V3=yes ; V3CRL=yes ;;
     -v3lastca|-lastca ) V3=yes ; V3CA=yes ; V3CAPATH=0 ;;
     -v3usr|-usr|-user ) V3=yes ; V3CA=no ;;
-    -v3server|-server ) V3=yes ; V3CA=${V3CA:-no} ; V3SERVER=yes ;;
-    -v3client|-client ) V3=yes ; V3CA=${V3CA:-no} ; V3CLIENT=yes ;;
-    -v3email|-email ) V3=yes ; V3CA=${V3CA:-no} ; V3EMAIL=yes ;;
+    -v3server|-server ) V3=yes ; V3SERVER=yes ;;
+    -v3client|-client ) V3=yes ; V3CLIENT=yes ;;
+    -v3email|-email ) V3=yes ; V3EMAIL=yes ;;
     -v3ns|-ns ) V3=yes ; V3NS=yes ;;
     -v3crit|-v3critical|-critical ) V3=yes ; V3CRITICAL=yes ; V3CA=${V3CA:-no} ;;
 
@@ -185,12 +186,13 @@ done
     V3XKU= ; V3EKU=
     [ "$V3CRITICAL" = yes ] && CR=critical, || CR=
 
+    [ "$V3SERVER" = yes -o "$V3EMAIL" = yes -o "$V3CLIENT" = yes ] &&
+	V3CA="${V3CA:-no}"
+
     V3P=${V3CAPATH:+, pathlen:$V3CAPATH}
 
-    [ "$V3CA" = yes ] && {
-	V3OPTS="$V3OPTS${NL}basicConstraints = ${CR}CA:TRUE${V3P}"
-	V3XKU=keyCertSign,${V3CRL:+cRLSign,}
-    }
+    [ "$V3CA" = yes ] && V3OPTS="$V3OPTS${NL}basicConstraints = ${CR}CA:TRUE${V3P}"
+    [ "$V3CA" = yes ] && V3XKU=keyCertSign,${V3CRL:+cRLSign,}
     [ "$V3CA" = no ] && V3OPTS="$V3OPTS${NL}basicConstraints = ${CR}CA:FALSE"
 
     if [ "$V3SERVER" = yes -a "$V3CA" != yes ]
@@ -270,6 +272,8 @@ else SSCERT="$(openssl req -new $X509 $DGST \
 	${SUBJ:+-subj "$SUBJ"} \
 	-key <(echo "$SSKEY") \
 	-config <(mkreqconf $WANTCSR) )"
+
+    [ "$WANTCSR" = yes ] && CSRTEXT="$SSCERT"
 fi
 
 [ "$SINGLEUSECA" = yes ] && {
@@ -329,8 +333,13 @@ outp() {
     then echo "$SSCERT" | openssl req -subject
     else echo "$SSCERT" | openssl x509 -subject -issuer -serial -dates
     fi
+
     [ "$SINGLEUSECA" = yes ] &&
 	echo "$SIGNPEM" | openssl x509 -subject -serial -dates
+
+    [ "$CSRTEXT" != "" ] &&
+	echo "$CSRTEXT"
+
     if [ "$KFN" = '/dev/null' ]
     then :
     elif [ "$KFN" != '' ]
