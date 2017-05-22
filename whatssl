@@ -19,7 +19,8 @@ do
     FIRSTPKEYPUB="$PKEYPUB"
     FIRSTREQPUB="$REQPUB"
     ISSU=
-    CHAIN=""
+    CHAIN=
+    PRECERTPUB=
 
     k=0
     while :
@@ -38,6 +39,8 @@ do
 
 	if [ "$CERTPUB" != "" ]
 	then
+	    PREVCERTPUB="$CERTPUB"
+
 	    echo "$ITEM" | openssl x509 -noout -text -certopt no_sigdump,no_pubkey
 	    [ "$CERTPUB" = "$FIRSTPKEYPUB" ] &&
 		echo "    The file contains a private key that matches this certificate."
@@ -70,11 +73,14 @@ do
 
 	elif [ "$REQPUB" != "" ]
 	then
+	    PREVCERTPUB=
 	    echo "$ITEM" | openssl req -noout -text -reqopt no_sigdump,no_pubkey
 	    [ "$REQPUB" = "$FIRSTCERTPUB" ] &&
 		echo "    This request matches the first certificate"
 	elif [ "$PKEYPUB" != "" -a "$PKEYPUB" = "$FIRSTCERTPUB" ]
 	then :
+	elif [ "$PKEYPUB" != "" -a "$PKEYPUB" = "$PREVCERTPUB" ]
+	then echo '    The file contains a private key that matches this certificate.'
 	elif [ "$PKEYPUB" != "" ]
 	then
 	    echo "$ITEM" | openssl pkey -noout -text -pubout
