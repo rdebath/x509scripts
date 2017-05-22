@@ -1,0 +1,49 @@
+#!/bin/sh
+
+for i
+do
+    CERTPUB="$(openssl x509 -pubkey -noout < "$i" 2>/dev/null)"
+    REQPUB="$(openssl req -pubkey -noout < "$i" 2>/dev/null)"
+    PKEYPUB="$(openssl pkey -pubout < "$i" 2>/dev/null)"
+    SUBJ="$(openssl x509 -subject_hash -noout < "$i" 2>/dev/null)"
+    ISSU="$(openssl x509 -issuer_hash -noout < "$i" 2>/dev/null)"
+
+    [ "$CERTPUB" != "" ] && CERTPUB="$(echo "$CERTPUB" | openssl md5 | awk '{print $2;}')"
+    [ "$PKEYPUB" != "" ] && PKEYPUB="$(echo "$PKEYPUB" | openssl md5 | awk '{print $2;}')"
+
+    if [ "$CERTPUB" != "" ]
+    then
+	openssl x509 < "$i" -noout -text -certopt no_sigdump,no_pubkey
+
+	if [ "$CERTPUB" = "$PKEYPUB" ]
+	then 
+	    openssl pkey -noout -text < "$i" | grep '^[A-Z][A-Za-z0-9]'
+	elif [ "$PKEYPUB" != "" ]
+	then echo WARNING: Contains a mis-matched public key
+	fi
+    elif [ "$REQPUB" != "" ]
+    then
+	openssl req < "$i" -noout -text -reqopt no_sigdump,no_pubkey
+
+	if [ "$REQPUB" = "$PKEYPUB" ]
+	then 
+	    openssl pkey -noout -text < "$i" | grep '^[A-Z][A-Za-z0-9]'
+	elif [ "$PKEYPUB" != "" ]
+	then echo WARNING: Contains a mis-matched public key
+	fi
+    elif [ "$PKEYPUB" != "" ]
+    then
+	openssl pkey -noout -text < "$i"
+    else
+	echo Nothing found in "$i"
+    fi
+
+    CACERT="$({
+	openssl pkcs12 -export -in "$i" -passout pass: |
+	openssl pkcs12 -passin pass: -cacerts -nokeys -nodes -nomacver
+    } 2>/dev/null )"
+    if [ "$CACERT" != "" ]
+    then
+	echo "$CACERT" | openssl x509 -noout -text -certopt no_sigdump,no_pubkey
+    fi
+done
