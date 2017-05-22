@@ -60,11 +60,16 @@ do
 		then
 		    success=
 		    tested=
-		    for purpose in sslclient sslserver nssslserver smimesign smimeencrypt
+		    for purpose in  sslclient sslserver nssslserver \
+				    smimesign smimeencrypt \
+				    crlsign ocsphelper timestampsign
 		    do
-			if ! (  openssl verify -x509_strict -purpose $purpose \
-				    -CAfile <(echo "$ITEM" ; echo "$CHAIN" ) <(echo "$DATA") 2>&1 |
-				grep -iq ^error )
+			if ! openssl verify -x509_strict -purpose $purpose \
+				    -CApath /dev/null \
+				    -CAfile <(echo "$ITEM") \
+				    ${CHAIN:+-untrusted <(echo "$CHAIN")} \
+				    <(echo "$DATA") 2>&1 |
+				grep -iq ^error
 			then success="$success $purpose"
 			fi
 			tested="$tested $purpose"
@@ -76,7 +81,10 @@ do
 		    elif [ "$success" != "" ]
 		    then
 			echo '    This self signed certificate verifies the chain for:' $success
-		    elif ! openssl verify -CAfile <(echo "$ITEM" ; echo "$CHAIN" ) <(echo "$DATA") 2>&1 | grep -iq ^error
+		    elif ! openssl verify -CAfile <(echo "$ITEM") \
+				    -CApath /dev/null \
+				    ${CHAIN:+-untrusted <(echo "$CHAIN")} \
+				    <(echo "$DATA") 2>&1 | grep -iq ^error
 		    then
 			echo '    This self signed certificate verifies the chain when not strict'
 		    else

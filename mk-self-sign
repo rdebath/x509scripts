@@ -175,7 +175,7 @@ done
 # Your best option is probably:
 #   No option: 	A v1 certificate, usually perfectly acceptable.
 #   -v3ca	A v3 CA certificate
-#   -v3		An unlabeled v3 certificate; must not be used as a CA
+#   -v3		An unlabeled v3 certificate; should not be used as a CA
 #   -v3usr	A v3 certificate labeled as NOT a CA.
 #
 # This ignores the worst of the complexity, most of which was designed to
@@ -188,8 +188,13 @@ done
     V3XKU= ; V3EKU=
     [ "$V3CRITICAL" = yes ] && CR=critical, || CR=
 
-    [ "$V3SERVER" = yes -o "$V3EMAIL" = yes -o "$V3CLIENT" = yes ] &&
-	V3CA="${V3CA:-no}"
+    [ "$V3SERVER" = yes -o "$V3EMAIL" = yes -o "$V3CLIENT" = yes ] && {
+	if [ "$SIGNPEM" != "" -o "$SINGLEUSECA" = yes ]
+	then V3CA="${V3CA:-no}"
+	elif [ "$V3CA" = '' ]
+	then V3XKU=keyCertSign,${V3CRL:+cRLSign,}
+	fi
+    }
 
     V3P=${V3CAPATH:+, pathlen:$V3CAPATH}
 
