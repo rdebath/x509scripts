@@ -34,6 +34,7 @@ do
 	REQPUB="$(echo "$ITEM" | openssl req -pubkey -noout 2>/dev/null)"
 	PKEYPUB="$(echo "$ITEM" | openssl pkey -pubout 2>/dev/null)"
 	PKEYPARAM="$(echo "$ITEM" | openssl pkeyparam -text -noout 2>/dev/null)"
+	PUBKEY="$(echo "$ITEM" | openssl pkey -pubin 2>/dev/null)"
 
 	[ "$CERTPUB" != "" ] && CERTPUB="$(echo "$CERTPUB" | openssl md5 | awk '{print $2;}')"
 	[ "$PKEYPUB" != "" ] && PKEYPUB="$(echo "$PKEYPUB" | openssl md5 | awk '{print $2;}')"
@@ -58,6 +59,7 @@ do
 		if ! openssl verify -CAfile <(echo "$ITEM") <(echo "$ITEM") 2>&1 | grep -iq ^error
 		then
 		    success=
+		    tested=
 		    for purpose in sslclient sslserver nssslserver smimesign smimeencrypt
 		    do
 			if ! (  openssl verify -x509_strict -purpose $purpose \
@@ -65,9 +67,13 @@ do
 				grep -iq ^error )
 			then success="$success $purpose"
 			fi
+			tested="$tested $purpose"
 		    done
 
-		    if [ "$success" != "" ]
+		    if [ "$tested" = "$success" ]
+		    then
+			echo '    This self signed certificate verifies the chain for all uses'
+		    elif [ "$success" != "" ]
 		    then
 			echo '    This self signed certificate verifies the chain for:' $success
 		    elif ! openssl verify -CAfile <(echo "$ITEM" ; echo "$CHAIN" ) <(echo "$DATA") 2>&1 | grep -iq ^error
@@ -97,11 +103,15 @@ do
 	then echo '    The file contains a private key that matches this certificate.'
 	elif [ "$PKEYPUB" != "" ]
 	then
-	    echo "$ITEM" | openssl pkey -noout -text -pubout
+	    echo 'A private key for this public key:'
+	    echo "$ITEM" | openssl pkey -pubout | openssl pkey -pubin -noout -text
 	elif [ "$PKEYPARAM" != "" ]
 	then
 	    echo Parameter file for genpkey:
 	    echo "$PKEYPARAM"
+	elif [ "$PUBKEY" != "" ]
+	then
+	    echo "$ITEM" | openssl pkey -pubin -noout -text
 	else
 	    echo Item $k not identified
 	fi

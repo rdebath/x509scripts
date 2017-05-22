@@ -30,6 +30,7 @@ KEYPASS=
 KEYPARAM=no
 WANTCSR=no
 ADDDNQ=no
+SHOWCSR=no
 CSRTEXT=
 SIGNPEM=
 SINGLEUSECA=
@@ -91,6 +92,7 @@ do  case "$ar" in
 	WANTCSR=yes
 	KFN=/dev/null
 	;;
+    -showcsr ) SHOWCSR=yes ;;
 
     -sign[=:]* )
 	SIGNPEM="$(cat "${ar#*[=:]}")"
@@ -337,7 +339,7 @@ outp() {
     [ "$SINGLEUSECA" = yes ] &&
 	echo "$SIGNPEM" | openssl x509 -subject -serial -dates
 
-    [ "$CSRTEXT" != "" ] &&
+    [ "$CSRTEXT" != "" -a "$SHOWCSR" = yes ] &&
 	echo "$CSRTEXT"
 
     if [ "$KFN" = '/dev/null' ]
