@@ -30,8 +30,8 @@ KEYPASS=
 KEYPARAM=no
 WANTCSR=no
 ADDDNQ=no
-SIGNFN=
 SIGNPEM=
+SINGLEUSECA=
 RSABITS=2048
 PKCS12FN=
 
@@ -92,9 +92,11 @@ do  case "$ar" in
 	;;
 
     -sign[=:]* )
-	SIGNFN="${ar#*[=:]}"
+	SIGNPEM="$(cat "${ar#*[=:]}")"
 	WANTCSR=yes
 	;;
+
+    -singleuseca|-suca ) WANTCSR=yes ; SINGLEUSECA=yes ;;
 
     -pkcs12[=:]* ) PKCS12FN="${ar#*[=:]}" ;;
 
@@ -270,9 +272,28 @@ else SSCERT="$(openssl req -new $X509 $DGST \
 	-config <(mkreqconf $WANTCSR) )"
 fi
 
-[ "$SIGNFN" != "" ] && {
-    SIGNPEM="$(cat "$SIGNFN")"
-    [ "$SERIAL" = "" ] && SERIAL="$(openssl rand -hex 8)"
+[ "$SINGLEUSECA" = yes ] && {
+    mksucareqconf() {
+	echo '[req]'
+	echo 'distinguished_name = req_distinguished_name'
+	echo '[ req_distinguished_name ]'
+	echo 'commonName = Common Name'
+    }
+
+    [ "$SERIAL" = "" ] && SERIAL="$(openssl rand -hex 9)"
+    CAKEY="$(mkkey)"
+    CASER="$(openssl rand -hex 8)"
+    SIGNPEM="$(openssl req -new -x509 $DGST \
+	    -days "${CERT_DAYS:-3652}" \
+	    -set_serial 0x"$CASER" \
+	    -key <(echo "$CAKEY") \
+	    -subj "/CN=Private CA/dnQualifier=$SERIAL/" \
+	    -config <(mksucareqconf)
+	echo "$CAKEY" )"
+}
+
+[ "$SIGNPEM" != "" ] && {
+    [ "$SERIAL" = "" ] && SERIAL="$(openssl rand -hex 9)"
 
     # Default to days left on CA certificate
     [ "$CERT_DAYS" = "" ] && {
@@ -282,11 +303,12 @@ fi
         CERT_DAYS=$((ENDDAY/86400 - TODAY/86400))
     }
 
-    SSCERT="$(echo "$SSCERT" |
-	openssl x509 -req $DGST \
+    SSCERT="$(openssl x509 -req $DGST \
 	    -days "${CERT_DAYS:-3652}" \
 	    ${SERIAL:+-set_serial 0x"$SERIAL"} \
-	    -CA <(echo "$SIGNPEM") -CAkey <(echo "$SIGNPEM") \
+	    -in <(echo "$SSCERT") \
+	    -CA <(echo "$SIGNPEM") \
+	    -CAkey <(echo "$SIGNPEM") \
 	    ${V3HEAD:+-extfile <(mkreqconf) -extensions "$X509SECT"} )"
 
     WANTCSR=no
@@ -307,6 +329,8 @@ outp() {
     then echo "$SSCERT" | openssl req -subject
     else echo "$SSCERT" | openssl x509 -subject -issuer -serial -dates
     fi
+    [ "$SINGLEUSECA" = yes ] &&
+	echo "$SIGNPEM" | openssl x509 -subject -serial -dates
     if [ "$KFN" = '/dev/null' ]
     then :
     elif [ "$KFN" != '' ]

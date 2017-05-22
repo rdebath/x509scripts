@@ -28,7 +28,6 @@ V1CERT=yes
 SERVER=no
 ECPARAM=prime256v1
 CAOU='Private CA'
-SERVEROU="OpenVPN Server TLS"
 CERTOU=""
 CASUBJ=""
 CN=
@@ -97,10 +96,10 @@ CAFILE="$CERT_DIR"/"$CN".ca.crt
 [ "$SERVER" = yes ] &&
     CAFILE="$CERT_DIR"/"$CN".ca.cer
 
-[ "$CERTOU" = "" -a "$SERVER" = yes ] &&
-    CERTOU="$SERVEROU"
+[ "$CERTOU" = "" -a "$SERVER" = yes ] && CERTOU="OpenVPN server"
+[ "$CERTOU" = "" -a "$SERVER" = client ] && CERTOU="OpenVPN client"
 
-[ "$CASUBJ" = "" ] && CASUBJ="/CN=$CN/OU=$CAOU/"
+[ "$CASUBJ" = "" ] && CASUBJ="/OU=$CAOU/CN=$CN/"
 
 CERT_DAYS="${CERT_DAYS:-3652}"
 

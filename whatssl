@@ -1,49 +1,69 @@
 #!/bin/sh
 
-for i
+for file
 do
-    CERTPUB="$(openssl x509 -pubkey -noout < "$i" 2>/dev/null)"
-    REQPUB="$(openssl req -pubkey -noout < "$i" 2>/dev/null)"
-    PKEYPUB="$(openssl pkey -pubout < "$i" 2>/dev/null)"
-    SUBJ="$(openssl x509 -subject_hash -noout < "$i" 2>/dev/null)"
-    ISSU="$(openssl x509 -issuer_hash -noout < "$i" 2>/dev/null)"
+    DATA="$(cat "$file")"
+    CERTPUB="$(echo "$DATA" | openssl x509 -pubkey -noout 2>/dev/null)"
+    REQPUB="$(echo "$DATA" | openssl req -pubkey -noout 2>/dev/null)"
+    PKEYPUB="$(echo "$DATA" | openssl pkey -pubout 2>/dev/null)"
 
     [ "$CERTPUB" != "" ] && CERTPUB="$(echo "$CERTPUB" | openssl md5 | awk '{print $2;}')"
+    [ "$REQPUB" != "" ] && REQPUB="$(echo "$REQPUB" | openssl md5 | awk '{print $2;}')"
     [ "$PKEYPUB" != "" ] && PKEYPUB="$(echo "$PKEYPUB" | openssl md5 | awk '{print $2;}')"
 
-    if [ "$CERTPUB" != "" ]
-    then
-	openssl x509 < "$i" -noout -text -certopt no_sigdump,no_pubkey
+    FIRSTCERTPUB="$CERTPUB"
+    FIRSTPKEYPUB="$PKEYPUB"
+    FIRSTREQPUB="$REQPUB"
+    ISSU=
 
-	if [ "$CERTPUB" = "$PKEYPUB" ]
-	then 
-	    openssl pkey -noout -text < "$i" | grep '^[A-Z][A-Za-z0-9]'
+    k=0
+    while :
+    do
+	((k+=1))
+	ITEM="$(echo "$DATA" | awk -v k=$k '/^-----BEGIN/ && k>1 {k--;next;} /^-----BEGIN/&& k {disp=1;} disp{print;} /^-----END/&&disp{disp=0;k--;}')"
+	[ "$ITEM" = "" ] && break
+
+	CERTPUB="$(echo "$ITEM" | openssl x509 -pubkey -noout 2>/dev/null)"
+	REQPUB="$(echo "$ITEM" | openssl req -pubkey -noout 2>/dev/null)"
+	PKEYPUB="$(echo "$ITEM" | openssl pkey -pubout 2>/dev/null)"
+
+	[ "$CERTPUB" != "" ] && CERTPUB="$(echo "$CERTPUB" | openssl md5 | awk '{print $2;}')"
+	[ "$PKEYPUB" != "" ] && PKEYPUB="$(echo "$PKEYPUB" | openssl md5 | awk '{print $2;}')"
+	[ "$REQPUB" != "" ] && REQPUB="$(echo "$REQPUB" | openssl md5 | awk '{print $2;}')"
+
+	if [ "$CERTPUB" != "" ]
+	then
+	    echo "$ITEM" | openssl x509 -noout -text -certopt no_sigdump,no_pubkey
+	    [ "$CERTPUB" = "$FIRSTPKEYPUB" ] &&
+		echo "    The file contains a private key that matches this certificate."
+
+	    SUBJ="$(echo "$ITEM" | openssl x509 -subject_hash -noout 2>/dev/null)"
+	    [ "$SUBJ" = "$ISSU" ] &&
+		echo '    This certificate is the issuer for the previous one'
+
+	    ISSU="$(echo "$ITEM" | openssl x509 -issuer_hash -noout 2>/dev/null)"
+
+	    [ "$SUBJ" = "$ISSU" ] && {
+		if openssl verify -CAfile <(echo "$ITEM") <(echo "$ITEM")
+		then
+		    echo '    This certificate is self signed'
+		else
+		    echo "    This certificate self signed certificate fails validation"
+		fi
+	    }
+
+	elif [ "$REQPUB" != "" ]
+	then
+	    echo "$ITEM" | openssl req -noout -text -reqopt no_sigdump,no_pubkey
+	    [ "$REQPUB" = "$FIRSTCERTPUB" ] &&
+		echo "    This request matches the first certificate"
+	elif [ "$PKEYPUB" != "" -a "$PKEYPUB" = "$FIRSTCERTPUB" ]
+	then :
 	elif [ "$PKEYPUB" != "" ]
-	then echo WARNING: Contains a mis-matched public key
+	then
+	    echo "$ITEM" | openssl pkey -noout -text -pubout
+	else
+	    echo Item $k not identified
 	fi
-    elif [ "$REQPUB" != "" ]
-    then
-	openssl req < "$i" -noout -text -reqopt no_sigdump,no_pubkey
-
-	if [ "$REQPUB" = "$PKEYPUB" ]
-	then 
-	    openssl pkey -noout -text < "$i" | grep '^[A-Z][A-Za-z0-9]'
-	elif [ "$PKEYPUB" != "" ]
-	then echo WARNING: Contains a mis-matched public key
-	fi
-    elif [ "$PKEYPUB" != "" ]
-    then
-	openssl pkey -noout -text < "$i"
-    else
-	echo Nothing found in "$i"
-    fi
-
-    CACERT="$({
-	openssl pkcs12 -export -in "$i" -passout pass: |
-	openssl pkcs12 -passin pass: -cacerts -nokeys -nodes -nomacver
-    } 2>/dev/null )"
-    if [ "$CACERT" != "" ]
-    then
-	echo "$CACERT" | openssl x509 -noout -text -certopt no_sigdump,no_pubkey
-    fi
+    done
 done
