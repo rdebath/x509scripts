@@ -64,7 +64,7 @@ do
 				    smimesign smimeencrypt \
 				    crlsign ocsphelper timestampsign
 		    do
-			if ! openssl verify -x509_strict -purpose $purpose \
+			if ! openssl verify -x509_strict -check_ss_sig -purpose $purpose \
 				    -CApath /dev/null \
 				    -CAfile <(echo "$ITEM") \
 				    ${CHAIN:+-untrusted <(echo "$CHAIN")} \
@@ -81,7 +81,8 @@ do
 		    elif [ "$success" != "" ]
 		    then
 			echo '    This self signed certificate verifies the chain for:' $success
-		    elif ! openssl verify -CAfile <(echo "$ITEM") \
+		    elif ! openssl verify -check_ss_sig \
+				    -CAfile <(echo "$ITEM") \
 				    -CApath /dev/null \
 				    ${CHAIN:+-untrusted <(echo "$CHAIN")} \
 				    <(echo "$DATA") 2>&1 | grep -iq ^error

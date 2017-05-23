@@ -283,7 +283,7 @@ else SSCERT="$(openssl req -new $X509 $DGST \
     [ "$WANTCSR" = yes ] && CSRTEXT="$SSCERT"
 fi
 
-[ "$SINGLEUSECA" = yes ] && {
+[ "$SINGLEUSECA" = yes -a "$SIGNPEM" = '' ] && {
     mksucareqconf() {
 	echo '[req]'
 	echo 'distinguished_name = req_distinguished_name'
