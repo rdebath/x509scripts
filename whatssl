@@ -10,7 +10,7 @@ do
     DATA="$(cat "$file")"
     CERTPUB="$(echo "$DATA" | openssl x509 -pubkey -noout 2>/dev/null)"
     REQPUB="$(echo "$DATA" | openssl req -pubkey -noout 2>/dev/null)"
-    PKEYPUB="$(echo "$DATA" | openssl pkey -pubout 2>/dev/null)"
+    PKEYPUB="$(echo "$DATA" | openssl pkey -pubout -passin pass: 2>/dev/null)"
 
     [ "$CERTPUB" != "" ] && CERTPUB="$(echo "$CERTPUB" | openssl md5 | awk '{print $2;}')"
     [ "$REQPUB" != "" ] && REQPUB="$(echo "$REQPUB" | openssl md5 | awk '{print $2;}')"
@@ -32,9 +32,11 @@ do
 
 	CERTPUB="$(echo "$ITEM" | openssl x509 -pubkey -noout 2>/dev/null)"
 	REQPUB="$(echo "$ITEM" | openssl req -pubkey -noout 2>/dev/null)"
-	PKEYPUB="$(echo "$ITEM" | openssl pkey -pubout 2>/dev/null)"
+	PKEYPUB="$(echo "$ITEM" | openssl pkey -pubout -passin pass: 2>/dev/null)"
 	PKEYPARAM="$(echo "$ITEM" | openssl pkeyparam -text -noout 2>/dev/null)"
 	PUBKEY="$(echo "$ITEM" | openssl pkey -pubin 2>/dev/null)"
+
+	ENCKEY=$(echo "$ITEM" | openssl pkey -pubout -passin pass: 2>&1 | grep -qi bad.password && echo yes)
 
 	[ "$CERTPUB" != "" ] && CERTPUB="$(echo "$CERTPUB" | openssl md5 | awk '{print $2;}')"
 	[ "$PKEYPUB" != "" ] && PKEYPUB="$(echo "$PKEYPUB" | openssl md5 | awk '{print $2;}')"
@@ -113,7 +115,7 @@ do
 	elif [ "$PKEYPUB" != "" ]
 	then
 	    echo 'A private key for this public key:'
-	    echo "$ITEM" | openssl pkey -pubout | openssl pkey -pubin -noout -text
+	    echo "$ITEM" | openssl pkey -pubout -passin pass: | openssl pkey -pubin -noout -text
 	elif [ "$PKEYPARAM" != "" ]
 	then
 	    echo Parameter file for genpkey:
@@ -121,6 +123,9 @@ do
 	elif [ "$PUBKEY" != "" ]
 	then
 	    echo "$ITEM" | openssl pkey -pubin -noout -text
+	elif [ "$ENCKEY" = "yes" ]
+	then
+	    echo Item $k is an encrypted key
 	else
 	    echo Item $k not identified
 	fi

@@ -94,6 +94,11 @@ do  case "$ar" in
 	;;
     -showcsr ) SHOWCSR=yes ;;
 
+    -sign[=:]*.pfx )
+	SIGNPEM="$(openssl pkcs12 -nodes -in "${ar#*[=:]}")"
+	WANTCSR=yes
+	;;
+
     -sign[=:]* )
 	SIGNPEM="$(cat "${ar#*[=:]}")"
 	WANTCSR=yes
