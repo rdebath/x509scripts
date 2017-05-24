@@ -29,6 +29,7 @@ NOECPARAM="$(openssl no-ecparam >/dev/null 2>&1 && echo yes || echo no)"
 KEYPASS=
 KEYPARAM=no
 WANTCSR=no
+MAKECSR=no
 ADDDNQ=no
 SHOWCSR=no
 CSRTEXT=
@@ -85,26 +86,25 @@ do  case "$ar" in
 
     -param ) KEYPARAM=yes ;;
 
-    -csr ) WANTCSR=yes ;;
+    -csr ) WANTCSR=yes ; MAKECSR=yes ;;
     -csrin[=:]* )
 	eval "mkkey() { :; }"
 	CSRFN="${ar#*[=:]}"
-	WANTCSR=yes
 	KFN=/dev/null
 	;;
     -showcsr ) SHOWCSR=yes ;;
 
     -sign[=:]*.pfx )
 	SIGNPEM="$(openssl pkcs12 -nodes -in "${ar#*[=:]}")"
-	WANTCSR=yes
+	MAKECSR=yes
 	;;
 
     -sign[=:]* )
 	SIGNPEM="$(cat "${ar#*[=:]}")"
-	WANTCSR=yes
+	MAKECSR=yes
 	;;
 
-    -singleuseca|-suca ) WANTCSR=yes ; SINGLEUSECA=yes ;;
+    -singleuseca|-suca ) MAKECSR=yes ; SINGLEUSECA=yes ;;
 
     -pkcs12[=:]* ) PKCS12FN="${ar#*[=:]}" ;;
 
@@ -253,7 +253,7 @@ done
 [ -s "$FN" ] &&
     { echo ERROR: File $FN already exists ; exit 1 ; }
 
-[ "$WANTCSR" = yes ] && X509= || X509=-x509
+[ "$MAKECSR" = yes ] && X509= || X509=-x509
 
 [ "$ADDDNQ" = yes ] && {
     [ "$SERIAL" = "" ] &&
@@ -266,10 +266,15 @@ mkreqconf() {
     echo 'distinguished_name = req_distinguished_name'
     echo "$V3HEAD"
     echo "$V3OPTS"
-    [ "$1" != yes ] && echo "$V3CERTONLY"
+
+    [ "$1" != no ] && echo "$V3CERTONLY"
     echo "$SANLIST"
-    [ "$1" != yes ] && echo "$V3LIST"
-    [ "$1" != yes ] && echo "$V3EXTRAS"
+    [ "$1" != no ] && echo "$V3LIST"
+    [ "$1" != no ] && echo "$V3EXTRAS"
+
+    [ "$1" != '' -a "$SANLIST$V3OPTS" = '' ] &&
+	echo 'nsComment="This stops OpenSSL complaining about an empty section."'
+
     echo '[ req_distinguished_name ]'
     echo 'commonName = Common Name'
     echo 'organizationalUnitName = Organizational Unit Name'
@@ -285,7 +290,7 @@ else SSCERT="$(openssl req -new $X509 $DGST \
 	-key <(echo "$SSKEY") \
 	-config <(mkreqconf $WANTCSR) )"
 
-    [ "$WANTCSR" = yes ] && CSRTEXT="$SSCERT"
+    [ "$MAKECSR" = yes ] && CSRTEXT="$SSCERT"
 fi
 
 [ "$SINGLEUSECA" = yes -a "$SIGNPEM" = '' ] && {
@@ -326,8 +331,6 @@ fi
 	    -CA <(echo "$SIGNPEM") \
 	    -CAkey <(echo "$SIGNPEM") \
 	    ${V3HEAD:+-extfile <(mkreqconf) -extensions "$X509SECT"} )"
-
-    WANTCSR=no
 }
 
 [ "$PKCS12FN" != "" ] && {

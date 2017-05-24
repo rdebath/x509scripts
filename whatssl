@@ -60,29 +60,34 @@ do
 	    then
 		if ! openssl verify -CAfile <(echo "$ITEM") <(echo "$ITEM") 2>&1 | grep -iq ^error
 		then
-		    success=
-		    tested=
-		    for purpose in  sslclient sslserver nssslserver \
-				    smimesign smimeencrypt \
-				    crlsign ocsphelper timestampsign
+		    for STRICT in '-x509_strict' ''
 		    do
-			if ! openssl verify -x509_strict -check_ss_sig -purpose $purpose \
-				    -CApath /dev/null \
-				    -CAfile <(echo "$ITEM") \
-				    ${CHAIN:+-untrusted <(echo "$CHAIN")} \
-				    <(echo "$DATA") 2>&1 |
-				grep -iq ^error
-			then success="$success $purpose"
-			fi
-			tested="$tested $purpose"
+			success=
+			tested=
+			for purpose in  sslclient sslserver nssslserver \
+					smimesign smimeencrypt \
+					crlsign ocsphelper timestampsign
+			do
+			    if ! openssl verify $STRICT -check_ss_sig -purpose $purpose \
+					-CApath /dev/null \
+					-CAfile <(echo "$ITEM") \
+					${CHAIN:+-untrusted <(echo "$CHAIN")} \
+					<(echo "$DATA") 2>&1 |
+				    grep -iq ^error
+			    then success="$success $purpose"
+			    fi
+			    tested="$tested $purpose"
+			done
+			[ "$success" ] && break
 		    done
 
 		    if [ "$tested" = "$success" ]
 		    then
-			echo '    This self signed certificate verifies the chain for all uses'
+			echo "    This self signed certificate verifies the chain${STRICT:+ in strict mode} for all purposes"
 		    elif [ "$success" != "" ]
 		    then
-			echo '    This self signed certificate verifies the chain for:' $success
+			echo "    This self signed certificate verifies the chain${STRICT:+ in strict mode}"
+			echo "        purposes: $success"
 		    elif ! openssl verify -check_ss_sig \
 				    -CAfile <(echo "$ITEM") \
 				    -CApath /dev/null \
