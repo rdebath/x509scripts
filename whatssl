@@ -5,16 +5,24 @@ if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 NL='
 '
 
+NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
+
 for file
 do
     DATA="$(cat "$file")"
     CERTPUB="$(echo "$DATA" | openssl x509 -pubkey -noout 2>/dev/null)"
     REQPUB="$(echo "$DATA" | openssl req -pubkey -noout 2>/dev/null)"
     PKEYPUB="$(echo "$DATA" | openssl pkey -pubout -passin pass: 2>/dev/null)"
+    [ "$NOPKEY" = yes -a "$PKEYPUB" = '' ] &&
+	PKEYPUB="$(echo "$DATA" | openssl rsa -pubout -passin pass: 2>/dev/null)"
+    [ "$NOPKEY" = yes -a "$PKEYPUB" = '' ] &&
+	PKEYPUB="$(echo "$DATA" | openssl ec -pubout -passin pass: 2>/dev/null)"
+    [ "$NOPKEY" = yes -a "$PKEYPUB" = '' ] &&
+	PKEYPUB="$(echo "$DATA" | openssl dsa -pubout -passin pass: 2>/dev/null)"
 
-    [ "$CERTPUB" != "" ] && CERTPUB="$(echo "$CERTPUB" | openssl md5 | awk '{print $2;}')"
-    [ "$REQPUB" != "" ] && REQPUB="$(echo "$REQPUB" | openssl md5 | awk '{print $2;}')"
-    [ "$PKEYPUB" != "" ] && PKEYPUB="$(echo "$PKEYPUB" | openssl md5 | awk '{print $2;}')"
+    [ "$CERTPUB" != "" ] && CERTPUB="$(echo "$CERTPUB" | openssl md5 | awk '{print $NF;}')"
+    [ "$REQPUB" != "" ] && REQPUB="$(echo "$REQPUB" | openssl md5 | awk '{print $NF;}')"
+    [ "$PKEYPUB" != "" ] && PKEYPUB="$(echo "$PKEYPUB" | openssl md5 | awk '{print $NF;}')"
 
     FIRSTCERTPUB="$CERTPUB"
     FIRSTPKEYPUB="$PKEYPUB"
@@ -27,7 +35,7 @@ do
     while :
     do
 	((k+=1))
-	ITEM="$(echo "$DATA" | awk -v k=$k '/^-----BEGIN/ && k>1 {k--;next;} /^-----BEGIN/&& k {disp=1;} disp{print;} /^-----END/&&disp{disp=0;k--;}')"
+	ITEM="$(echo "$DATA" | awk -v k=$k '/^-----BEGIN/ && k>1 {k--;next;} /^-----BEGIN/&& k {disp=1;} disp{print;} /^-----END/&&disp{disp=0;k=0;}')"
 	[ "$ITEM" = "" ] && break
 
 	CERTPUB="$(echo "$ITEM" | openssl x509 -pubkey -noout 2>/dev/null)"
@@ -36,11 +44,18 @@ do
 	PKEYPARAM="$(echo "$ITEM" | openssl pkeyparam -text -noout 2>/dev/null)"
 	PUBKEY="$(echo "$ITEM" | openssl pkey -pubin 2>/dev/null)"
 
+	[ "$NOPKEY" = yes -a "$PKEYPUB$CERTPUB$REQPUB$PKEYPARAM$PUBKEY" = '' ] &&
+	    PKEYPUB="$(echo "$ITEM" | openssl rsa -pubout -passin pass: 2>/dev/null)"
+	[ "$NOPKEY" = yes -a "$PKEYPUB$CERTPUB$REQPUB$PKEYPARAM$PUBKEY" = '' ] &&
+	    PKEYPUB="$(echo "$ITEM" | openssl ec -pubout -passin pass: 2>/dev/null)"
+	[ "$NOPKEY" = yes -a "$PKEYPUB$CERTPUB$REQPUB$PKEYPARAM$PUBKEY" = '' ] &&
+	    PKEYPUB="$(echo "$ITEM" | openssl dsa -pubout -passin pass: 2>/dev/null)"
+
 	ENCKEY=$(echo "$ITEM" | openssl pkey -pubout -passin pass: 2>&1 | grep -qi bad.password && echo yes)
 
-	[ "$CERTPUB" != "" ] && CERTPUB="$(echo "$CERTPUB" | openssl md5 | awk '{print $2;}')"
-	[ "$PKEYPUB" != "" ] && PKEYPUB="$(echo "$PKEYPUB" | openssl md5 | awk '{print $2;}')"
-	[ "$REQPUB" != "" ] && REQPUB="$(echo "$REQPUB" | openssl md5 | awk '{print $2;}')"
+	[ "$CERTPUB" != "" ] && CERTPUB="$(echo "$CERTPUB" | openssl md5 | awk '{print $NF;}')"
+	[ "$PKEYPUB" != "" ] && PKEYPUB="$(echo "$PKEYPUB" | openssl md5 | awk '{print $NF;}')"
+	[ "$REQPUB" != "" ] && REQPUB="$(echo "$REQPUB" | openssl md5 | awk '{print $NF;}')"
 
 	if [ "$CERTPUB" != "" ]
 	then
@@ -64,19 +79,27 @@ do
 		    do
 			success=
 			tested=
-			for purpose in  sslclient sslserver nssslserver \
+			for purpose in  '' \
+					sslclient sslserver nssslserver \
 					smimesign smimeencrypt \
 					crlsign ocsphelper timestampsign
 			do
-			    if ! openssl verify $STRICT -check_ss_sig -purpose $purpose \
+			    tested="$tested $purpose"
+			    [ "$purpose" = '' ] && tested="${tested}unspecified"
+
+			    if ! openssl verify $STRICT ${STRICT:+-check_ss_sig} \
+					${purpose:+-purpose $purpose} \
 					-CApath /dev/null \
 					-CAfile <(echo "$ITEM") \
 					${CHAIN:+-untrusted <(echo "$CHAIN")} \
 					<(echo "$DATA") 2>&1 |
 				    grep -iq ^error
 			    then success="$success $purpose"
+				 [ "$purpose" = '' ] &&
+				    success="${success}unspecified"
+			    elif [ "$purpose" = '' ]
+			    then break
 			    fi
-			    tested="$tested $purpose"
 			done
 			[ "$success" ] && break
 		    done
@@ -87,7 +110,7 @@ do
 		    elif [ "$success" != "" ]
 		    then
 			echo "    This self signed certificate verifies the chain${STRICT:+ in strict mode}"
-			echo "        purposes: $success"
+			echo "        purposes:$success"
 		    elif ! openssl verify -check_ss_sig \
 				    -CAfile <(echo "$ITEM") \
 				    -CApath /dev/null \
@@ -111,26 +134,31 @@ do
 	then
 	    PREVCERTPUB=
 	    echo "$ITEM" | openssl req -noout -text -reqopt no_sigdump,no_pubkey
+	    [ "$REQPUB" = "$FIRSTPKEYPUB" ] &&
+		echo "    WARNING: The file contains a private key that matches this request"
 	    [ "$REQPUB" = "$FIRSTCERTPUB" ] &&
 		echo "    This request matches the first certificate"
-	elif [ "$PKEYPUB" != "" -a "$PKEYPUB" = "$FIRSTCERTPUB" ]
+	elif [ "$PKEYPUB" = "$FIRSTPKEYPUB" -a "$PKEYPUB" = "$FIRSTCERTPUB" ]
 	then :
 	elif [ "$PKEYPUB" != "" -a "$PKEYPUB" = "$PREVCERTPUB" ]
 	then echo '    The file contains a private key that matches this certificate.'
-	elif [ "$PKEYPUB" != "" ]
+	elif [ "$NOPKEY" = no -a "$PKEYPUB" != "" ]
 	then
 	    echo 'A private key for this public key:'
 	    echo "$ITEM" | openssl pkey -pubout -passin pass: | openssl pkey -pubin -noout -text
-	elif [ "$PKEYPARAM" != "" ]
+	elif [ "$NOPKEY" = no -a "$PKEYPARAM" != "" ]
 	then
 	    echo Parameter file for genpkey:
 	    echo "$PKEYPARAM"
-	elif [ "$PUBKEY" != "" ]
+	elif [ "$NOPKEY" = no -a "$PUBKEY" != "" ]
 	then
 	    echo "$ITEM" | openssl pkey -pubin -noout -text
 	elif [ "$ENCKEY" = "yes" ]
 	then
 	    echo Item $k is an encrypted key
+	elif [ "$PKEYPUB" != "" ]
+	then
+	    echo Item $k is a private key
 	else
 	    echo Item $k not identified
 	fi

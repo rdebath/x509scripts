@@ -264,17 +264,16 @@ done
 mkreqconf() {
     echo '[req]'
     echo 'distinguished_name = req_distinguished_name'
-    echo "$V3HEAD"
-    echo "$V3OPTS"
-
-    [ "$1" != no ] && echo "$V3CERTONLY"
-    echo "$SANLIST"
-    [ "$1" != no ] && echo "$V3LIST"
-    [ "$1" != no ] && echo "$V3EXTRAS"
-
-    [ "$1" != '' -a "$SANLIST$V3OPTS" = '' ] &&
-	echo 'nsComment="This stops OpenSSL complaining about an empty section."'
-
+    if [ "$2" != no -o "$1" = no ]
+    then
+	echo "$V3HEAD"
+	echo "$V3OPTS"
+	[ "$1" != yes ] &&
+	    echo "$V3CERTONLY"
+	echo "$SANLIST"
+	echo "$V3LIST"
+	echo "$V3EXTRAS"
+    fi
     echo '[ req_distinguished_name ]'
     echo 'commonName = Common Name'
     echo 'organizationalUnitName = Organizational Unit Name'
@@ -288,7 +287,7 @@ else SSCERT="$(openssl req -new $X509 $DGST \
 	${SERIAL:+-set_serial 0x"$SERIAL"} \
 	${SUBJ:+-subj "$SUBJ"} \
 	-key <(echo "$SSKEY") \
-	-config <(mkreqconf $WANTCSR) )"
+	-config <(mkreqconf $MAKECSR $WANTCSR) )"
 
     [ "$MAKECSR" = yes ] && CSRTEXT="$SSCERT"
 fi
@@ -297,6 +296,10 @@ fi
     mksucareqconf() {
 	echo '[req]'
 	echo 'distinguished_name = req_distinguished_name'
+	if [ "$V3CA" = no ]
+	then echo "$V3INIT"
+	     echo "basicConstraints = CA:TRUE"
+	fi
 	echo '[ req_distinguished_name ]'
 	echo 'commonName = Common Name'
     }
