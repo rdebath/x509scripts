@@ -2,9 +2,6 @@
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 set -e
 
-CERT_DIR="${CERT_DIR:-.}"
-RSABITS=2048
-
 export OPENSSL_CONF=/dev/null
 FN=
 KFN=
@@ -39,12 +36,21 @@ SIGNPEM=
 SINGLEUSECA=
 PKCS12FN=
 
+SUBJTYPE=
+SUBJ=
+SUBJ_C=
+SUBJ_ST=
+SUBJ_L=
+SUBJ_O=
+SUBJ_OU=
+SUBJ_OU_ID=1
+SUBJ_CN=
+
 # This is my default for making a key file.
 if [ "$NOECPARAM" = no ] ; then
     mkkey() { openssl ecparam -name prime256v1 -genkey ;}
 else
-    echo "$NOECPARAM"
-    mkkey() { openssl genrsa $RSABITS ; }
+    mkkey() { openssl genrsa ; }
 fi
 # See also:
 # mkkey() { openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) ;}
@@ -75,7 +81,7 @@ do  case "$ar" in
 	    ar="${ar#*:}:" ; noseed="${ar%%:*}"
 	    eval "mkkey() { openssl ecparam -name '$curve' ${param:+-param_enc $param} ${noseed:+-no_seed} -genkey ; }"
 	    ;;
-    -rsa ) eval "mkkey() { openssl genrsa $RSABITS ; }" ;;
+    -rsa ) eval "mkkey() { openssl genrsa ; }" ;;
 
     -list[-_]curves|-show[_-]curves )
 	openssl ecparam -list_curves ; exit ;;
@@ -152,18 +158,51 @@ do  case "$ar" in
 	    ;;
 
     /*=* )
-	if [ "$SUBJ" != "" ] ; then
-	    echo >&1 Duplicate subject name definition ; exit 1
+	if [ "$SUBJTYPE" != "" ] ; then
+	    echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
 	fi
 	SUBJ="$ar"
+	SUBJTYPE=arg
 	;;
 
-    -*|*/*) echo >&2 "Unknown option: $ar" ; exit 1 ;;
+    -subj[-_]c[=:]*|-subj[-_]st[=:]*|-subj[-_]l[=:]*|-subj[-_]o[=:]*|-subj[-_]cn[=:]* )
+	SUBJTYPE="${SUBJTYPE:-conf}"
 
-    * ) if [ "$SUBJ" != "" ] ; then
-	    SUBJ="${SUBJ%/}/OU=$ar/"
-	else
-	    SUBJ="/CN=$ar/" ; CN="$ar"
+	V="${ar#??????}"
+	C="${V/=*/}"
+	V="${ar#*[=:]}"
+	C="${C^^}"
+
+	eval "X=\"\$SUBJ_$C\""
+
+	if [ "$SUBJTYPE" != "conf" -o "$X" != "" ] ; then
+	    echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
+	fi
+	eval "SUBJ_$C=\"$C=\$V\""
+	;;
+
+    -subj[-_]ou[=:]* )
+	SUBJTYPE="${SUBJTYPE:-conf}"
+	if [ "$SUBJTYPE" != "conf" ] ; then
+	    echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
+	fi
+
+	SUBJ_OU="$SUBJ_OU${NL}${SUBJ_OU_ID}.OU=${ar#*[=:]}"
+	SUBJ_OU_ID=$((SUBJ_OU_ID+1))
+	;;
+
+    -*) echo >&2 "Unknown option: $ar" ; exit 1 ;;
+
+    * ) SUBJTYPE="${SUBJTYPE:-conf}"
+	if [ "$SUBJTYPE" != "conf" ] ; then
+	    echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
+	fi
+
+	if [ "$SUBJ_CN" = "" ]
+	then SUBJ_CN="CN=$ar"
+	     CN="$ar"
+	else SUBJ_OU="$SUBJ_OU${NL}${SUBJ_OU_ID}.OU=$ar"
+	     SUBJ_OU_ID=$((SUBJ_OU_ID+1))
 	fi
 	;;
     esac
@@ -268,12 +307,19 @@ mk_rand() {
 [ "$ADDDNQ" = yes ] && {
     [ "$SERIAL" = "" ] &&
 	SERIAL="$(mk_rand 8)"
-    SUBJ="${SUBJ%/}/dnQualifier=$SERIAL/"
+
+    case "$SUBJTYPE" in
+    arg ) SUBJ="${SUBJ%/}/dnQualifier=$SERIAL/" ;;
+    conf ) SUBJ_DNQ="dnQualifier=$SERIAL" ;;
+    esac
 }
 
 mkreqconf() {
     echo '[req]'
     echo 'distinguished_name = req_distinguished_name'
+    [ "$SUBJTYPE" = conf ] &&
+	echo 'prompt = no'
+
     if [ "$2" != no -o "$1" = no ]
     then
 	echo "$V3HEAD"
@@ -285,8 +331,23 @@ mkreqconf() {
 	echo "$V3EXTRAS"
     fi
     echo '[ req_distinguished_name ]'
-    echo 'commonName = Common Name'
-    echo 'organizationalUnitName = Organizational Unit Name'
+    case "$SUBJTYPE" in
+    conf )
+	echo "$SUBJ_C"
+	echo "$SUBJ_ST"
+	echo "$SUBJ_L"
+	echo "$SUBJ_O"
+	echo "$SUBJ_OU"
+	echo "$SUBJ_CN"
+	echo "$SUBJ_DNQ"
+	;;
+    "")
+	echo 'commonName = Common Name'
+	echo 'organizationalUnitName = Organizational Unit Name'
+	echo "dnQualifier= Additional subject qualifier"
+	echo "dnQualifier_default=$SERIAL"
+	;;
+    esac
 }
 
 SSKEY="$(mkkey)"
@@ -306,26 +367,27 @@ fi
     mksucareqconf() {
 	echo '[req]'
 	echo 'distinguished_name = req_distinguished_name'
+	echo 'prompt = no'
 	if [ "$V3CA" = no ]
 	then echo "$V3INIT"
 	     echo "basicConstraints = CA:TRUE"
 	fi
 	echo '[ req_distinguished_name ]'
-	echo 'commonName = Common Name'
+	if [ "$CN" != "" ]
+	then echo "OU=Private CA"
+	     echo "CN=$CN"
+	else echo "CN=Private CA"
+	fi
+	echo "dnQualifier=$SERIAL"
     }
 
     [ "$SERIAL" = "" ] && SERIAL="$(mk_rand 8)"
     CAKEY="$(mkkey)"
     CASER="$(mk_rand 8)"
-    if [ "$CN" != "" ]
-    then CASUBJ="/OU=Private CA/CN=$CN/dnQualifier=$SERIAL/"
-    else CASUBJ="/CN=Private CA/dnQualifier=$SERIAL/"
-    fi
     SIGNPEM="$(openssl req -new -x509 $DGST \
 	    -days "${CERT_DAYS:-3652}" \
 	    -set_serial 0x"$CASER" \
 	    -key <(echo "$CAKEY") \
-	    -subj "$CASUBJ" \
 	    -config <(mksucareqconf)
 	echo "$CAKEY" )"
 }
