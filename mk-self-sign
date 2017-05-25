@@ -1,9 +1,11 @@
 #!/bin/bash -
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 set -e
-export OPENSSL_CONF=/dev/null
-CERT_DIR="${CERT_DIR:-.}"
 
+CERT_DIR="${CERT_DIR:-.}"
+RSABITS=2048
+
+export OPENSSL_CONF=/dev/null
 FN=
 KFN=
 SERIAL=
@@ -35,7 +37,6 @@ SHOWCSR=no
 CSRTEXT=
 SIGNPEM=
 SINGLEUSECA=
-RSABITS=2048
 PKCS12FN=
 
 # This is my default for making a key file.
@@ -178,10 +179,12 @@ done
 # Build some V3 certificate extension sets.
 # Like the certificate extensions themselves this is very complex.
 # Your best option is probably:
-#   No option: 	A v1 certificate, usually perfectly acceptable.
-#   -v3ca	A v3 CA certificate
-#   -v3		An unlabeled v3 certificate; should not be used as a CA
-#   -v3usr	A v3 certificate labeled as NOT a CA.
+#   No option:  A v1 certificate, usually perfectly acceptable.
+#   -v3         An bare v3 certificate; eg: a strict verifiable self signed.
+#   -v3ca       A v3 CA certificate
+#   -v3usr      A v3 certificate labeled as NOT a CA.
+#   -server     A TLS (eg web) server
+#   -client     A TLS client, eg a client certificate for a web server.
 #
 # This ignores the worst of the complexity, most of which was designed to
 # allow CA's to charge more for "special" certificates.
@@ -253,11 +256,18 @@ done
 [ -s "$FN" ] &&
     { echo ERROR: File $FN already exists ; exit 1 ; }
 
+mk_rand() {
+    RH="$(openssl rand -hex "$1" 2>/dev/null ||:)"
+    [ "$RH" = '' ] &&
+	RH="$(openssl rand "$1" | xxd -p)"
+    echo $RH
+}
+
 [ "$MAKECSR" = yes ] && X509= || X509=-x509
 
 [ "$ADDDNQ" = yes ] && {
     [ "$SERIAL" = "" ] &&
-	SERIAL="$(openssl rand -hex 8)"
+	SERIAL="$(mk_rand 8)"
     SUBJ="${SUBJ%/}/dnQualifier=$SERIAL/"
 }
 
@@ -304,20 +314,24 @@ fi
 	echo 'commonName = Common Name'
     }
 
-    [ "$SERIAL" = "" ] && SERIAL="$(openssl rand -hex 9)"
+    [ "$SERIAL" = "" ] && SERIAL="$(mk_rand 8)"
     CAKEY="$(mkkey)"
-    CASER="$(openssl rand -hex 8)"
+    CASER="$(mk_rand 8)"
+    if [ "$CN" != "" ]
+    then CASUBJ="/OU=Private CA/CN=$CN/dnQualifier=$SERIAL/"
+    else CASUBJ="/CN=Private CA/dnQualifier=$SERIAL/"
+    fi
     SIGNPEM="$(openssl req -new -x509 $DGST \
 	    -days "${CERT_DAYS:-3652}" \
 	    -set_serial 0x"$CASER" \
 	    -key <(echo "$CAKEY") \
-	    -subj "/CN=Private CA/dnQualifier=$SERIAL/" \
+	    -subj "$CASUBJ" \
 	    -config <(mksucareqconf)
 	echo "$CAKEY" )"
 }
 
 [ "$SIGNPEM" != "" ] && {
-    [ "$SERIAL" = "" ] && SERIAL="$(openssl rand -hex 9)"
+    [ "$SERIAL" = "" ] && SERIAL="$(mk_rand 8)"
 
     # Default to days left on CA certificate
     [ "$CERT_DAYS" = "" ] && {
