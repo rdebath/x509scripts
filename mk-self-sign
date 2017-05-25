@@ -63,6 +63,14 @@ req_extensions = $X509SECT
 [ $X509SECT ]
 "
 
+UTF8=
+if [ "$(locale charmap 2>/dev/null)" = UTF-8 ]
+then
+    if openssl req -help 2>&1 | grep -q -e -utf8
+    then UTF8=-utf8
+    fi
+fi
+
 for ar
 do  case "$ar" in
 
@@ -353,7 +361,7 @@ mkreqconf() {
 SSKEY="$(mkkey)"
 if [ "$CSRFN" != "" ]
 then SSCERT="$(cat "$CSRFN")"
-else SSCERT="$(openssl req -new $X509 $DGST \
+else SSCERT="$(openssl req -new $UTF8 $X509 $DGST \
 	-days "${CERT_DAYS:-3652}" \
 	${SERIAL:+-set_serial 0x"$SERIAL"} \
 	${SUBJ:+-subj "$SUBJ"} \
@@ -384,7 +392,7 @@ fi
     [ "$SERIAL" = "" ] && SERIAL="$(mk_rand 8)"
     CAKEY="$(mkkey)"
     CASER="$(mk_rand 8)"
-    SIGNPEM="$(openssl req -new -x509 $DGST \
+    SIGNPEM="$(openssl req -new $UTF8 -x509 $DGST \
 	    -days "${CERT_DAYS:-3652}" \
 	    -set_serial 0x"$CASER" \
 	    -key <(echo "$CAKEY") \
