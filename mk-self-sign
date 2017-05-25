@@ -39,12 +39,19 @@ PKCS12FN=
 SUBJTYPE=
 SUBJ=
 SUBJ_C=
+SUBJ_C_ID=0
 SUBJ_ST=
+SUBJ_ST_ID=0
 SUBJ_L=
+SUBJ_L_ID=0
 SUBJ_O=
+SUBJ_O_ID=0
+SUBJ_DC=
+SUBJ_DC_ID=0
 SUBJ_OU=
-SUBJ_OU_ID=1
+SUBJ_OU_ID=0
 SUBJ_CN=
+SUBJ_CN_ID=0
 
 # This is my default for making a key file.
 if [ "$NOECPARAM" = no ] ; then
@@ -173,30 +180,22 @@ do  case "$ar" in
 	SUBJTYPE=arg
 	;;
 
-    -subj[-_]c[=:]*|-subj[-_]st[=:]*|-subj[-_]l[=:]*|-subj[-_]o[=:]*|-subj[-_]cn[=:]* )
-	SUBJTYPE="${SUBJTYPE:-conf}"
-
-	V="${ar#??????}"
-	C="${V/=*/}"
-	V="${ar#*[=:]}"
-	C="${C^^}"
-
-	eval "X=\"\$SUBJ_$C\""
-
-	if [ "$SUBJTYPE" != "conf" -o "$X" != "" ] ; then
-	    echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
-	fi
-	eval "SUBJ_$C=\"$C=\$V\""
-	;;
-
-    -subj[-_]ou[=:]* )
+    -subj[-_]c[=:]*|-subj[-_]st[=:]*|-subj[-_]l[=:]*|-subj[-_]o[=:]*|\
+    -subj[-_]dc[=:]*|-subj[-_]ou[=:]*|-subj[-_]cn[=:]* )
 	SUBJTYPE="${SUBJTYPE:-conf}"
 	if [ "$SUBJTYPE" != "conf" ] ; then
 	    echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
 	fi
 
-	SUBJ_OU="$SUBJ_OU${NL}${SUBJ_OU_ID}.OU=${ar#*[=:]}"
-	SUBJ_OU_ID=$((SUBJ_OU_ID+1))
+	V="${ar#??????}"
+	C="${V/=*/}"
+	C="${C^^}"
+
+	eval "SUBJ_${C}_ID=\$((SUBJ_${C}_ID+1))"
+	eval "SUBJ_$C=\"\$SUBJ_$C\${NL}\$SUBJ_${C}_ID.$C=\${ar#*[=:]}\""
+
+	[ "$C" = CN -a "$CN" = '' ] &&
+	    CN="${ar#*[=:]}"
 	;;
 
     -*) echo >&2 "Unknown option: $ar" ; exit 1 ;;
@@ -206,11 +205,12 @@ do  case "$ar" in
 	    echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
 	fi
 
-	if [ "$SUBJ_CN" = "" ]
-	then SUBJ_CN="CN=$ar"
+	if [ "$CN" = "" ]
+	then SUBJ_CN_ID=$((SUBJ_CN_ID+1))
+	     SUBJ_CN="$SUBJ_CN${NL}${SUBJ_CN_ID}.CN=$ar"
 	     CN="$ar"
-	else SUBJ_OU="$SUBJ_OU${NL}${SUBJ_OU_ID}.OU=$ar"
-	     SUBJ_OU_ID=$((SUBJ_OU_ID+1))
+	else SUBJ_OU_ID=$((SUBJ_OU_ID+1))
+	     SUBJ_OU="$SUBJ_OU${NL}${SUBJ_OU_ID}.OU=$ar"
 	fi
 	;;
     esac
@@ -345,6 +345,7 @@ mkreqconf() {
 	echo "$SUBJ_ST"
 	echo "$SUBJ_L"
 	echo "$SUBJ_O"
+	echo "$SUBJ_DC"
 	echo "$SUBJ_OU"
 	echo "$SUBJ_CN"
 	echo "$SUBJ_DNQ"
