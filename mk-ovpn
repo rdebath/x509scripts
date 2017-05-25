@@ -118,32 +118,37 @@ mkconfig() {
     echo '[ req_distinguished_name ]'
 }
 
-# Generate the CA key, don't save it to disk.
+# Generate the keys
 CAKEY="$(openssl ecparam -name $ECPARAM -genkey)"
+MYKEY="$(openssl ecparam -name $ECPARAM -genkey)"
 
 # Self sign the CA
-openssl req -new -x509 -days "$CERT_DAYS" \
-    -subj "$CASUBJ" \
-    -key <(echo "$CAKEY") -config <(mkconfig ca) |
-openssl x509 -subject > "$CAFILE"
+CACERT="$(
+    openssl req -new -x509 -days "$CERT_DAYS" \
+	-subj "$CASUBJ" \
+	-key <(echo "$CAKEY") -config <(mkconfig ca) |
+    openssl x509 -subject
+)"
 
-# Make system key, matching the CA type
-openssl req -new -nodes \
-    -newkey param:"$CAFILE" \
-    -subj "${CERTOU:+/OU=$CERTOU}/CN=$CN/" \
-    -keyout "$CERT_DIR"/"$CN".key \
-    -config <(mkconfig) |
+MYCERT="$(
+    # Make a CSR and sign it with the CA
+    openssl req -new -nodes \
+	-key <(echo "$MYKEY") \
+	-subj "${CERTOU:+/OU=$CERTOU}/CN=$CN/" \
+	-config <(mkconfig) |
 
-# Sign it
-openssl x509 -req -days "$CERT_DAYS" \
-    -set_serial 0x$(openssl rand -hex 8) \
-    -out "$CERT_DIR"/"$CN".crt \
-    -CA "$CAFILE" \
-    -CAkey <(echo "$CAKEY") \
-    ${V3CERT:+-extfile <(echo "$V3CERT")}
+    # Sign it
+    openssl x509 -req -days "$CERT_DAYS" \
+	-set_serial 0x$(openssl rand -hex 8) \
+	-CA <(echo "$CACERT") \
+	-CAkey <(echo "$CAKEY") \
+	${V3CERT:+-extfile <(echo "$V3CERT")} |
 
-# Reduce the file list
-openssl x509 -subject -issuer -serial -dates -in "$CERT_DIR"/"$CN".crt |
-cat - "$CAFILE" "$CERT_DIR"/"$CN".key > "$CERT_DIR"/"$CN".pem
-rm "$CERT_DIR"/"$CN".crt "$CAFILE" "$CERT_DIR"/"$CN".key
-mv "$CERT_DIR"/"$CN".pem "$CAFILE"
+    openssl x509 -subject -issuer -serial -dates
+)"
+
+{
+    echo "$MYCERT"
+    echo "$CACERT"
+    echo "$MYKEY"
+} > "$CAFILE"
