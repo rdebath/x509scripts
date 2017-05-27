@@ -25,6 +25,7 @@ V3NS=no
 
 NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
 NOECPARAM="$(openssl no-ecparam >/dev/null 2>&1 && echo yes || echo no)"
+NOSETSERIAL=
 KEYPASS=
 KEYPARAM=no
 WANTCSR=no
@@ -32,6 +33,7 @@ MAKECSR=no
 ADDDNQ=no
 SHOWCSR=no
 CSRTEXT=
+SIGNPFX=
 SIGNPEM=
 SINGLEUSECA=
 PKCS12FN=
@@ -59,8 +61,10 @@ SUBJ_CN_ID=0
 # This is my default for making a key file.
 if [ "$NOECPARAM" = no ] ; then
     mkkey() { openssl ecparam -name prime256v1 -genkey ;}
+    mktmpkey() { openssl ecparam -name prime256v1 -genkey ;}
 else
     mkkey() { openssl genrsa ; }
+    mktmpkey() { openssl genrsa 512 2>/dev/null ; }
 fi
 # See also:
 # mkkey() { openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) ;}
@@ -120,7 +124,7 @@ do  case "$ar" in
     -showcsr ) SHOWCSR=yes ;;
 
     -sign[=:]*.pfx )
-	SIGNPEM="$(openssl pkcs12 -nodes -in "${ar#*[=:]}")"
+	SIGNPFX="${ar#*[=:]}"
 	MAKECSR=yes
 	;;
 
@@ -196,7 +200,7 @@ do  case "$ar" in
 
 	V="${ar#??????}"
 	C="${V/=*/}"
-	C="${C^^}"
+	C="$(echo "$C" | tr '[a-z]' '[A-Z]')"
 
 	eval "SUBJ_${C}_ID=\$((SUBJ_${C}_ID+1))"
 	eval "SUBJ_$C=\"\$SUBJ_$C\${NL}\$SUBJ_${C}_ID.$C=\${ar#*[=:]}\""
@@ -223,12 +227,26 @@ do  case "$ar" in
     esac
 done
 
+# Extract a (passworded) pfx file.
+[ "$SIGNPFX" != '' ] && SIGNPEM="$(openssl pkcs12 -nodes -in "$SIGNPFX")"
+
+# Put the commonName at the start of the san list
 [ "$SANLIST" != "" ] && {
     if [ "$CN" = "" ]
     then SANLIST="subjectAltName=$SANLIST"
     else SANLIST="subjectAltName=DNS:$CN,$SANLIST"
     fi
 }
+
+# Problems?
+if ! openssl x509 -help 2>&1 | grep -qie -set_serial
+then NOSETSERIAL=yes
+fi
+
+if openssl req -help 2>&1 | grep -qie -subject
+then REQSUBJECT=-subject
+else REQSUBJECT=-text
+fi
 
 # Build some V3 certificate extension sets.
 # Like the certificate extensions themselves this is very complex.
@@ -323,12 +341,14 @@ mk_rand() {
 [ "$MAKECSR" = yes ] && X509= || X509=-x509
 
 [ "$ADDDNQ" = yes ] && {
-    [ "$SERIAL" = "" ] &&
-	SERIAL="$(mk_rand 8)"
+    [ "$SERIAL" = "" ] && DNQ="$(mk_rand 8)" || DNQ="$SERIAL"
+
+    [ "$SERIAL" = "" -a "$NOSETSERIAL" != yes ] &&
+	SERIAL="$DNQ"
 
     case "$SUBJTYPE" in
-    arg ) SUBJ="${SUBJ%/}/dnQualifier=$SERIAL/" ;;
-    conf ) SUBJ_DNQ="dnQualifier=$SERIAL" ;;
+    arg ) SUBJ="${SUBJ%/}/dnQualifier=$DNQ/" ;;
+    conf ) SUBJ_DNQ="dnQualifier=$DNQ" ;;
     esac
 }
 
@@ -392,20 +412,25 @@ fi
 	     echo "basicConstraints = CA:TRUE"
 	fi
 	echo '[ req_distinguished_name ]'
+
 	if [ "$CN" != "" ]
 	then echo "OU=Private CA"
 	     echo "CN=$CN"
 	else echo "CN=Private CA"
 	fi
-	echo "dnQualifier=$SERIAL"
+
+	if [ "$SERIAL" != '' ]
+	then echo "dnQualifier=$SERIAL"
+	else echo "dnQualifier=$(mk_rand 8)"
+	fi
     }
 
-    [ "$SERIAL" = "" ] && SERIAL="$(mk_rand 8)"
+    [ "$SERIAL" = "" -a "$NOSETSERIAL" != yes ] && SERIAL="$(mk_rand 8)"
     CAKEY="$(mkkey)"
-    CASER="$(mk_rand 8)"
+    [ "$NOSETSERIAL" != yes ] && CASER="$(mk_rand 8)"
     SIGNPEM="$(openssl req -new $UTF8 -x509 $DGST \
 	    -days "${CERT_DAYS:-3652}" \
-	    -set_serial 0x"$CASER" \
+	    ${CASER:+-set_serial 0x"$CASER"} \
 	    -key <(echo "$CAKEY") \
 	    -config <(mksucareqconf)
 	echo "$CAKEY" )"
@@ -422,13 +447,49 @@ fi
         CERT_DAYS=$((ENDDAY - TODAY/86400))
     }
 
+    # Do we have to override the CSR's common name?
+    if [ "$CSRFN" != "" -a "$SUBJTYPE" != "" ]
+    then
+	if ! openssl x509 -help 2>&1 | grep -qie -force_pubkey
+	then echo >&2 "ERROR: Cannot override name from csr with $(openssl version)"
+	     exit 1
+	fi
+
+	# First extract the public key from the existing CSR.
+	FORCEPUB="$(echo "$SSCERT" | openssl req -pubkey -noout)"
+
+	# Openssl req requires a key, make it something quick.
+	TMPKEY="$(mktmpkey)"
+
+	# Make the new request with the new name.
+	SSCERT="$(openssl req -new $UTF8 \
+	    ${SUBJ:+-subj "$SUBJ"} \
+	    -key <(echo "$TMPKEY") \
+	    -config <(mkreqconf yes no) )"
+    else
+	FORCEPUB=""
+    fi
+
+    # Very old versions of openssl ...
+    if [ "$NOSETSERIAL" = yes ]
+    then
+	SERIALFN=/tmp/_$$.tmp
+	echo "$SERIAL" > "$SERIALFN"
+	unset SERIAL
+    else SERIALFN=
+    fi
+
     SSCERT="$(openssl x509 -req $DGST \
 	    -days "${CERT_DAYS:-3652}" \
 	    ${SERIAL:+-set_serial 0x"$SERIAL"} \
+	    ${SERIALFN:+-CAserial "$SERIALFN"} \
 	    -in <(echo "$SSCERT") \
 	    -CA <(echo "$SIGNPEM") \
 	    -CAkey <(echo "$SIGNPEM") \
+	    ${FORCEPUB:+-force_pubkey <(echo "$FORCEPUB") } \
 	    ${V3HEAD:+-extfile <(mkreqconf) -extensions "$X509SECT"} )"
+
+    [ "$SERIALFN" != '' ] && rm "$SERIALFN" # Sigh
 }
 
 [ "$PKCS12FN" != "" ] && {
@@ -443,7 +504,7 @@ fi
 
 outp() {
     if [ "$WANTCSR" = yes ]
-    then echo "$SSCERT" | openssl req -subject
+    then echo "$SSCERT" | openssl req $REQSUBJECT
     else echo "$SSCERT" | openssl x509 -subject -issuer -serial -dates
     fi
 
