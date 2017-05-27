@@ -20,7 +20,7 @@ for file
 do
     # DATA="$(cat "$file")"
     XDATA="$(cat "$file" | openssl enc -base64)"
-    if echo "$XDATA" | openssl enc -base64 -d | grep -iq ^-----BEGIN
+    if echo "$XDATA" | openssl enc -base64 -d 2>/dev/null | grep -iq ^-----BEGIN
     then DATA="$(echo "$XDATA" | openssl enc -base64 -d )"
     elif echo "$XDATA" | openssl enc -base64 -d | openssl asn1parse -inform der >/dev/null 2>&1
     then

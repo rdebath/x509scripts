@@ -36,6 +36,9 @@ SIGNPEM=
 SINGLEUSECA=
 PKCS12FN=
 
+CIPHER=-aes128
+DGST=
+
 SUBJTYPE=
 SUBJ=
 SUBJ_C=
@@ -133,8 +136,12 @@ do  case "$ar" in
     -pass[=:]*:* ) KEYPASS="${ar#*[=:]}" ;;
     -pass[=:]* ) KEYPASS="pass:${ar#*[=:]}" ;;
 
-    -md4|-md5|-ripemd160|-sha|-sha1|-sha224|-sha256|-sha384|-sha512|-whirlpool)
+    -ripemd160|-sha|-sha1|-sha224|-sha256|-sha384|-sha512|-whirlpool)
 	DGST=$ar ;;
+
+    -dgst[=:]* ) DGST="${ar#*[=:]}" ; DGST="-${DGST%-}" ;;
+    -cipher[=:]* ) CIPHER="${ar#*[=:]}" ; CIPHER="-${CIPHER%-}" ;;
+    -openssl[:=]* ) eval "openssl() { command '${ar#*[=:]}' \"\$@\" ; }" ;;
 
     -v3 ) V3=yes ;;
     -v3ca|-ca ) V3=yes ; V3CA=yes ;;
@@ -456,7 +463,7 @@ outk() {
     if [ "$NOPKEY" = no -o "$KEYPASS" != "" -o "$KEYPARAM" = yes ]
     then [ "$KEYPARAM" = no ] ||
 	    echo "$SSKEY" | openssl pkeyparam 2>/dev/null ||:
-	 echo "$SSKEY" | openssl pkey ${KEYPASS:+-des3 -passout "$KEYPASS"}
+	 echo "$SSKEY" | openssl pkey ${KEYPASS:+$CIPHER -passout "$KEYPASS"}
     else echo "$SSKEY"
     fi
 }
