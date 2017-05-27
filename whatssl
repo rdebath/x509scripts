@@ -24,6 +24,7 @@ do
     then DATA="$(echo "$XDATA" | openssl enc -base64 -d )"
     elif echo "$XDATA" | openssl enc -base64 -d | openssl asn1parse -inform der >/dev/null 2>&1
     then
+	echo "This is a DER (ASN1) format file"
 	DATA=''
 	for cmd in x509 req pkey crl
 	do  [ "$DATA" != "" ] && break
@@ -33,6 +34,8 @@ do
 	    DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs8 -inform DER $PW 2>/dev/null)"
 	[ "$DATA" = "" ] &&
 	    DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs12 -nodes $PW 2>/dev/null)"
+	[ "$DATA" = "" ] &&
+	    DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs12 -nodes -passin pass: 2>/dev/null)"
 	[ "$DATA" = "" ] && {
 	    if echo "$XDATA" | openssl enc -base64 -d | openssl asn1parse -inform DER | grep -qi 'OBJECT *:pkcs7-signedData'
 	    then echo "PKCS7 format data file:"
@@ -42,7 +45,7 @@ do
 		 continue
 	    else 
 		 OBJ="$(echo "$XDATA" | openssl enc -base64 -d | openssl asn1parse -inform DER | awk '/OBJECT/{print $NF;exit;}')"
-		 echo >&2 "Contents of DER (ASN1) format file starts with$OBJ"
+		 echo "File contents not identified; starts with$OBJ"
 		 continue
 	    fi
 	}
@@ -201,7 +204,7 @@ do
 	then
 	    echo Item $k is a private key
 	else
-	    ENCKEY=$(echo "$ITEM" | openssl pkey -pubout $PW 2>&1 | grep -qi bad.decrypt && echo yes)
+	    ENCKEY=$(echo "$ITEM" | openssl pkey -pubout $PW 2>&1 | grep -qi 'bad.\(decrypt\|pass\)' && echo yes)
 	    CRLITEM=$(echo "$ITEM" | openssl crl 2>/dev/null)
 
 	    if [ "$ENCKEY" = "yes" ]
