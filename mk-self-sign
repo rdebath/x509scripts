@@ -44,6 +44,8 @@ DGST=
 SUBJTYPE=
 SUBJ=
 SUBJ_C=
+# shellcheck disable=SC2034
+{
 SUBJ_C_ID=0
 SUBJ_ST=
 SUBJ_ST_ID=0
@@ -57,6 +59,7 @@ SUBJ_OU=
 SUBJ_OU_ID=0
 SUBJ_CN=
 SUBJ_CN_ID=0
+}
 
 # This is my default for making a key file.
 if [ "$NOECPARAM" = no ] ; then
@@ -200,7 +203,8 @@ do  case "$ar" in
 
 	V="${ar#??????}"
 	C="${V/=*/}"
-	C="$(echo "$C" | tr '[a-z]' '[A-Z]')"
+	# shellcheck disable=SC2018,SC2019
+	C="$(echo "$C" | tr 'a-z' 'A-Z')"
 
 	eval "SUBJ_${C}_ID=\$((SUBJ_${C}_ID+1))"
 	eval "SUBJ_$C=\"\$SUBJ_$C\${NL}\$SUBJ_${C}_ID.$C=\${ar#*[=:]}\""
@@ -265,8 +269,8 @@ fi
 
 [ "$V3" = yes ] && {
     V3HEAD="$V3INIT"
-    V3XKU= ; V3EKU=
-    [ "$V3CRITICAL" = yes ] && CR=critical, || CR=
+    V3XKU=; V3EKU=
+    [ "$V3CRITICAL" != yes ] && CR='' || CR=critical,
 
     [ "$V3SERVER" = yes -o "$V3EMAIL" = yes -o "$V3CLIENT" = yes ] && {
 	if [ "$SIGNPEM" != "" -o "$SINGLEUSECA" = yes ]
@@ -328,17 +332,17 @@ fi
 [ "$KFN" != '' -a "$KFN" != /dev/null -a -s "$KFN" ] &&
     { echo ERROR: File $KFN already exists ; exit 1 ; }
 
-[ "KFN" != '' -a -s "$FN" ] &&
+[ "$KFN" != '' -a -s "$FN" ] &&
     { echo ERROR: File $FN already exists ; exit 1 ; }
 
 mk_rand() {
     RH="$(openssl rand -hex "$1" 2>/dev/null ||:)"
     [ "$RH" = '' ] &&
 	RH="$(openssl rand "$1" | xxd -p)"
-    echo $RH
+    echo "$RH"
 }
 
-[ "$MAKECSR" = yes ] && X509= || X509=-x509
+[ "$MAKECSR" = yes ] && X509='' || X509=-x509
 
 [ "$ADDDNQ" = yes ] && {
     [ "$SERIAL" = "" ] && DNQ="$(mk_rand 8)" || DNQ="$SERIAL"
@@ -425,9 +429,10 @@ fi
 	fi
     }
 
-    [ "$SERIAL" = "" -a "$NOSETSERIAL" != yes ] && SERIAL="$(mk_rand 8)"
+    [ "$SERIAL" = "" ] && SERIAL="$(mk_rand 8)"
     CAKEY="$(mkkey)"
     [ "$NOSETSERIAL" != yes ] && CASER="$(mk_rand 8)"
+    # shellcheck disable=SC2086
     SIGNPEM="$(openssl req -new $UTF8 -x509 $DGST \
 	    -days "${CERT_DAYS:-3652}" \
 	    ${CASER:+-set_serial 0x"$CASER"} \
@@ -479,6 +484,7 @@ fi
     else SERIALFN=
     fi
 
+    # shellcheck disable=SC2086
     SSCERT="$(openssl x509 -req $DGST \
 	    -days "${CERT_DAYS:-3652}" \
 	    ${SERIAL:+-set_serial 0x"$SERIAL"} \
@@ -494,9 +500,10 @@ fi
 
 [ "$PKCS12FN" != "" ] && {
     [ "$WANTCSR" = yes ] && { echo >&2 "PKCS12 files can't hold csr's"; exit 1;}
+    # shellcheck disable=SC2086
     openssl pkcs12 -export -passout pass: \
 	-out "$PKCS12FN" \
-	-name "$CN `date`" \
+	-name "$CN $(date)" \
 	-inkey <(echo "$SSKEY") \
 	-in <(echo "$SSCERT") \
 	${SIGNPEM:+-certfile <(echo "$SIGNPEM" | openssl x509) }

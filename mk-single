@@ -12,7 +12,7 @@ CN="$1"
 SANLIST="$*"
 F="${CN:-_}"
 case "$F" in \*.?* ) F=${F#??} ;; esac
-F=$(echo "$F" | tr -c '[a-zA-Z0-9\.\-\012]' _)
+F=$(echo "$F" | tr -c 'a-zA-Z0-9\.\-\012' _)
 
 CERTSERIAL=$(openssl rand -hex 8)
 
@@ -33,7 +33,7 @@ build_xt() {
 	echo
 	echo 'The common name and alternative names on the certificate are:'
 	for h in ${SANLIST}
-	do echo '    '$h
+	do echo "    $h"
 	done
 
     } | sed -e '1s/^/explicitText=/' -e 's:$:\\r\\n\\:'
