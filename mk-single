@@ -14,7 +14,9 @@ F="${CN:-_}"
 case "$F" in \*.?* ) F=${F#??} ;; esac
 F=$(echo "$F" | tr -c 'a-zA-Z0-9\.\-\012' _)
 
-CERTSERIAL=$(openssl rand -hex 8)
+NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
+
+CERTSERIAL=$(openssl rand 8 | od -x | sed -n '1{s/^[^ ]*//;s/ //gp;}')
 
 build_xt() {
     # This text is US-ASCII only
@@ -38,14 +40,14 @@ CAPEM="$(bash mk-self-sign \
     -subj-cn="Private CA for $CN" \
     -days=3652 \
     -rsa \
-    -serial=00 \
     -v3='basicConstraints=CA:TRUE' \
-    -poltext=<(build_xt) \
+    ${CERTSERIAL:+-poltext=<(build_xt)} \
     )"
+
 
 PEMFILE="$(bash mk-self-sign -rsa \
     -sign=<(echo "$CAPEM") \
-    -serial="$CERTSERIAL" \
+    ${CERTSERIAL:+-serial="$CERTSERIAL"} \
     -subj-cn="$CN" -san="${SANLIST// /,}" )"
 
 ################################################################################
@@ -57,7 +59,11 @@ mkcacrlconf() {
     echo 'default_ca = CA_default'
     echo '[CA_default]'
     echo "database = $TMP.index.txt"
-    echo 'default_md = default'
+
+    if [ "$NOPKEY" = no ]
+    then echo 'default_md = default'
+    else echo 'default_md = sha256'
+    fi
 }
 
 touch $TMP.index.txt

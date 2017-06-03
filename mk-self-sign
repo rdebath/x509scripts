@@ -366,7 +366,7 @@ fi
 mk_rand() {
     RH="$(openssl rand -hex "$1" 2>/dev/null ||:)"
     [ "$RH" = '' ] &&
-	RH="$(openssl rand "$1" | xxd -p)"
+	RH="$(openssl rand "$1" | od -x | sed -n '1{s/^[^ ]*//;s/ //gp;}' )"
     echo "$RH"
 }
 
