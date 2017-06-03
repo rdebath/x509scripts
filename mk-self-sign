@@ -6,6 +6,8 @@ export OPENSSL_CONF=/dev/null
 FN=
 KFN=
 SERIAL=
+CERT_DAYS=
+DEFAULT_DAYS=3652
 
 V3=no
 V3HEAD=
@@ -37,6 +39,7 @@ SIGNPFX=
 SIGNPEM=
 SINGLEUSECA=
 PKCS12FN=
+POLICYTEXT=
 
 CIPHER=-aes128
 DGST=
@@ -138,6 +141,10 @@ do  case "$ar" in
 
     -singleuseca|-suca ) MAKECSR=yes ; SINGLEUSECA=yes ;;
 
+    -poltext[=:]*|-policytext[=:]* )
+	POLICYTEXT="$(cat "${ar#*[=:]}")"
+	;;
+
     -pkcs12[=:]* ) PKCS12FN="${ar#*[=:]}" ;;
 
     -pass[=:]*:* ) KEYPASS="${ar#*[=:]}" ;;
@@ -230,6 +237,11 @@ do  case "$ar" in
 	;;
     esac
 done
+
+[ "$WANTCSR" = yes -a  "$SINGLEUSECA" = yes ] && {
+    echo >&2 "Options -csr and -singleuseca conflict"
+    exit 1
+}
 
 # Extract a (passworded) pfx file.
 [ "$SIGNPFX" != '' ] && SIGNPEM="$(openssl pkcs12 -nodes -in "$SIGNPFX")"
@@ -327,6 +339,22 @@ fi
 	V3OPTS="$V3OPTS${NL}subjectKeyIdentifier=hash"
 	V3CERTONLY="$V3CERTONLY${NL}authorityKeyIdentifier=keyid,issuer${NL}"
     }
+
+    [ "$POLICYTEXT" != "" ] && {
+	V3LIST="$V3LIST${NL}certificatePolicies=@x509_pol${NL}"
+	build_poltext() {
+	    echo '[ x509_pol ]'
+	    echo 'policyIdentifier = 2.5.29.32.0'
+	    echo 'userNotice=@notice'
+	    echo '[ notice ]'
+	    echo "$POLICYTEXT" |
+	    tr -d '"'"'" |
+	    sed -e '1s/^/explicitText=/; $b end; s:$:\\r\\n\\:; :end'
+	    echo
+	}
+	V3EXTRAS="$V3EXTRAS${NL}$(build_poltext)$NL"
+	unset build_poltext
+    }
 }
 
 [ "$KFN" != '' -a "$KFN" != /dev/null -a -s "$KFN" ] &&
@@ -364,13 +392,15 @@ mkreqconf() {
 
     if [ "$2" != no -o "$1" = no ]
     then
-	echo "$V3HEAD"
-	echo "$V3OPTS"
-	[ "$1" != yes ] &&
-	    echo "$V3CERTONLY"
-	echo "$SANLIST"
-	echo "$V3LIST"
-	echo "$V3EXTRAS"
+	[ "$V3OPTS$SANLIST$V3LIST$V3EXTRAS" != "" -o "$1" = "" ] && {
+	    echo "$V3HEAD"
+	    echo "$V3OPTS"
+	    [ "$1" != yes ] &&
+		echo "$V3CERTONLY"
+	    echo "$SANLIST"
+	    echo "$V3LIST"
+	    echo "$V3EXTRAS"
+	}
     fi
     echo '[ req_distinguished_name ]'
     case "$SUBJTYPE" in
@@ -397,7 +427,7 @@ SSKEY="$(mkkey)"
 if [ "$CSRFN" != "" ]
 then SSCERT="$(cat "$CSRFN")"
 else SSCERT="$(openssl req -new $UTF8 $X509 $DGST \
-	-days "${CERT_DAYS:-3652}" \
+	-days "${CERT_DAYS:-$DEFAULT_DAYS}" \
 	${SERIAL:+-set_serial 0x"$SERIAL"} \
 	${SUBJ:+-subj "$SUBJ"} \
 	-key <(echo "$SSKEY") \
@@ -411,7 +441,7 @@ fi
 	echo '[req]'
 	echo 'distinguished_name = req_distinguished_name'
 	echo 'prompt = no'
-	if [ "$V3CA" = no ]
+	if [ "$V3" = yes ]
 	then echo "$V3INIT"
 	     echo "basicConstraints = CA:TRUE"
 	fi
@@ -434,7 +464,7 @@ fi
     [ "$NOSETSERIAL" != yes ] && CASER="$(mk_rand 8)"
     # shellcheck disable=SC2086
     SIGNPEM="$(openssl req -new $UTF8 -x509 $DGST \
-	    -days "${CERT_DAYS:-3652}" \
+	    -days "${CERT_DAYS:-$DEFAULT_DAYS}" \
 	    ${CASER:+-set_serial 0x"$CASER"} \
 	    -key <(echo "$CAKEY") \
 	    -config <(mksucareqconf)
@@ -486,7 +516,7 @@ fi
 
     # shellcheck disable=SC2086
     SSCERT="$(openssl x509 -req $DGST \
-	    -days "${CERT_DAYS:-3652}" \
+	    -days "${CERT_DAYS:-$DEFAULT_DAYS}" \
 	    ${SERIAL:+-set_serial 0x"$SERIAL"} \
 	    ${SERIALFN:+-CAserial "$SERIALFN"} \
 	    -in <(echo "$SSCERT") \

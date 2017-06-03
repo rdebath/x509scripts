@@ -17,44 +17,36 @@ F=$(echo "$F" | tr -c 'a-zA-Z0-9\.\-\012' _)
 CERTSERIAL=$(openssl rand -hex 8)
 
 build_xt() {
-
-    cat <<-!
-	[ x509_pol ]
-	policyIdentifier =  2.5.29.32.0
-	userNotice=@notice
-	[ notice ]
-!
-
-    {
-	echo
-	echo 'Only one certificate was signed by this CA.'
-	echo 'The serial number of that certificate is:'
-	echo "$CERTSERIAL"
-	echo
+    # This text is US-ASCII only
+    echo 'Only one certificate was signed by this CA.'
+    echo 'The serial number of that certificate is:'
+    echo "    $CERTSERIAL"
+    echo
+    if [ "$CN" = "$SANLIST" ]
+    then
+	echo 'The common name on the certificate is:'
+	echo "    $CN"
+    else
 	echo 'The common name and alternative names on the certificate are:'
 	for h in ${SANLIST}
 	do echo "    $h"
 	done
-
-    } | sed -e '1s/^/explicitText=/' -e 's:$:\\r\\n\\:'
-
-    echo
+    fi
 }
 
 CAPEM="$(bash mk-self-sign \
-    "/CN=Private CA for $CN/" \
+    -subj-cn="Private CA for $CN" \
     -days=3652 \
     -rsa \
-    -serial="01$CERTSERIAL" \
-    -v3='basicConstraints=CA:TRUE, pathlen:0' \
-    -v3='keyUsage=keyCertSign' \
-    -v3='certificatePolicies=@x509_pol' \
-    -v3xt="$(build_xt)" )"
+    -serial=00 \
+    -v3='basicConstraints=CA:TRUE' \
+    -poltext=<(build_xt) \
+    )"
 
 PEMFILE="$(bash mk-self-sign -rsa \
     -sign=<(echo "$CAPEM") \
     -serial="$CERTSERIAL" \
-    "$CN" -san="${SANLIST// /,}" )"
+    -subj-cn="$CN" -san="${SANLIST// /,}" )"
 
 ################################################################################
 
