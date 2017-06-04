@@ -6,6 +6,7 @@ export OPENSSL_CONF=/dev/null
 FN=
 KFN=
 CRLFN=
+CAFN=
 SERIAL=
 CERT_DAYS=
 DEFAULT_DAYS=3652
@@ -105,6 +106,7 @@ do  case "$ar" in
     -out[=:]* ) FN="${ar#*[=:]}" ;;
     -keyout[=:]* ) KFN="${ar#*[=:]}" ;;
     -crlout[=:]* ) CRLFN="${ar#*[=:]}" ; V3CRL=yes ;;
+    -caout[=:]* ) CAFN="${ar#*[=:]}" ;;
 
     -ser[=:]??*|-serial[=:]??* ) SERIAL="${ar#*[=:]}" ;;
     -dnq ) ADDDNQ=yes ;;
@@ -423,6 +425,7 @@ mkreqconf() {
     echo '[ req_distinguished_name ]'
     case "$SUBJTYPE" in
     conf )
+	echo "$SUBJ_DNQ"
 	echo "$SUBJ_C"
 	echo "$SUBJ_ST"
 	echo "$SUBJ_L"
@@ -430,7 +433,6 @@ mkreqconf() {
 	echo "$SUBJ_DC"
 	echo "$SUBJ_OU"
 	echo "$SUBJ_CN"
-	echo "$SUBJ_DNQ"
 	;;
     "")
 	echo 'commonName = Common Name'
@@ -473,16 +475,17 @@ fi
 	fi
 	echo '[ req_distinguished_name ]'
 
+	if [ "$SERIAL" != '' ]
+	then echo "dnQualifier=$SERIAL"
+	else echo "dnQualifier=$(mk_rand 8)"
+	fi
+
 	if [ "$CN" != "" ]
 	then echo "OU=Private CA"
 	     echo "CN=$CN"
 	else echo "CN=Private CA"
 	fi
 
-	if [ "$SERIAL" != '' ]
-	then echo "dnQualifier=$SERIAL"
-	else echo "dnQualifier=$(mk_rand 8)"
-	fi
 	echo '#END'
     }
 
@@ -617,8 +620,12 @@ outp() {
     else echo "$SSCERT" | openssl x509 -subject -issuer -fingerprint -serial -dates
     fi
 
-    [ "$SINGLEUSECA" = yes ] &&
-	echo "$SIGNPEM" | openssl x509 -subject -serial -dates
+    [ "$SINGLEUSECA" = yes ] && {
+	if [ "$CAFN" != '' ]
+	then echo "$SIGNPEM" | openssl x509 -subject -serial -dates >"$CAFN"
+	else echo "$SIGNPEM" | openssl x509 -subject -serial -dates
+	fi
+    }
 
     [ "$CSRTEXT" != "" -a "$SHOWCSR" = yes ] &&
 	echo "$CSRTEXT"

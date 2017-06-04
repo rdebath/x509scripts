@@ -17,6 +17,7 @@ F=$(echo "$F" | tr -c 'a-zA-Z0-9\.\-\012' _)
 NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
 
 CERTSERIAL=$(openssl rand 8 | od -x | sed -n '1{s/^[^ ]*//;s/ //gp;}')
+CERT_DAYS=$((24840 - $(date +%s)/86400))
 
 build_xt() {
     # This text is US-ASCII only
@@ -38,14 +39,13 @@ build_xt() {
 
 CAPEM="$(bash mk-self-sign \
     -subj-cn="Private CA for $CN" \
-    -dnq=$CERTSERIAL \
-    -days=$((24840 - $(date +%s)/86400)) \
-    -rsa \
+    -days=$CERT_DAYS \
     -v3='basicConstraints=CA:TRUE,pathlen:0' \
-    ${CERTSERIAL:+-poltext=<(build_xt)} \
+    ${CERTSERIAL:+-dnq="$CERTSERIAL" -poltext=<(build_xt)} \
     )"
 
-PEMFILE="$(bash mk-self-sign -rsa \
+PEMFILE="$(bash mk-self-sign \
+    -rsa \
     -sign=<(echo "$CAPEM") \
     ${CERTSERIAL:+-serial="$CERTSERIAL"} \
     -subj-cn="$CN" \
@@ -75,7 +75,7 @@ CRLFILE="$(
     openssl ca \
 	-config <(mkcacrlconf) \
 	-gencrl \
-	-crldays 3652 \
+	-crldays $CERT_DAYS \
 	-keyfile <(echo "$CAPEM") \
 	-cert <(echo "$CAPEM") )"
 
