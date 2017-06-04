@@ -86,8 +86,11 @@ rm "$TMP".*
 mkdir -p navcert
 echo "$CAPEM" | openssl x509 -subject -serial -dates > navcert/"$F".ca.crt
 echo "$CRLFILE" > navcert/"$F".crl
-echo "$PEMFILE" > navcert/"$F".pem
+echo "$PEMFILE" | openssl pkey > navcert/"$F".key
+echo "$PEMFILE" | openssl x509 -subject -serial -dates > navcert/"$F".crt
 
-openssl pkcs12 -export -in navcert/"$F".pem -certfile navcert/"$F".ca.crt \
-    -passout pass: -out navcert/"$F".pfx
-
+openssl pkcs12 -export \
+    -passout pass: \
+    -in navcert/"$F".crt \
+    -inkey navcert/"$F".key \
+    -out navcert/"$F".pfx

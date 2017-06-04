@@ -110,6 +110,14 @@ do
 		    -certopt no_sigdump,no_pubkey \
 		    -nameopt esc_ctrl${UTF8:+,utf8,-esc_msb}
 
+	    PKEYTYPE=$(echo "$ITEM" |
+		openssl x509 -pubkey -noout |
+		openssl asn1parse |
+		awk '/OBJECT/{print $NF;}' |
+		tr -d '\012' | tr : ' ')
+
+	    echo "    Public key type is$PKEYTYPE"
+
 	    [ "$CERTPUB" = "$FIRSTPKEYPUB" ] &&
 		echo "    The file contains a private key that matches this certificate."
 
@@ -192,7 +200,7 @@ do
 	elif [ "$NOPKEY" = no -a "$PKEYPUB" != "" ]
 	then
 	    echo 'A private key for this public key:'
-	    echo "$ITEM" | openssl pkey -pubout $PW | openssl pkey -pubin -noout -text
+	    echo "$ITEM" | openssl pkey -noout -text_pub $PW
 	elif [ "$NOPKEY" = no -a "$PKEYPARAM" != "" ]
 	then
 	    echo Parameter file for genpkey:
