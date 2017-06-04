@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 set -e
 export OPENSSL_CONF=/dev/null
@@ -56,7 +56,7 @@ main() {
 
     echo Creating CN="$CN"
 
-    F=$(echo "$F" | tr -c '[a-zA-Z0-9\.\-\012]' _)
+    F=$(echo "$F" | tr -c 'a-zA-Z0-9\.\-\012' _)
 
     CONF='-config '"$TMP"'.cnf'
     cat <<-! > "$TMP".cnf
@@ -168,7 +168,7 @@ fix_demoCA() {
 		# 32bit workaround.
 		[ "$ENDDATE" = "" ] && ENDDATE=20380119031400Z
 
-		RDATE="$(awk -v serial=$SERIAL '
+		RDATE="$(awk -v serial="$SERIAL" '
 		    /Serial Number:/ { enabled = ( $3 == serial ); }
 		    enabled && /Revocation Date:/ {
 			$1=""; $2=""; print
@@ -362,7 +362,7 @@ create_cert() {
 	# If the CN has been reset rename the files.
 	NEWF="$(openssl req -noout -in demoCA/certs/"$F".csr -subject | \
 		sed -n '/^subject/s/^.*CN[ \t]*=[ \t]*//p' | \
-		tr -c '[a-zA-Z0-9\.\-\012]' _)"
+		tr -c 'a-zA-Z0-9\.\-\012' _)"
 
 	if [ "$F" != "$NEWF" -a "$NEWF" != "" ]
 	then
