@@ -64,6 +64,8 @@ SUBJ_OU=
 SUBJ_OU_ID=0
 SUBJ_CN=
 SUBJ_CN_ID=0
+SUBJ_DNQ=
+SUBJ_DNQ_ID=0
 }
 
 # This is my default for making a key file.
@@ -106,6 +108,15 @@ do  case "$ar" in
 
     -ser[=:]??*|-serial[=:]??* ) SERIAL="${ar#*[=:]}" ;;
     -dnq ) ADDDNQ=yes ;;
+    -dnq[=:]* )
+	SUBJTYPE="${SUBJTYPE:-conf}"
+	if [ "$SUBJTYPE" != "conf" ] ; then
+	    echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
+	fi
+
+	SUBJ_DNQ_ID=$((SUBJ_DNQ_ID+1))
+	SUBJ_DNQ="$SUBJ_DNQ${NL}$SUBJ_DNQ_ID.dnQualifier=${ar#*[=:]}"
+	;;
 
     -rsa[=:]* ) eval "mkkey() { openssl genrsa '${ar#*[=:]}' ; }" ;;
     -dsa[=:]* ) eval "mkkey() { openssl dsaparam -genkey '${ar#*[=:]}' ; }" ;;
@@ -386,7 +397,7 @@ mk_rand() {
 
     case "$SUBJTYPE" in
     arg ) SUBJ="${SUBJ%/}/dnQualifier=$DNQ/" ;;
-    conf ) SUBJ_DNQ="dnQualifier=$DNQ" ;;
+    conf ) SUBJ_DNQ="$SUBJ_DNQ${NL}dnQualifier=$DNQ" ;;
     esac
 }
 

@@ -38,6 +38,7 @@ build_xt() {
 
 CAPEM="$(bash mk-self-sign \
     -subj-cn="Private CA for $CN" \
+    -dnq=$CERTSERIAL \
     -days=$((24840 - $(date +%s)/86400)) \
     -rsa \
     -v3='basicConstraints=CA:TRUE,pathlen:0' \
