@@ -5,6 +5,7 @@ set -e
 export OPENSSL_CONF=/dev/null
 FN=
 KFN=
+CRLFN=
 SERIAL=
 CERT_DAYS=
 DEFAULT_DAYS=3652
@@ -34,6 +35,7 @@ WANTCSR=no
 MAKECSR=no
 ADDDNQ=no
 SHOWCSR=no
+SHOWCONF=
 CSRTEXT=
 SIGNPFX=
 SIGNPEM=
@@ -94,9 +96,13 @@ fi
 for ar
 do  case "$ar" in
 
+    -showconf ) SHOWCONF=yes ;;
+
     -days[=:]* ) CERT_DAYS="${ar#*[=:]}" ;;
+    -alldays ) CERT_DAYS=$((2932896 - $(date +%s)/86400)) ;;
     -out[=:]* ) FN="${ar#*[=:]}" ;;
     -keyout[=:]* ) KFN="${ar#*[=:]}" ;;
+    -crlout[=:]* ) CRLFN="${ar#*[=:]}" ; V3CRL=yes ;;
 
     -ser[=:]??*|-serial[=:]??* ) SERIAL="${ar#*[=:]}" ;;
     -dnq ) ADDDNQ=yes ;;
@@ -385,6 +391,7 @@ mk_rand() {
 }
 
 mkreqconf() {
+    echo "# Configure file for WANTCSR=$1 MAKECSR=$2"
     echo '[req]'
     echo 'distinguished_name = req_distinguished_name'
     [ "$SUBJTYPE" = conf ] &&
@@ -392,7 +399,7 @@ mkreqconf() {
 
     if [ "$2" != no -o "$1" = no ]
     then
-	[ "$V3OPTS$SANLIST$V3LIST$V3EXTRAS" != "" -o "$1" = "" ] && {
+	[ "$V3OPTS$SANLIST$V3LIST$V3EXTRAS" != "" -o "$1" != "yes" ] && {
 	    echo "$V3HEAD"
 	    echo "$V3OPTS"
 	    [ "$1" != yes ] &&
@@ -421,12 +428,16 @@ mkreqconf() {
 	echo "dnQualifier_default=$SERIAL"
 	;;
     esac
+    echo '#END'
 }
 
 SSKEY="$(mkkey)"
 if [ "$CSRFN" != "" ]
 then SSCERT="$(cat "$CSRFN")"
-else SSCERT="$(openssl req -new $UTF8 $X509 $DGST \
+else
+    [ "$SHOWCONF" = yes ] && mkreqconf $MAKECSR $WANTCSR
+
+    SSCERT="$(openssl req -new $UTF8 $X509 $DGST \
 	-days "${CERT_DAYS:-$DEFAULT_DAYS}" \
 	${SERIAL:+-set_serial 0x"$SERIAL"} \
 	${SUBJ:+-subj "$SUBJ"} \
@@ -438,12 +449,16 @@ fi
 
 [ "$SINGLEUSECA" = yes -a "$SIGNPEM" = '' ] && {
     mksucareqconf() {
+	echo "# Configure file for a private CA"
 	echo '[req]'
 	echo 'distinguished_name = req_distinguished_name'
 	echo 'prompt = no'
 	if [ "$V3" = yes ]
 	then echo "$V3INIT"
-	     echo "basicConstraints = CA:TRUE"
+	     if [ "$V3CA" != yes ]
+	     then echo "basicConstraints = CA:TRUE,pathlen:0"
+	     else echo "basicConstraints = CA:TRUE"
+	     fi
 	fi
 	echo '[ req_distinguished_name ]'
 
@@ -457,12 +472,16 @@ fi
 	then echo "dnQualifier=$SERIAL"
 	else echo "dnQualifier=$(mk_rand 8)"
 	fi
+	echo '#END'
     }
 
     [ "$SERIAL" = "" ] && SERIAL="$(mk_rand 8)"
     CAKEY="$(mkkey)"
     [ "$NOSETSERIAL" != yes ] && CASER="$(mk_rand 8)"
     # shellcheck disable=SC2086
+
+    [ "$SHOWCONF" = yes ] && mksucareqconf
+
     SIGNPEM="$(openssl req -new $UTF8 -x509 $DGST \
 	    -days "${CERT_DAYS:-$DEFAULT_DAYS}" \
 	    ${CASER:+-set_serial 0x"$CASER"} \
@@ -496,6 +515,8 @@ fi
 	# Openssl req requires a key, make it something quick.
 	TMPKEY="$(mktmpkey)"
 
+	[ "$SHOWCONF" = yes ] && mkreqconf yes no
+
 	# Make the new request with the new name.
 	SSCERT="$(openssl req -new $UTF8 \
 	    ${SUBJ:+-subj "$SUBJ"} \
@@ -514,6 +535,8 @@ fi
     else SERIALFN=
     fi
 
+    [ "$SHOWCONF" = yes ] && mkreqconf
+
     # shellcheck disable=SC2086
     SSCERT="$(openssl x509 -req $DGST \
 	    -days "${CERT_DAYS:-$DEFAULT_DAYS}" \
@@ -526,6 +549,44 @@ fi
 	    ${V3HEAD:+-extfile <(mkreqconf) -extensions "$X509SECT"} )"
 
     [ "$SERIALFN" != '' ] && rm "$SERIALFN" # Sigh
+}
+
+[ "$CRLFN" != "" ] && {
+    [ "$WANTCSR" = yes ] && {
+	echo >&2 "ERROR: Cannot make a CRL for a CSR"
+	exit 1
+    }
+
+    if [ "$SIGNPEM" != '' ]
+    then CRLSIGN="$SIGNPEM"
+    else CRLSIGN="$SSCERT$NL$SSKEY"
+    fi
+
+    mkcacrlconf() {
+	echo '[ca]'
+	echo 'default_ca = CA_default'
+	echo '[CA_default]'
+	echo "database = $TMP/index.txt"
+	if [ "$NOPKEY" = no ]
+	then echo 'default_md = default'
+	else echo 'default_md = sha256'
+	fi
+    }
+
+    TMP=/tmp/ca_tmp.$$
+    mkdir -p -m u=rwx "$TMP"
+    touch $TMP/index.txt
+    touch $TMP/index.txt.attr
+
+    openssl ca \
+	-config <(mkcacrlconf) \
+	-gencrl \
+	-crldays "${CERT_DAYS:-$DEFAULT_DAYS}" \
+	-keyfile <(echo "$CRLSIGN") \
+	-cert <(echo "$CRLSIGN") \
+	-out "$CRLFN"
+
+    rm -fr "$TMP"
 }
 
 [ "$PKCS12FN" != "" ] && {
@@ -542,7 +603,7 @@ fi
 outp() {
     if [ "$WANTCSR" = yes ]
     then echo "$SSCERT" | openssl req $REQSUBJECT
-    else echo "$SSCERT" | openssl x509 -subject -issuer -serial -dates
+    else echo "$SSCERT" | openssl x509 -subject -issuer -fingerprint -serial -dates
     fi
 
     [ "$SINGLEUSECA" = yes ] &&

@@ -8,7 +8,7 @@ then
     exit 1
 fi
 
-CN="$1"
+CN="$1" ; shift
 SANLIST="$*"
 F="${CN:-_}"
 case "$F" in \*.?* ) F=${F#??} ;; esac
@@ -24,13 +24,13 @@ build_xt() {
     echo 'The serial number of that certificate is:'
     echo "    $CERTSERIAL"
     echo
-    if [ "$CN" = "$SANLIST" ]
+    if [ "$CN" = "$SANLIST" -o "$SANLIST" = '' ]
     then
 	echo 'The common name on the certificate is:'
 	echo "    $CN"
     else
 	echo 'The common name and alternative names on the certificate are:'
-	for h in ${SANLIST}
+	for h in "$CN" ${SANLIST}
 	do echo "    $h"
 	done
     fi
@@ -38,17 +38,18 @@ build_xt() {
 
 CAPEM="$(bash mk-self-sign \
     -subj-cn="Private CA for $CN" \
-    -days=3652 \
+    -days=$((24840 - $(date +%s)/86400)) \
     -rsa \
-    -v3='basicConstraints=CA:TRUE' \
+    -v3='basicConstraints=CA:TRUE,pathlen:0' \
     ${CERTSERIAL:+-poltext=<(build_xt)} \
     )"
-
 
 PEMFILE="$(bash mk-self-sign -rsa \
     -sign=<(echo "$CAPEM") \
     ${CERTSERIAL:+-serial="$CERTSERIAL"} \
-    -subj-cn="$CN" -san="${SANLIST// /,}" )"
+    -subj-cn="$CN" \
+    ${SANLIST:+-san="${SANLIST// /,}"} \
+    )"
 
 ################################################################################
 
