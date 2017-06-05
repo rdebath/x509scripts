@@ -355,9 +355,6 @@ create_cert() {
 	     -key "$CERT_DIR"/"$F".key -out demoCA/certs/"$F".csr || exit
     fi
 
-    # For a 'real' CA the SANLIST will be copied from the request
-    #	     ${SANLIST:+-reqexts SANLIST} \
-
     [ "$SUBJ" = "" ] && {
 	# If the CN has been reset rename the files.
 	NEWF="$(openssl req -noout -in demoCA/certs/"$F".csr -subject | \
@@ -518,14 +515,7 @@ choose_cert_type() {
 	echo authorityKeyIdentifier=keyid,issuer
 	;;
 
-    openvpn_s )
-	echo basicConstraints = CA:false
-	echo subjectKeyIdentifier=hash
-	echo authorityKeyIdentifier=keyid,issuer:always
-	echo nsCertType = server
-	;;
-
-    v3|openvpn)
+    v3)
 	echo basicConstraints = CA:false
 	echo subjectKeyIdentifier=hash
 	echo authorityKeyIdentifier=keyid,issuer:always
