@@ -17,7 +17,7 @@ F=$(echo "$F" | tr -c 'a-zA-Z0-9\.\-\012' _)
 NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
 
 CERTSERIAL=$(openssl rand 8 | od -x | sed -n '1{s/^[^ ]*//;s/ //gp;}')
-CERT_DAYS=$((24840 - $(date +%s)/86400))
+CERT_DAYS=$((24842 - $(date +%s)/86400))
 
 build_xt() {
     # This text is US-ASCII only

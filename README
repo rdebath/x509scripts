@@ -1,12 +1,13 @@
 
 
-    -subj-c=String
-    -subj-st=String
-    -subj-l=String
-    -subj-o=String
-    -subj-dc=String
-    -subj-ou=String
     -subj-cn=String
+    -subj-ou=String
+    -subj-dc=String
+    -subj-o=String
+    -subj-l=String
+    -subj-st=String
+    -subj-c=String
+
 	Set a component of the certificate subject. Some items such as
 	DC, OU and CN are allowed to be duplicated. OpenSSL will accept
 	duplicates for any item.
@@ -18,6 +19,8 @@
 	If a argument begins with a "/" and contains an "=" it is
 	treated as an OpenSSL subject string. This conflicts with the
 	other options for building a subject.
+
+	If no subject is specified one will be prompted for by OpenSSL.
 
     -showconf
 	Debugging option, show the config files generated for OpenSSL
@@ -67,7 +70,7 @@
 	List the EC curves that OpenSSL supports.
 
     -keyfile=FileName
-	Don't geenrate a key, use the one in FileName
+	Don't generate a key, use the one in FileName
 
     -param
 	Don't transform the keyfile into the new format using OpenSSL pkey.
@@ -114,6 +117,16 @@
 	Use the specified copy of openssl, not the one in the PATH.
 
 Version 3 certificate extensions.
+
+    Note V3 extensions are used to limit the uses that a certificate
+    can be put to. If you're not concerned with limiting use of the
+    private key (ie the user is trusted) then these generally have
+    no use. However, some validators insist on certain V3 extensions
+    being present.
+
+    The SAN extension is a minor exception to this as it allows multiple
+    wildcard DNS names whereas browsers only accept one wildcard CN item
+    in the subject.
 
     -v3
 	Make the certificate V3, don't add any extensions though.
@@ -166,7 +179,5 @@ Version 3 certificate extensions.
 	Add any x509 v3 extension config to the OpenSSL config file used
 	to create the certificate.
 
-	This item is place after the all "-v3=" items so can be used when
+	This item is placed after the all "-v3=" items so can be used when
 	the config file needs additional sections.
-
-
