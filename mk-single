@@ -37,14 +37,14 @@ build_xt() {
     fi
 }
 
-CAPEM="$(bash mk-self-sign \
+CAPEM="$(bash mk-cert \
     -subj-cn="Private CA for $CN" \
     -days=$CERT_DAYS \
     -v3='basicConstraints=CA:TRUE,pathlen:0' \
     ${CERTSERIAL:+-dnq="$CERTSERIAL" -poltext=<(build_xt)} \
     )"
 
-PEMFILE="$(bash mk-self-sign \
+PEMFILE="$(bash mk-cert \
     -rsa \
     -sign=<(echo "$CAPEM") \
     ${CERTSERIAL:+-serial="$CERTSERIAL"} \
@@ -83,14 +83,16 @@ rm "$TMP".*
 
 ################################################################################
 
-mkdir -p navcert
-echo "$CAPEM" | openssl x509 -subject -serial -dates > navcert/"$F".ca.crt
-echo "$CRLFILE" > navcert/"$F".crl
-echo "$PEMFILE" | openssl pkey > navcert/"$F".key
-echo "$PEMFILE" | openssl x509 -subject -serial -dates > navcert/"$F".crt
+CERT_DIR=${CERT_DIR:-certs}
+
+mkdir -p "$CERT_DIR"
+echo "$CAPEM" | openssl x509 -subject -serial -dates > "$CERT_DIR"/"$F".ca.crt
+echo "$CRLFILE" > "$CERT_DIR"/"$F".crl
+echo "$PEMFILE" | openssl pkey > "$CERT_DIR"/"$F".key
+echo "$PEMFILE" | openssl x509 -subject -serial -dates > "$CERT_DIR"/"$F".crt
 
 openssl pkcs12 -export \
     -passout pass: \
-    -in navcert/"$F".crt \
-    -inkey navcert/"$F".key \
-    -out navcert/"$F".pfx
+    -in "$CERT_DIR"/"$F".crt \
+    -inkey "$CERT_DIR"/"$F".key \
+    -out "$CERT_DIR"/"$F".pfx

@@ -11,7 +11,7 @@ fi
 CN="$1"
 
 # working_signed_by_domain
-bash mk-self-sign \
+bash mk-cert \
     -rsa \
     "$@" \
     -sign=domain-key.pfx \
@@ -20,7 +20,7 @@ bash mk-self-sign \
 exit
 
 # Working self-sign
-# bash mk-self-sign -rsa "$CN"
+# bash mk-cert -rsa "$CN"
 
 # Extra crap on pattern
     -rsa:1024 -sha1 \

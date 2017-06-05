@@ -49,9 +49,10 @@ DGST=
 
 SUBJTYPE=
 SUBJ=
-SUBJ_C=
+CASUBJ=
 # shellcheck disable=SC2034
 {
+SUBJ_C=
 SUBJ_C_ID=0
 SUBJ_ST=
 SUBJ_ST_ID=0
@@ -237,6 +238,20 @@ do  case "$ar" in
 
 	[ "$C" = CN -a "$CN" = '' ] &&
 	    CN="${ar#*[=:]}"
+	;;
+
+    -casubj[=:]* )
+	V="${ar#*[=:]}"
+	case "$V" in
+	/*=* )
+	    CASUBJ="${CASUBJ%/}${V%/}/"
+	    ;;
+	* ) if [ "$CASUBJ" = '' ]
+	    then CASUBJ="/CN=$V/"
+	    else CASUBJ="/OU=$V$CASUBJ"
+	    fi
+	    ;;
+	esac
 	;;
 
     -*) echo >&2 "Unknown option: $ar" ; exit 1 ;;
@@ -499,6 +514,7 @@ fi
     SIGNPEM="$(openssl req -new $UTF8 -x509 $DGST \
 	    -days "${CERT_DAYS:-$DEFAULT_DAYS}" \
 	    ${CASER:+-set_serial 0x"$CASER"} \
+	    ${CASUBJ:+-subj "$CASUBJ"} \
 	    -key <(echo "$CAKEY") \
 	    -config <(mksucareqconf)
 	echo "$CAKEY" )"
