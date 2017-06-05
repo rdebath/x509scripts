@@ -49,6 +49,8 @@ do
 		 continue
 	    fi
 	}
+    elif [ "$XDATA" = '' ]
+    then continue
     else
 	echo >&2 "File not in PEM or DER format"
 	continue

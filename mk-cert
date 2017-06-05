@@ -26,6 +26,7 @@ V3SERVER=no
 V3EMAIL=no
 V3CRITICAL=no
 V3NS=no
+V3ENS=
 
 NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
 NOECPARAM="$(openssl no-ecparam >/dev/null 2>&1 && echo yes || echo no)"
@@ -185,8 +186,16 @@ do  case "$ar" in
     -v3server|-server ) V3=yes ; V3SERVER=yes ;;
     -v3client|-client ) V3=yes ; V3CLIENT=yes ;;
     -v3email|-email ) V3=yes ; V3EMAIL=yes ;;
+    -v3crit|-v3critical|-critical )
+	V3=yes ; V3CRITICAL=yes ; V3CA=${V3CA:-no}
+	;;
+
     -v3ns|-ns ) V3=yes ; V3NS=yes ;;
-    -v3crit|-v3critical|-critical ) V3=yes ; V3CRITICAL=yes ; V3CA=${V3CA:-no} ;;
+    -v3ns[=:]*|-ns[=:]* )
+	V3=yes
+	V3NS=yes
+	V3ENS="${ar#*[=:]}"
+	;;
 
     -v3[=:]* )
 	    V3=yes
