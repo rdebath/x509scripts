@@ -91,6 +91,9 @@
 	certificate. Discard the CA key and send the CA certificate to the
 	output.
 
+    -onekeyca
+	Just like -singleuseca, except the CA key is the same as the host key
+
     -poltext=FileName
 	Add an "all uses" policy extension and include the text from FileName
 	as an "issuer statement".

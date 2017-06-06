@@ -1,4 +1,4 @@
-#!/bin/bash -
+#!/bin/bash
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 set -e
 
@@ -43,6 +43,7 @@ SIGNPEM=
 SINGLEUSECA=
 PKCS12FN=
 POLICYTEXT=
+ONEKEY=
 
 CIPHER=-aes128
 DGST=
@@ -158,6 +159,7 @@ do  case "$ar" in
 	;;
 
     -singleuseca|-suca ) MAKECSR=yes ; SINGLEUSECA=yes ;;
+    -onekeyca ) ONEKEY=yes ; MAKECSR=yes ; SINGLEUSECA=yes ;;
 
     -poltext[=:]*|-policytext[=:]* )
 	POLICYTEXT="$(cat "${ar#*[=:]}")"
@@ -380,6 +382,7 @@ fi
 	V3CERTONLY="$V3CERTONLY${NL}authorityKeyIdentifier=keyid,issuer${NL}"
     }
 
+    # shellcheck disable=SC2016
     [ "$POLICYTEXT" != "" ] && {
 	V3LIST="$V3LIST${NL}certificatePolicies=@x509_pol${NL}"
 	build_poltext() {
@@ -511,12 +514,15 @@ fi
     }
 
     [ "$SERIAL" = "" ] && SERIAL="$(mk_rand 8)"
-    CAKEY="$(mkkey)"
+    if [ "$ONEKEY" != yes ]
+    then CAKEY="$(mkkey)"
+    else CAKEY="$SSKEY"
+    fi
     [ "$NOSETSERIAL" != yes ] && CASER="$(mk_rand 8)"
-    # shellcheck disable=SC2086
 
     [ "$SHOWCONF" = yes ] && mksucareqconf
 
+    # shellcheck disable=SC2086
     SIGNPEM="$(openssl req -new $UTF8 -x509 $DGST \
 	    -days "${CERT_DAYS:-$DEFAULT_DAYS}" \
 	    ${CASER:+-set_serial 0x"$CASER"} \
