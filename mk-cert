@@ -499,15 +499,20 @@ fi
 	fi
 	echo '[ req_distinguished_name ]'
 
-	if [ "$SERIAL" != '' ]
-	then echo "dnQualifier=$SERIAL"
-	else echo "dnQualifier=$(mk_rand 8)"
-	fi
+	if [ "$ONEKEY" = yes -a "$CASER" != '' ]
+	then echo "dnQualifier=$CASER"
+	     echo "CN=Private CA"
+	else
+	    if [ "$SERIAL" != '' ]
+	    then echo "dnQualifier=$SERIAL"
+	    else echo "dnQualifier=$(mk_rand 8)"
+	    fi
 
-	if [ "$CN" != "" ]
-	then echo "OU=Private CA"
-	     echo "CN=$CN"
-	else echo "CN=Private CA"
+	    if [ "$CN" != "" ]
+	    then echo "OU=Private CA"
+		 echo "CN=$CN"
+	    else echo "CN=Private CA"
+	    fi
 	fi
 
 	echo '#END'
