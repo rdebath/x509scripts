@@ -71,6 +71,7 @@ main() {
 	policy = policy_cn
 	copy_extensions = copyall
 	[policy_cn]
+	dnQualifier		= optional
 	countryName             = optional
 	stateOrProvinceName     = optional
 	localityName            = optional
@@ -78,7 +79,6 @@ main() {
 	organizationalUnitName  = optional
 	commonName 				= supplied
 	emailAddress            = optional
-	dnQualifier		= optional
 
 !
 
@@ -210,7 +210,7 @@ fix_demoCA() {
 	# Create a cert request
 	openssl req -new -nodes -config <(mk_reqconfig) \
 		-key "$CAKEY" \
-		-subj "/CN=Private CA/dnQualifier=$(cat demoCA/serial)/" \
+		-subj "/dnQualifier=$(cat demoCA/serial)/CN=Private CA/" \
 		-out demoCA/ca.csr
 
 	# Self-sign the CA-certificate
@@ -528,9 +528,9 @@ choose_cert_type() {
 	;;
 
     v3_ca )
+	echo 'basicConstraints = CA:true'
 	echo 'subjectKeyIdentifier=hash'
 	echo 'authorityKeyIdentifier=keyid:always,issuer'
-	echo 'basicConstraints = CA:true'
 	;;
 
     esac
