@@ -72,9 +72,6 @@
     -keyfile=FileName
 	Don't generate a key, use the one in FileName
 
-    -param
-	Don't transform the keyfile into the new format using OpenSSL pkey.
-
     -csr
 	Create a CSR not a certificate
 

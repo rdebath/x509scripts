@@ -32,7 +32,6 @@ NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
 NOECPARAM="$(openssl no-ecparam >/dev/null 2>&1 && echo yes || echo no)"
 NOSETSERIAL=
 KEYPASS=
-KEYPARAM=no
 WANTCSR=no
 MAKECSR=no
 ADDDNQ=no
@@ -73,8 +72,8 @@ SUBJ_DNQ_ID=0
 
 # This is my default for making a key file.
 if [ "$NOECPARAM" = no ] ; then
-    mkkey() { openssl ecparam -name prime256v1 -genkey ;}
-    mktmpkey() { openssl ecparam -name prime256v1 -genkey ;}
+    mkkey() { openssl ecparam -name prime256v1 -genkey -noout ;}
+    mktmpkey() { openssl ecparam -name prime256v1 -genkey -noout ;}
 else
     mkkey() { openssl genrsa ; }
     mktmpkey() { openssl genrsa 512 2>/dev/null ; }
@@ -128,7 +127,7 @@ do  case "$ar" in
 	    ar="${ar#*[=:]}:" ; curve="${ar%%:*}"
 	    ar="${ar#*:}:" ; param="${ar%%:*}"
 	    ar="${ar#*:}:" ; noseed="${ar%%:*}"
-	    eval "mkkey() { openssl ecparam -name '$curve' ${param:+-param_enc $param} ${noseed:+-no_seed} -genkey ; }"
+	    eval "mkkey() { openssl ecparam -name '$curve' ${param:+-param_enc $param} ${noseed:+-no_seed} -genkey -noout ; }"
 	    ;;
     -rsa ) eval "mkkey() { openssl genrsa ; }" ;;
 
@@ -139,8 +138,6 @@ do  case "$ar" in
 	eval "mkkey() { cat < '${ar#*[=:]}' ; }"
 	[ "$KFN" = "" ] && KFN=/dev/null
 	;;
-
-    -param ) KEYPARAM=yes ;;
 
     -csr ) WANTCSR=yes ; MAKECSR=yes ;;
     -csrin[=:]* )
@@ -665,10 +662,8 @@ outp() {
 }
 
 outk() {
-    if [ "$NOPKEY" = no -o "$KEYPASS" != "" -o "$KEYPARAM" = yes ]
-    then [ "$KEYPARAM" = no ] ||
-	    echo "$SSKEY" | openssl pkeyparam 2>/dev/null ||:
-	 echo "$SSKEY" | openssl pkey ${KEYPASS:+$CIPHER -passout "$KEYPASS"}
+    if [ "$KEYPASS" != "" ]
+    then echo "$SSKEY" | openssl pkey ${KEYPASS:+$CIPHER -passout "$KEYPASS"}
     else echo "$SSKEY"
     fi
 }
