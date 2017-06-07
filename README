@@ -93,6 +93,9 @@ mk-cert bash script
     -onekeyca
 	Just like -singleuseca, except the CA key is the same as the host key
 
+    -casubj=...
+	Set the subject for the single use CA.
+
     -poltext=FileName
 	Add an "all uses" policy extension and include the text from FileName
 	as an "issuer statement".

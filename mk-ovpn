@@ -119,8 +119,8 @@ mkconfig() {
 }
 
 # Generate the keys
-CAKEY="$(openssl ecparam -name $ECPARAM -genkey)"
-MYKEY="$(openssl ecparam -name $ECPARAM -genkey)"
+CAKEY="$(openssl ecparam -name $ECPARAM -genkey -noout)"
+MYKEY="$(openssl ecparam -name $ECPARAM -genkey -noout)"
 
 # Self sign the CA
 CACERT="$(
