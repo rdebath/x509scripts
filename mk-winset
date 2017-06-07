@@ -1,0 +1,14 @@
+#!/bin/sh
+
+D="${1:-example.com}"
+L=$(pwd)
+[ "$2" != "" ] && { mkdir -p "$2" ; cd "$2" || exit ; }
+
+"$L"/mk-cert \
+    -suca -v3 -rsa -alldays \
+    -crlout="$D".crl \
+    -pkcs12="$D".pfx \
+    -keyout="$D".key \
+    -caout="$D".ca.crt \
+    -out="$D".crt \
+    -subj-cn="$D"

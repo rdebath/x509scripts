@@ -1,0 +1,35 @@
+#!/bin/bash
+
+make_ss() {
+    local CN="$1" OU c=0 SERIAL ; shift
+
+    make_ss_reqconf() {
+	echo '[req]'
+	echo 'distinguished_name = rdn'
+	echo 'prompt = no'
+	echo '[rdn]'
+	echo "dnQualifier=$SERIAL"
+	if [ "$CN" != "" ]
+	then
+	    for OU in "$@"
+	    do echo $((c=c+1)).OU="$OU"
+	    done
+	    echo "CN=$CN"
+	else echo "CN=server"
+	fi
+    }
+
+    SERIAL="$(openssl rand -hex 8)"
+    SSKEY="$(openssl genrsa)"
+    SSCERT="$(openssl req -new -x509 \
+	    -days $((24842 - $(date +%s)/86400)) \
+	    -set_serial 0x"$SERIAL" \
+	    -key <(echo "$SSKEY") \
+	    -config <(make_ss_reqconf "$@") )"
+    unset make_ss_reqconf
+}
+
+make_ss "$@"
+
+echo "$SSCERT" | openssl x509 -subject -serial -dates
+echo "$SSKEY"
