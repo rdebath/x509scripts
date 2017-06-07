@@ -1,4 +1,6 @@
 
+mk-cert bash script
+===================
 
     -subj-cn=String
     -subj-ou=String
@@ -22,9 +24,6 @@
 
 	If no subject is specified one will be prompted for by OpenSSL.
 
-    -showconf
-	Debugging option, show the config files generated for OpenSSL
-
     -days=7304
 	How many days should the certificate run for?
 
@@ -45,7 +44,7 @@
 
     -ser=0123456789abcdef
     -serial=0123456789abcdef
-	Set the certificate serial number.
+	Set the certificate serial number (in hexadecimal).
 
     -dnq
 	Generate and add a dnQualifier item to the subject.
@@ -60,7 +59,7 @@
     -dsa=1024
 	Generate DSA private keys.
 
-    -ec:curve
+    -ec:prime256v1
     -ec:curve:encoding
     -ec:curve:encoding:no_seed
 	Use OpenSSL ecparam to generate an EC key.
@@ -103,7 +102,7 @@
 	CA certificate used to sign the certificate.
 
     -pass:password
-    -pass:OpenSSL:pass
+    -pass=OpenSSL:pass
 	Set a password on the key.
 
     -dgst=sha1
@@ -111,10 +110,13 @@
 	Select the digest used for signing.
 
     -cipher=name
-	Select the cipher used in signing.
+	Select the cipher used for encrypting.
 
     -openssl=/path/to/executable/openssl
 	Use the specified copy of openssl, not the one in the PATH.
+
+    -showconf
+	Debugging option, show the config files generated for OpenSSL
 
 Version 3 certificate extensions.
 
@@ -166,6 +168,10 @@ Version 3 certificate extensions.
 
     -v3ns, -ns
 	Add the netscape Client/server extensions too.
+
+    -v3ns=...
+    -ns=...
+	Add a specific list of netscape usages.
 
     -v3crit, -v3critical, -critical
 	Mark CA and key usage extensions as critical.
