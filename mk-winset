@@ -1,14 +1,20 @@
 #!/bin/sh
 
-D="${1:-example.com}"
+D="${1:-example.com}" ; shift
 L=$(pwd)
-[ "$2" != "" ] && { mkdir -p "$2" ; cd "$2" || exit ; }
+
+case "$1" in
+-* ) ;;
+"" ) ;;
+* ) mkdir -p "$1" ; cd "$1" || exit ; shift ;;
+esac
 
 "$L"/mk-cert \
-    -suca -v3 -rsa -alldays \
+    -suca -v3 -rsa -alldays -san \
     -crlout="$D".crl \
     -pkcs12="$D".pfx \
     -keyout="$D".key \
     -caout="$D".ca.crt \
     -out="$D".crt \
-    -subj-cn="$D"
+    -subj-cn="$D" \
+    "$@"

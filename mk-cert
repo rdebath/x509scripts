@@ -14,6 +14,7 @@ DEFAULT_DAYS=3652
 V3=no
 V3HEAD=
 SANLIST=
+V3SAN=
 V3OPTS=
 V3LIST=
 V3EXTRAS=
@@ -207,7 +208,7 @@ do  case "$ar" in
 	    ;;
 
     -v3san[=:]*|-san[=:]* )
-	    V3=yes
+	    V3=yes ; V3SAN=yes
 	    sanlst="${ar#*[=:]}"
 	    for san in ${sanlst//,/ }
 	    do  [ "$SANLIST" != "" ] && SANLIST="${SANLIST%,},"
@@ -220,6 +221,8 @@ do  case "$ar" in
 	    done
 	    SANLIST="${SANLIST%,}"
 	    ;;
+
+    -v3san|-san ) V3=yes ; V3SAN=yes ;;
 
     /*=* )
 	if [ "$SUBJTYPE" != "" ] ; then
@@ -289,11 +292,13 @@ done
 [ "$SIGNPFX" != '' ] && SIGNPEM="$(openssl pkcs12 -nodes -in "$SIGNPFX")"
 
 # Put the commonName at the start of the san list
-[ "$SANLIST" != "" ] && {
-    if [ "$CN" = "" ]
+[ "$V3SAN" = yes ] && {
+    if [ "$CN" != "" ]
+    then SANLIST="subjectAltName=DNS:$CN,$SANLIST"
+    elif [ "$SANLIST" != '' ]
     then SANLIST="subjectAltName=$SANLIST"
-    else SANLIST="subjectAltName=DNS:$CN,$SANLIST"
     fi
+    SANLIST="${SANLIST%,}"
 }
 
 # Problems?

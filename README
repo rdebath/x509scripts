@@ -141,6 +141,9 @@ Version 3 certificate extensions.
 	Add a SAN name, or multiple items seperated by commas.
 	A dumb huristic is used to identify DNS vs IP vs email items.
 
+    -v3san, -san
+	Make a san from the common name even if there are no others.
+
     -v3ca, -ca
 	Add V3 extensions for a CA certificate.
 

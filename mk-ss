@@ -15,7 +15,7 @@ make_ss() {
 	    do echo $((c=c+1)).OU="$OU"
 	    done
 	    echo "CN=$CN"
-	else echo "CN=server"
+	else echo "CN=localhost"
 	fi
     }
 
