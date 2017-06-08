@@ -1,5 +1,4 @@
-#!/bin/bash -
-if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
+#!/bin/sh -
 [ "$#" = 0 ] && { echo >&2 "Usage: $0 CommonName [Options]" ; exit 1; }
 #
 # This script creates certificates for OpenVPN tls setups.
@@ -11,144 +10,52 @@ if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 # to make this secure. But it is suggested that verify-x509-name is used to
 # stop OpenVPN complaining.
 #
-# The certificates can be V1 or V3, but note that V1 certificates can be
-# used as intermediate CA certificates or direct validation. If this is
-# a problem the V3 certificates with the CA constraint should be used.
-#
-# OpenSSL (and so OpenVPN) can also use self-signed certificates directly
-# in which case the CA and the Client certificate are the same one.
+# For OpenVPN the certificates can be V1 or V3, however, V1 certificates
+# can be used as intermediate CA certificates or direct validation. If this
+# is a problem the V3 certificates with the CA constraint should be used.
 
-export OPENSSL_CONF=/dev/null
 CERT_DIR="${CERT_DIR:-certs}"
+CERTVER=v1 ; CERTTYPE=
 
-V3CA=""
-V3CERT=""
-V3EXTENDED=no
-V1CERT=yes
-SERVER=no
-ECPARAM=prime256v1
-CAOU='Private CA'
-CERTOU=""
-CASUBJ=""
-CN=
-
-V3BASECERT='basicConstraints = critical,CA:FALSE
-subjectKeyIdentifier=hash
-authorityKeyIdentifier=keyid,issuer
-'
-V3BASECA='
-x509_extensions = req_x509
-[ req_x509 ]
-basicConstraints = critical,CA:TRUE, pathlen:0
-subjectKeyIdentifier=hash
-authorityKeyIdentifier=keyid:always,issuer
-'
-
-# Some options...
 for v
 do  case "$v" in
-    -s|-server ) SERVER=yes ; CAOU='OpenVPN server CA' ;;
-    -c|-client ) SERVER=client ; CAOU='OpenVPN client CA' ;;
-    -v1 ) V1CERT=yes ;;
-    -v3 ) V1CERT=no ;;
-    -v3ext ) V1CERT=no ; V3EXTENDED=yes ;;
+    -s|-server ) CERTTYPE=server ;;
+    -c|-client ) CERTTYPE=client ;;
+    -v1 ) CERTVER=v1 ;;
+    -v3 ) CERTVER=v3 ;;
+    -v3ext ) CERTVER=v3x ;;
+
     -days=[1-9]*[0-9] ) CERT_DAYS="${v#*=}" ;;
-    -ca=* )		CASUBJ="${v#*=}" ;;
-    -ou=*|-OU=* )	CERTOU="${v#*=}" ;;
-    -dir=* )		CERT_DIR="${v#*=}" ;;
+    -dir=* )            CERT_DIR="${v#*=}" ;;
+
     -* ) echo >&2 "Option $v not recognised"; exit 1;;
 
     * ) [ "$CN" != '' ] && CN="$CN $v" || CN="$v" ;;
     esac
 done
 
-[ "$V1CERT" = no -o "$V3EXTENDED" = yes ] && {
-    V3CERT="$V3BASECERT"
-    V3CA="$V3BASECA"
-}
-
-[ "$V3CERT" != "" -a "$SERVER" = yes ] && {
-    if [ "$V3EXTENDED" = yes ] 
-    then
-	V3CERT="${V3BASECERT}
-	keyUsage = keyEncipherment
-	extendedKeyUsage = serverAuth
-	"
-    else
-	V3CERT="${V3BASECERT} nsCertType = server "
-    fi
-}
-
-[ "$V3CERT" != "" -a "$SERVER" = client ] && {
-    if [ "$V3EXTENDED" = yes ] 
-    then
-	V3CERT="${V3BASECERT}
-	keyUsage = digitalSignature
-	extendedKeyUsage = clientAuth
-	"
-    else
-	V3CERT="${V3BASECERT} nsCertType = client "
-    fi
-}
-
 CAFILE="$CERT_DIR"/"$CN".ca.crt
 
-[ "$SERVER" = yes ] &&
+[ "$CERTTYPE" = server ] &&
     CAFILE="$CERT_DIR"/"$CN".ca.cer
 
-[ "$CERTOU" = "" -a "$SERVER" = yes ] && CERTOU="OpenVPN server"
-[ "$CERTOU" = "" -a "$SERVER" = client ] && CERTOU="OpenVPN client"
+[ -s "$CAFILE" ] && { echo "ERROR: Name '$CN' already exists" ; exit 1 ; }
 
-[ "$CASUBJ" = "" ] && CASUBJ="/OU=$CAOU/CN=$CN/"
-
-CERT_DAYS="${CERT_DAYS:-3652}"
-
-[ -s "$CAFILE" -o -s "$CERT_DIR"/"$CN".pem -o -s "$CERT_DIR"/"$CN".key ] &&
-    { echo "ERROR: Name '$CN' already exists" ; exit 1 ; }
-
-umask 077
-mkdir -p "$CERT_DIR"
-set -e
-
-mkconfig() {
-    echo '[req]'
-    echo 'distinguished_name = req_distinguished_name'
-    [ "$1" = ca ] &&
-	echo "$V3CA"
-    echo '[ req_distinguished_name ]'
+mkc() {
+    ./mk-cert -suca ${CERT_DAYS:+-days="$CERT_DAYS"} "$CN" "$@" > "$CAFILE"
 }
 
-# Generate the keys
-CAKEY="$(openssl ecparam -name $ECPARAM -genkey -noout)"
-MYKEY="$(openssl ecparam -name $ECPARAM -genkey -noout)"
-
-# Self sign the CA
-CACERT="$(
-    openssl req -new -x509 -days "$CERT_DAYS" \
-	-subj "$CASUBJ" \
-	-key <(echo "$CAKEY") -config <(mkconfig ca) |
-    openssl x509 -subject
-)"
-
-MYCERT="$(
-    # Make a CSR and sign it with the CA
-    openssl req -new -nodes \
-	-key <(echo "$MYKEY") \
-	-subj "${CERTOU:+/OU=$CERTOU}/CN=$CN/" \
-	-config <(mkconfig) |
-
-    # Sign it
-    openssl x509 -req -days "$CERT_DAYS" \
-	-set_serial 0x$(openssl rand -hex 8) \
-	-CA <(echo "$CACERT") \
-	-CAkey <(echo "$CAKEY") \
-	${V3CERT:+-extfile <(echo "$V3CERT")} |
-
-    openssl x509 -subject -issuer -serial -dates
-)"
-
-{
-    echo "$MYCERT"
-    echo "$CACERT"
-    echo "$MYKEY"
-} > "$CAFILE"
+if [ "$CERTTYPE" = '' ]
+then if [ "$CERTVER" = v1 ]
+     then mkc
+     else mkc -v3critical
+     fi
+else
+    if [ "$CERTVER" = v1 ]
+    then CF=''
+    elif [ "$CERTVER" = v3 ]
+    then CF="-v3critical -v3ns=$CERTTYPE"
+    else CF="-v3critical -$CERTTYPE"
+    fi
+    mkc -casubj="$CN" -casubj="OpenVPN $CERTTYPE CA" "OpenVPN $CERTTYPE" $CF
+fi
