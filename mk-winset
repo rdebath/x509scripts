@@ -1,6 +1,6 @@
 #!/bin/sh
 
-D="${1:-example.com}" ; shift
+D="${1:-localhost}" ; shift
 L=$(pwd)
 
 case "$1" in
