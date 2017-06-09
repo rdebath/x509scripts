@@ -1,22 +1,26 @@
 #!/bin/bash
 
 make_ss() {
-    local CN="$1" OU c=0 SERIAL ; shift
+    local CN="$1" SERIAL ; shift
+    [ "$CN" = "" ] && CN=localhost
 
     make_ss_reqconf() {
+	local SANLIST=''
+	[ "$*" != '' ] && {
+	    SANLIST="$(echo "$CN $*" | xargs)"
+	    SANLIST="DNS:${SANLIST// /,DNS:}"
+	}
 	echo '[req]'
 	echo 'distinguished_name = rdn'
 	echo 'prompt = no'
+	[ "$SANLIST" != "" ] && echo 'x509_extensions = x509v3'
 	echo '[rdn]'
 	echo "dnQualifier=$SERIAL"
-	if [ "$CN" != "" ]
-	then
-	    for OU in "$@"
-	    do echo $((c=c+1)).OU="$OU"
-	    done
-	    echo "CN=$CN"
-	else echo "CN=localhost"
-	fi
+	echo "CN=$CN"
+	[ "$SANLIST" != "" ] && {
+	    echo '[x509v3]'
+	    echo "subjectAltName=$SANLIST"
+	}
     }
 
     SERIAL="$(openssl rand -hex 8)"
