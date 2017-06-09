@@ -1,6 +1,23 @@
 
+mk-ss bash script
+=================
+
+This is a very simple script to create a plain self-signed certificate
+that expires in January 2038.  If given no arguments it creates a V1
+x509 certificate with the common name 'localhost'. The first argument
+is the Common Name, additional arguments are set as SAN hosts which
+automatically converts the certificate to a plain V3 x509 certificate.
+
+The certificate and key are 2048 bit RSA and sent out the standard output.
+
 mk-cert bash script
 ===================
+
+This script can create most styles of x509 certificate from the command
+line.  All options can be configured from arguments and the standard
+OpenSSL configuration file is not used.
+
+Usage: ./mk-cert [Common Name] [arguments]
 
     -subj-cn=String
     -subj-ou=String
@@ -30,7 +47,7 @@ mk-cert bash script
     -alldays
 	Make the certificate run until 9999-12-31
 
-    -out=FileName )
+    -out=FileName
 	Put the certificate, and any other items in a file.
 
     -keyout=FileName

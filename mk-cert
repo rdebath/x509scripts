@@ -497,7 +497,7 @@ fi
 	echo 'prompt = no'
 	if [ "$V3" = yes ]
 	then echo "$V3INIT"
-	     if [ "$V3CA" != yes ]
+	     if [ "$V3CA" = no ]
 	     then
 		[ "$V3CRITICAL" != yes ] && CR='' || CR=critical,
 		echo "basicConstraints = ${CR}CA:TRUE,pathlen:0"
