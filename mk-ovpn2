@@ -156,6 +156,12 @@ do
     restore_certs "$CN"
     [ -s "$TMP"/client.ca ] || continue
 
+    CLIENTNAME="$(openssl x509 -noout -in "$TMP"/client.crt \
+	-subject -nameopt multiline | sed -n 's/ *commonName *= //p')"
+
+    [ "$CLIENTNAME" != "$CN" ] &&
+	echo "WARNING: Certificate common name is '$CLIENTNAME'"
+
     ISSU="$(openssl x509 -issuer_hash -noout < "$TMP"/client.crt 2>/dev/null)"
     [ -f "$TMP/dup.server.$ISSU.flg" ] &&
 	echo WARNING: This client has the same CA as a server.

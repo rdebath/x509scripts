@@ -205,7 +205,7 @@ do
 	    echo "$ITEM" | openssl pkey -noout -text_pub $PW
 	elif [ "$NOPKEY" = no -a "$PKEYPARAM" != "" ]
 	then
-	    echo Parameter file for genpkey:
+	    echo Parameter file:
 	    echo "$PKEYPARAM"
 	elif [ "$NOPKEY" = no -a "$PUBKEY" != "" ]
 	then

@@ -45,6 +45,7 @@ SINGLEUSECA=
 PKCS12FN=
 POLICYTEXT=
 ONEKEY=
+NOPROMPT=
 
 CIPHER=-aes128
 DGST=
@@ -232,9 +233,7 @@ do  case "$ar" in
 	SUBJTYPE=arg
 	;;
 
-    -no-prompt )
-	SUBJTYPE="${SUBJTYPE:-conf}"
-	;;
+    -no-prompt ) NOPROMPT=yes ;;
 
     -subj[-_]c[=:]*|-subj[-_]st[=:]*|-subj[-_]l[=:]*|-subj[-_]o[=:]*|\
     -subj[-_]dc[=:]*|-subj[-_]ou[=:]*|-subj[-_]cn[=:]* )
@@ -424,6 +423,13 @@ mk_rand() {
 
 [ "$MAKECSR" = yes ] && X509='' || X509=-x509
 
+[ "$NOPROMPT" = yes -a "$SUBJTYPE" = '' ] && {
+    if [ "$ADDDNQ" = yes ]
+    then SUBJTYPE=conf
+    else SUBJTYPE=arg ; SUBJ=/
+    fi
+}
+
 [ "$ADDDNQ" = yes ] && {
     [ "$SERIAL" = "" ] && DNQ="$(mk_rand 8)" || DNQ="$SERIAL"
 
@@ -471,7 +477,10 @@ mkreqconf() {
 	echo 'commonName = Common Name'
 	echo 'organizationalUnitName = Organizational Unit Name'
 	echo "dnQualifier= Additional subject qualifier"
-	echo "dnQualifier_default=$SERIAL"
+	if [ "$SERIAL" != "" ]
+	then echo "dnQualifier_default=$SERIAL"
+	else echo "dnQualifier_default=$(mk_rand 8)"
+	fi
 	;;
     esac
     echo '#END'

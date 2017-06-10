@@ -6,7 +6,7 @@ make_ss() {
 
     make_ss_reqconf() {
 	local SANLIST=''
-	[ "$*" != '' ] && {
+	[ "$#" -gt 0 ] && {
 	    SANLIST="$(echo "$CN $*" | xargs)"
 	    SANLIST="DNS:${SANLIST// /,DNS:}"
 	}
