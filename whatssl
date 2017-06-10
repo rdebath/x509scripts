@@ -25,6 +25,10 @@ pubkey_id() {
 	echo "$1" |
 	openssl pkey -pubin -text -noout |
 	sed -n 's/Public-Key://p'
+	H=$(echo "$1" |
+	openssl dsa -pubin -modulus -noout 2>/dev/null |
+	sed -n 's/.*=//p' | wc -c)
+	[ "$H" -gt 0 ] && echo "($((H/2*8)) bit)"
 	echo "$1" |
 	openssl pkey -pubin -outform DER |
 	openssl md5 |
@@ -34,8 +38,10 @@ pubkey_id() {
 
 for file
 do
-    # DATA="$(cat "$file")"
-    XDATA="$(cat "$file" | openssl enc -base64)"
+    if [ ".$file" != .- ]
+    then XDATA="$(openssl enc -base64 -in "$file")"
+    else XDATA="$(openssl enc -base64)"
+    fi
     if echo "$XDATA" | openssl enc -base64 -d 2>/dev/null | grep -iq ^-----BEGIN
     then DATA="$(echo "$XDATA" | openssl enc -base64 -d )"
     elif echo "$XDATA" | openssl enc -base64 -d | openssl asn1parse -inform der >/dev/null 2>&1
