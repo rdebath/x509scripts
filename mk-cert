@@ -232,6 +232,10 @@ do  case "$ar" in
 	SUBJTYPE=arg
 	;;
 
+    -no-prompt )
+	SUBJTYPE="${SUBJTYPE:-conf}"
+	;;
+
     -subj[-_]c[=:]*|-subj[-_]st[=:]*|-subj[-_]l[=:]*|-subj[-_]o[=:]*|\
     -subj[-_]dc[=:]*|-subj[-_]ou[=:]*|-subj[-_]cn[=:]* )
 	SUBJTYPE="${SUBJTYPE:-conf}"

@@ -69,6 +69,9 @@ Usage: ./mk-cert [Common Name] [arguments]
     -dnq=...
 	Add a dnQualifier item to the subject.
 
+    -no-prompt
+	Prevent OpenSSL prompting for any part of the subject.
+
     -rsa
     -rsa=2048
 	Generate RSA private keys.

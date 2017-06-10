@@ -15,18 +15,18 @@
 # is a problem the V3 certificates with the CA constraint should be used.
 
 do_commonname() {
-    CN="$1"
+    CN="$1" ; SIGN=-suca
     mkdir -p -m 700 "$CERT_DIR"
-    CAFILE="$CERT_DIR"/"$CN".ca.crt
+    CRTFILE="$CERT_DIR"/"$CN".crt
 
-    [ "$CERTTYPE" = server ] &&
-	CAFILE="$CERT_DIR"/"$CN".ca.cer
-
-    [ -s "$CAFILE" ] && { echo "ERROR: Name '$CN' already exists" ; return ; }
+    [ -s "$CRTFILE" ] && { echo "ERROR: Name '$CN' already exists" ; return ; }
 
     mkc() {
-	./mk-cert -suca ${CERT_DAYS:+-days="$CERT_DAYS"} "$CN" "$@" > "$CAFILE"
+	./mk-cert "$SIGN" ${CERT_DAYS:+-days="$CERT_DAYS"} "$CN" "$@" > "$CRTFILE"
     }
+
+    [ -f "$CERT_DIR/${CERTTYPE:-client}-ca.pem" ] &&
+	SIGN="-sign=$CERT_DIR/${CERTTYPE:-client}-ca.pem"
 
     if [ "$CERTTYPE" = '' ]
     then if [ "$CERTVER" = v1 ]
