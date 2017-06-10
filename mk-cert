@@ -125,7 +125,7 @@ do  case "$ar" in
 	;;
 
     -rsa[=:]* ) eval "mkkey() { openssl genrsa '${ar#*[=:]}' ; }" ;;
-    -dsa[=:]* ) eval "mkkey() { openssl dsaparam -genkey '${ar#*[=:]}' ; }" ;;
+    -dsa[=:]* ) eval "mkkey() { openssl dsaparam -noout -genkey '${ar#*[=:]}' ; }" ;;
     -ec[=:]* ) 
 	    ar="${ar#*[=:]}:" ; curve="${ar%%:*}"
 	    ar="${ar#*:}:" ; param="${ar%%:*}"

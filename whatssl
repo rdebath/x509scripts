@@ -20,12 +20,13 @@ pubkey_id() {
     echo $(echo "$1" |
 	openssl asn1parse |
 	awk '/OBJECT/{print $NF;}' |
-	tr -d '\012' | tr : ' '
+	tr : ' ' |
+	sed -e 's/PublicKey//' -e 's/Encryption//'
 	echo "$1" |
 	openssl pkey -pubin -text -noout |
 	sed -n 's/Public-Key://p'
 	echo "$1" |
-	openssl pkey -pubin |
+	openssl pkey -pubin -outform DER |
 	openssl md5 |
 	awk '{print $NF;}'
 	)
