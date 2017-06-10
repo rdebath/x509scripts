@@ -10,12 +10,21 @@ automatically converts the certificate to a plain V3 x509 certificate.
 
 The certificate and key are 2048 bit RSA and sent out the standard output.
 
+whatssl bash script
+===================
+
+Gives a description of the contents of any OpenSSL related certificate,
+key or parameter file. If the file contains multiple items they are all
+described.
+
 mk-cert bash script
 ===================
 
 This script can create most styles of x509 certificate from the command
 line.  All options can be configured from arguments and the standard
-OpenSSL configuration file is not used.
+OpenSSL configuration file is not used. The default is to prompt for
+a common name (plus OU and DNQ) and generate an EC:prime256r1 key and
+certificate which is sent to the standard out.
 
 Usage: ./mk-cert [Common Name] [arguments]
 
@@ -213,3 +222,27 @@ Version 3 certificate extensions.
 
 	This item is placed after the all "-v3=" items so can be used when
 	the config file needs additional sections.
+
+mk-ovpn and mk-ovpn2 bash scripts
+=================================
+
+This script calls mk-cert to make certificates and keys for OpenVPN. The
+idea is to use the "singleuseca" mode to create a CA certificate
+specifically for every instance of OpenVPN (client and server) and only
+have the CA certificates that of the specific keys allowed to connect
+listed in the configuration file. The mk-ovpn2 script collects these CA
+keys and does the necessary selections for generating each ovpn config file.
+
+mk-winset script
+================
+The calls mk-cert with default arguments that create the file types normally
+needed by Windows server applications. Windows applications usually prefer
+CA+server certificate pairs, RSA keys and pfx files. Current web browsers
+like to have a SAN entry even if it only includes the CN.
+
+The first argument is the common name, the second, if it doesn't begin
+with a '-' is a directory to put the files in. The remainder of the
+arguments are passed to mk-cert.
+
+The files created use the common name as the base and have extensions:
+    .crt .ca.crt .pfx .key .crl
