@@ -7,6 +7,7 @@ that expires in January 2038.  If given no arguments it creates a V1
 x509 certificate with the common name 'localhost'. The first argument
 is the Common Name, additional arguments are set as SAN hosts which
 automatically converts the certificate to a plain V3 x509 certificate.
+An empty second argument gives a SAN list of just the common name.
 
 The certificate and key are 2048 bit RSA and sent out the standard output.
 
@@ -159,8 +160,9 @@ Version 3 certificate extensions.
     being present.
 
     The SAN extension is a minor exception to this as it allows multiple
-    wildcard DNS names whereas browsers only accept one wildcard CN item
-    in the subject.
+    wildcard DNS names whereas browsers only accept one wildcard CN
+    item in the subject. In addition some browsers are rejecting all
+    certificates that don't have a SAN extension.
 
     -v3
 	Make the certificate V3, don't add any extensions though.

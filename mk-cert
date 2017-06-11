@@ -348,6 +348,13 @@ fi
     [ "$V3CA" = yes ] && V3XKU=keyCertSign,${V3CRL:+cRLSign,}
     [ "$V3CA" = no ] && V3OPTS="$V3OPTS${NL}basicConstraints = ${CR}CA:FALSE"
 
+    [ "$V3SERVER" = yes ] && V3EKU=$V3EKU,serverAuth
+    [ "$V3CLIENT" = yes ] && V3EKU=$V3EKU,clientAuth
+    [ "$V3EMAIL" = yes ] && V3EKU=$V3EKU,emailProtection
+
+    [ "$V3EKU" != '' ] &&
+	V3OPTS="$V3OPTS${NL}extendedKeyUsage = ${V3EKU#,}"
+
     if [ "$V3SERVER" = yes -a "$V3CA" != yes ]
     then
         V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}keyEncipherment,digitalSignature,keyAgreement"
@@ -362,10 +369,6 @@ fi
         V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU%,}"
     fi
 
-    [ "$V3SERVER" = yes ] && V3EKU=$V3EKU,serverAuth
-    [ "$V3CLIENT" = yes ] && V3EKU=$V3EKU,clientAuth
-    [ "$V3EMAIL" = yes ] && V3EKU=$V3EKU,emailProtection
-
     if [ "$V3CA" = yes ]
     then
 	[ "$V3SERVER" = yes ] && V3ENS=$V3ENS,sslCA
@@ -378,9 +381,6 @@ fi
 	[ "$V3CLIENT" = yes ] && V3ENS=$V3ENS,client
 	[ "$V3EMAIL" = yes ] && V3ENS=$V3ENS,email
     fi
-
-    [ "$V3EKU" != '' ] &&
-	V3OPTS="$V3OPTS${NL}extendedKeyUsage = ${V3EKU#,}"
 
     [ "$V3NS" = yes -a "$V3ENS" != '' ] &&
 	V3OPTS="$V3OPTS${NL}nsCertType = ${V3ENS#,}"
