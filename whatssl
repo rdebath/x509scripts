@@ -39,7 +39,7 @@ pubkey_id() {
 for file
 do
     if [ ".$file" != .- ]
-    then XDATA="$(openssl enc -base64 -in "$file")"
+    then XDATA="$(openssl enc -base64 <"$file")"
     else XDATA="$(openssl enc -base64)"
     fi
     if echo "$XDATA" | openssl enc -base64 -d 2>/dev/null | grep -iq ^-----BEGIN
