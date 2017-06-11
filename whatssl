@@ -149,7 +149,10 @@ do
 	    then
 		if openssl verify -CAfile <(echo "$ITEM") <(echo "$ITEM") 2>&1 | grep -iq ^error
 		then
-		    echo "    This self signed certificate fails validation"
+		    if echo "$ITEM" | openssl x509 -checkend 0 >/dev/null 2>&1
+		    then echo "    This self signed certificate fails validation"
+		    else echo "    This self signed certificate has expired"
+		    fi
 		else
 		    for STRICT in '-x509_strict' ''
 		    do
