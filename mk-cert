@@ -132,7 +132,14 @@ do  case "$ar" in
 	    ar="${ar#*:}:" ; noseed="${ar%%:*}"
 	    eval "mkkey() { openssl ecparam -name '$curve' ${param:+-param_enc $param} ${noseed:+-no_seed} -genkey -noout ; }"
 	    ;;
-    -rsa ) eval "mkkey() { openssl genrsa ; }" ;;
+
+    -dsa )
+	mkkey() { openssl dsaparam -noout -genkey 1024; }
+	DGST="${DGST:--sha1}"
+	;;
+
+    -rsa ) mkkey() { openssl genrsa ; } ;;
+    -ec )  mkkey() { openssl ecparam -name prime256v1 -genkey -noout ; } ;;
 
     -list[-_]curves|-show[_-]curves )
 	openssl ecparam -list_curves ; exit ;;

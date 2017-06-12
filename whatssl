@@ -255,3 +255,4 @@ do
     [ "$found" -eq 0 ] &&
 	echo No PEM data found in "$file"
 done
+exit 0
