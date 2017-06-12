@@ -126,10 +126,6 @@ Usage: ./mk-cert [Common Name] [arguments]
     -casubj=...
 	Set the subject for the single use CA.
 
-    -poltext=FileName
-	Add an "all uses" policy extension and include the text from FileName
-	as an "issuer statement".
-
     -pkcs12=FileName
 	Create a "pfx" file with the certificate, private key and the
 	CA certificate used to sign the certificate.
@@ -211,7 +207,11 @@ Version 3 certificate extensions.
 	Add a specific list of netscape usages.
 
     -v3crit, -v3critical, -critical
-	Mark CA and key usage extensions as critical.
+	Mark CA, key usage and extended key usage extensions as critical.
+
+    -poltext=FileName
+	Add an "all uses" policy extension and include the text from
+	FileName as an "issuer statement".
 
     -v3='OpenSSL extension config'
 	Add any x509 v3 extension config to the OpenSSL config file used

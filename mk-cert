@@ -9,7 +9,7 @@ CRLFN=
 CAFN=
 SERIAL=
 CERT_DAYS=
-DEFAULT_DAYS=3652
+DEFAULT_DAYS=7304
 
 V3=no
 V3HEAD=
@@ -163,10 +163,6 @@ do  case "$ar" in
     -singleuseca|-suca ) MAKECSR=yes ; SINGLEUSECA=yes ;;
     -onekeyca ) ONEKEY=yes ; MAKECSR=yes ; SINGLEUSECA=yes ;;
 
-    -poltext[=:]*|-policytext[=:]* )
-	POLICYTEXT="$(cat "${ar#*[=:]}")"
-	;;
-
     -pkcs12[=:]* ) PKCS12FN="${ar#*[=:]}" ;;
 
     -pass[=:]*:* ) KEYPASS="${ar#*[=:]}" ;;
@@ -189,6 +185,11 @@ do  case "$ar" in
     -v3email|-email ) V3=yes ; V3EMAIL=yes ;;
     -v3crit|-v3critical|-critical )
 	V3=yes ; V3CRITICAL=yes ; V3CA=${V3CA:-no}
+	;;
+
+    -v3policytext[=:]*|-policytext[=:]*|-poltext[=:]* )
+	V3=yes
+	POLICYTEXT="$(cat "${ar#*[=:]}")"
 	;;
 
     -v3ns|-ns ) V3=yes ; V3NS=yes ;;
@@ -215,7 +216,9 @@ do  case "$ar" in
 	    do  [ "$SANLIST" != "" ] && SANLIST="${SANLIST%,},"
 		[ "$san" = '' -o "$san" = "$CN" ] && continue
 		case "$san" in
-		[0-9]*.*[0-9] ) SANLIST="${SANLIST}IP:$san" ;;
+		[0-9]*.*.*.*[0-9] ) SANLIST="${SANLIST}IP:$san" ;;
+		[0-9a-fA-F]*:*:*[0-9a-fA-F]|::*[0-9a-fA-F] )
+		    SANLIST="${SANLIST}IP:$san" ;;
 		*@* ) SANLIST="${SANLIST}email:$san" ;;
 		* ) SANLIST="${SANLIST}DNS:$san" ;;
 		esac
@@ -353,7 +356,7 @@ fi
     [ "$V3EMAIL" = yes ] && V3EKU=$V3EKU,emailProtection
 
     [ "$V3EKU" != '' ] &&
-	V3OPTS="$V3OPTS${NL}extendedKeyUsage = ${V3EKU#,}"
+	V3OPTS="$V3OPTS${NL}extendedKeyUsage = $CR${V3EKU#,}"
 
     if [ "$V3SERVER" = yes -a "$V3CA" != yes ]
     then
