@@ -3,6 +3,7 @@
 # crlDistributionPoints ==> W.T.F.
 bash mk-cert \
     -rsa \
+    -san \
     -sign=domain-key.pfx \
     \
     -v3='crlDistributionPoints=crlsect' \

@@ -24,7 +24,7 @@ mk-cert bash script
 This script can create most styles of x509 certificate from the command
 line.  All options can be configured from arguments and the standard
 OpenSSL configuration file is not used. The default is to prompt for
-a common name (plus OU and DNQ) and generate an EC:prime256r1 key and
+a common name (plus OU and DNQ) and generate an ec:prime256r1 key and
 certificate which is sent to the standard out.
 
 Usage: ./mk-cert [Common Name] [arguments]
@@ -50,6 +50,8 @@ Usage: ./mk-cert [Common Name] [arguments]
 	other options for building a subject.
 
 	If no subject is specified one will be prompted for by OpenSSL.
+	NOTE: If you are adding a SAN list the common name prompted for
+	by OpenSSL will NOT be in the list unless you add it there too.
 
     -days=7304
 	How many days should the certificate run for?
@@ -82,17 +84,18 @@ Usage: ./mk-cert [Common Name] [arguments]
     -no-prompt
 	Prevent OpenSSL prompting for any part of the subject.
 
-    -rsa
-    -rsa=2048
-	Generate RSA private keys.
-
-    -dsa=1024
-	Generate DSA private keys.
-
     -ec:prime256v1
     -ec:curve:encoding
     -ec:curve:encoding:no_seed
 	Use OpenSSL ecparam to generate an EC key.
+
+    -rsa
+    -rsa=2048
+	Generate RSA private keys.
+
+    -dsa
+    -dsa=1024
+	Generate DSA private keys.
 
     -list-curves
     -show-curves
@@ -121,7 +124,7 @@ Usage: ./mk-cert [Common Name] [arguments]
 	output.
 
     -onekeyca
-	Just like -singleuseca, except the CA key is the same as the host key
+	Just like -singleuseca, except the CA key is copied from the host key.
 
     -casubj=...
 	Set the subject for the single use CA.

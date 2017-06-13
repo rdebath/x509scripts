@@ -356,6 +356,8 @@ fi
 
     V3P=${V3CAPATH:+, pathlen:$V3CAPATH}
 
+    V3OPTS="$V3OPTS${NL}$SANLIST"
+
     [ "$V3CA" = yes ] && V3OPTS="$V3OPTS${NL}basicConstraints = ${CR}CA:TRUE${V3P}"
     [ "$V3CA" = yes ] && V3XKU=keyCertSign,${V3CRL:+cRLSign,}
     [ "$V3CA" = no ] && V3OPTS="$V3OPTS${NL}basicConstraints = ${CR}CA:FALSE"
@@ -463,12 +465,11 @@ mkreqconf() {
 
     if [ "$2" != no -o "$1" = no ]
     then
-	[ "$V3OPTS$SANLIST$V3LIST$V3EXTRAS" != "" -o "$1" != "yes" ] && {
+	[ "$V3OPTS$V3LIST$V3EXTRAS" != "" -o "$1" != "yes" ] && {
 	    echo "$V3HEAD"
 	    echo "$V3OPTS"
 	    [ "$1" != yes ] &&
 		echo "$V3CERTONLY"
-	    echo "$SANLIST"
 	    echo "$V3LIST"
 	    echo "$V3EXTRAS"
 	}
