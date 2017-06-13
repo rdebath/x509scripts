@@ -9,12 +9,7 @@ case "$1" in
 * ) mkdir -p "$1" ; cd "$1" || exit ; shift ;;
 esac
 
-if faketime -h 2>/dev/null | grep -qi libfaketime
-then ft() { faketime -f '1999-01-01 12:00:00' "$@" ; }
-else ft() { "$@" ; }
-fi
-
-ft mk-cert \
+mk-cert \
     -suca -v3 -rsa -alldays -san \
     -crlout="$D".crl \
     -pkcs12="$D".pfx \

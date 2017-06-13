@@ -71,6 +71,8 @@ SUBJ_CN=
 SUBJ_CN_ID=0
 SUBJ_DNQ=
 SUBJ_DNQ_ID=0
+CRLURI=
+CRLURI_ID=0
 }
 
 # This is my default for making a key file.
@@ -83,6 +85,9 @@ else
 fi
 # See also:
 # mkkey() { openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) ;}
+
+# Faketime prefix
+ft() { "$@" ; }
 
 NL='
 '
@@ -106,7 +111,14 @@ do  case "$ar" in
     -showconf ) SHOWCONF=yes ;;
 
     -days[=:]* ) CERT_DAYS="${ar#*[=:]}" ;;
-    -alldays ) CERT_DAYS=$((2932896 - $(date +%s)/86400)) ;;
+    -alldays )
+	if faketime -h 2>/dev/null | grep -qi libfaketime
+	then ft() { faketime -f '1999-01-01 12:00:00' "$@" ; }
+	fi
+
+	CERT_DAYS=$((2932896 - $(ft date +%s)/86400))
+	;;
+
     -out[=:]* ) FN="${ar#*[=:]}" ;;
     -keyout[=:]* ) KFN="${ar#*[=:]}" ;;
     -crlout[=:]* ) CRLFN="${ar#*[=:]}" ; V3CRL=yes ;;
@@ -236,6 +248,12 @@ do  case "$ar" in
 	    ;;
 
     -v3san|-san ) V3=yes ; V3SAN=yes ;;
+
+    -v3crluri[=:]*|-crluri[=:]* )
+	V3=yes
+	CRLURI_ID=$((CRLURI_ID+1))
+	CRLURI="$CRLURI${NL}URI.$CRLURI_ID=${ar#*[=:]}"
+	;;
 
     /*=* )
 	if [ "$SUBJTYPE" != "" ] ; then
@@ -404,9 +422,20 @@ fi
 	V3CERTONLY="$V3CERTONLY${NL}authorityKeyIdentifier=keyid,issuer${NL}"
     }
 
+    [ "$CRLURI" != "" ] && {
+	V3OPTS="$V3OPTS${NL}crlDistributionPoints=crl_uri_sect${NL}"
+
+	# crlDistributionPoints ==> W.T.F.
+	V3EXTRAS="$V3EXTRAS
+	    ${NL}[ crl_uri_sect ]
+	    ${NL}fullname=@crl_url_fn
+	    ${NL}[ crl_url_fn ]
+	    ${NL}$CRLURI$NL"
+    }
+
     # shellcheck disable=SC2016
     [ "$POLICYTEXT" != "" ] && {
-	V3LIST="$V3LIST${NL}certificatePolicies=@x509_pol${NL}"
+	V3OPTS="$V3OPTS${NL}certificatePolicies=@x509_pol${NL}"
 	build_poltext() {
 	    echo '[ x509_pol ]'
 	    echo 'policyIdentifier = 2.5.29.32.0'
@@ -505,7 +534,7 @@ then SSCERT="$(cat "$CSRFN")"
 else
     [ "$SHOWCONF" = yes ] && mkreqconf $MAKECSR $WANTCSR
 
-    SSCERT="$(openssl req -new $UTF8 $X509 $DGST \
+    SSCERT="$(ft openssl req -new $UTF8 $X509 $DGST \
 	-days "${CERT_DAYS:-$DEFAULT_DAYS}" \
 	${SERIAL:+-set_serial 0x"$SERIAL"} \
 	${SUBJ:+-subj "$SUBJ"} \
@@ -566,7 +595,7 @@ fi
     [ "$SHOWCONF" = yes ] && mksucareqconf
 
     # shellcheck disable=SC2086
-    SIGNPEM="$(openssl req -new $UTF8 -x509 $DGST \
+    SIGNPEM="$(ft openssl req -new $UTF8 -x509 $DGST \
 	    -days "${CERT_DAYS:-$DEFAULT_DAYS}" \
 	    ${CASER:+-set_serial 0x"$CASER"} \
 	    ${CASUBJ:+-subj "$CASUBJ"} \
@@ -581,7 +610,7 @@ fi
     # Default to days left on CA certificate
     [ "$CERT_DAYS" = "" ] && {
         ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in <(echo "$SIGNPEM") | sed 's/^[^=]*=//')" ||:)"
-        TODAY="$(date +%s)"
+        TODAY="$(ft date +%s)"
         [ "$ENDDAY" = "" ] && ENDDAY=2932896 || ENDDAY=$((ENDDAY/86400))
         CERT_DAYS=$((ENDDAY - TODAY/86400))
     }
@@ -623,7 +652,7 @@ fi
     [ "$SHOWCONF" = yes ] && mkreqconf
 
     # shellcheck disable=SC2086
-    SSCERT="$(openssl x509 -req $DGST \
+    SSCERT="$(ft openssl x509 -req $DGST \
 	    -days "${CERT_DAYS:-$DEFAULT_DAYS}" \
 	    ${SERIAL:+-set_serial 0x"$SERIAL"} \
 	    ${SERIALFN:+-CAserial "$SERIALFN"} \
@@ -663,7 +692,7 @@ fi
     touch $TMP/index.txt
     touch $TMP/index.txt.attr
 
-    openssl ca \
+    ft openssl ca \
 	-config <(mkcacrlconf) \
 	-gencrl \
 	-crldays "${CERT_DAYS:-$DEFAULT_DAYS}" \
