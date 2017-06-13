@@ -1,9 +1,15 @@
 #!/bin/sh
-set -e
-
 # working_signed_by_domain
+# crlDistributionPoints ==> W.T.F.
 bash mk-cert \
     -rsa \
     -sign=domain-key.pfx \
-    -v3="crlDistributionPoints=URI:http://TVTDC00.tvt.local/CertEnroll/TVision%20Domain.crl" \
+    \
+    -v3='crlDistributionPoints=crlsect' \
+    -v3xt='[ crlsect ]' \
+    -v3xt='fullname=@crlfn' \
+    -v3xt='[ crlfn ]' \
+    -v3xt='URI.1=ldap:///CN=TVision%20Domain,CN=TVTDC00,CN=CDP,CN=Public%20Key%20Services,CN=Services,CN=Configuration,DC=tvt,DC=local?certificateRevocationList?base?objectClass=cRLDistributionPoint' \
+    -v3xt='URI.2=http://TVTDC00.tvt.local/CertEnroll/TVision%20Domain.crl' \
+    \
     "$@"

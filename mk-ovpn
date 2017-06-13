@@ -6,9 +6,10 @@
 # is designed so that any machine only has the CA certificates for the
 # machines that it is allowed to connect to.
 #
-# Note none of ns-cert-type, remote-cert-tls or verify-x509-name are required
-# to make this secure. But it is suggested that verify-x509-name is used to
-# stop OpenVPN complaining.
+# Note none of ns-cert-type, remote-cert-tls or verify-x509-name are
+# required to make this secure. But it is suggested that verify-x509-name
+# is used to stop OpenVPN complaining as this is what's required for
+# certificates signed by a public CA.
 #
 # For OpenVPN the certificates can be V1 or V3, however, V1 certificates
 # can be used as intermediate CA certificates or direct validation. If this

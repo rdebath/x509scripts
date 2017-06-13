@@ -134,6 +134,8 @@ do  case "$ar" in
 	    ;;
 
     -dsa )
+	# FIPS used to force 1024, so lots of hardware and protocols did too.
+	echo >&2 WARNING: Making weak 1024bit DSA key.
 	mkkey() { openssl dsaparam -noout -genkey 1024; }
 	DGST="${DGST:--sha1}"
 	;;
