@@ -390,16 +390,16 @@ fi
 
     if [ "$V3SERVER" = yes -a "$V3CA" != yes ]
     then
-        V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}keyEncipherment,digitalSignature,keyAgreement"
+	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}keyEncipherment,digitalSignature,keyAgreement"
     elif [ "$V3EMAIL" = yes -a "$V3CA" != yes ]
     then
-        V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}keyEncipherment,digitalSignature"
+	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}keyEncipherment,digitalSignature"
     elif [ "$V3CLIENT" = yes -a "$V3CA" != yes ]
     then
-        V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}digitalSignature"
+	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}digitalSignature"
     elif [ "$V3XKU" != '' ]
     then
-        V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU%,}"
+	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU%,}"
     fi
 
     if [ "$V3CA" = yes ]
@@ -610,10 +610,10 @@ fi
 
     # Default to days left on CA certificate
     [ "$CERT_DAYS" = "" ] && {
-        ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in <(echo "$SIGNPEM") | sed 's/^[^=]*=//')" ||:)"
-        TODAY="$(ft date +%s)"
-        [ "$ENDDAY" = "" ] && ENDDAY=2932896 || ENDDAY=$((ENDDAY/86400))
-        CERT_DAYS=$((ENDDAY - TODAY/86400))
+	ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in <(echo "$SIGNPEM") | sed 's/^[^=]*=//')" ||:)"
+	TODAY="$(ft date +%s)"
+	[ "$ENDDAY" = "" ] && ENDDAY=2932896 || ENDDAY=$((ENDDAY/86400))
+	CERT_DAYS=$((ENDDAY - TODAY/86400))
     }
 
     # Do we have to override the CSR's common name?
@@ -715,7 +715,7 @@ fi
 	-in <(echo "$SSCERT") \
 	${SIGNPEM:+-certfile <(echo "$SIGNPEM" | openssl x509) } \
 	${SIGNPEM:+-caname "$(echo "$SIGNPEM" | openssl x509 -noout \
-                -subject -nameopt multiline | sed -n 's/ *commonName *= //p'
+		-subject -nameopt multiline | sed -n 's/ *commonName *= //p'
 		) CA til: $(echo "$SIGNPEM" | openssl x509 -noout -enddate |
 		  sed -n 's/.*= *//p' )"}
 }
@@ -740,7 +740,7 @@ outp() {
     then :
     elif [ "$KFN" != '' ]
     then umask 077
-         outk > "$KFN"
+	 outk > "$KFN"
     else outk
     fi
 }
@@ -749,7 +749,7 @@ outk() {
     if [ "$KEYPASS" != "" ]
     then echo "$SSKEY" | openssl pkey ${KEYPASS:+$CIPHER -passout "$KEYPASS"}
 	 echo 'Public key for above key is:'
-         echo "$SSKEY" | openssl pkey -pubout
+	 echo "$SSKEY" | openssl pkey -pubout
     else echo "$SSKEY"
     fi
 }
