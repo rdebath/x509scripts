@@ -418,7 +418,7 @@ fi
 	V3OPTS="$V3OPTS${NL}nsCertType = ${V3ENS#,}"
 
     [ "$V3CA" != '' ] && {
-	V3OPTS="$V3OPTS${NL}subjectKeyIdentifier=hash"
+	V3CERTONLY="$V3CERTONLY${NL}subjectKeyIdentifier=hash"
 	V3CERTONLY="$V3CERTONLY${NL}authorityKeyIdentifier=keyid,issuer${NL}"
     }
 
@@ -708,10 +708,15 @@ fi
     # shellcheck disable=SC2086
     openssl pkcs12 -export -passout pass: \
 	-out "$PKCS12FN" \
-	-name "$CN $(date)" \
+	-name "$CN til: $(echo "$SSCERT" | openssl x509 -noout -enddate |
+                  sed -n 's/.*= *//p')" \
 	-inkey <(echo "$SSKEY") \
 	-in <(echo "$SSCERT") \
-	${SIGNPEM:+-certfile <(echo "$SIGNPEM" | openssl x509) }
+	${SIGNPEM:+-certfile <(echo "$SIGNPEM" | openssl x509) } \
+	${SIGNPEM:+-caname "$(echo "$SIGNPEM" | openssl x509 -noout \
+                -subject -nameopt multiline | sed -n 's/ *commonName *= //p'
+		) CA til: $(echo "$SIGNPEM" | openssl x509 -noout -enddate |
+		  sed -n 's/.*= *//p' )"}
 }
 
 outp() {
