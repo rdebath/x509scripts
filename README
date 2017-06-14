@@ -217,6 +217,10 @@ Version 3 certificate extensions.
 	Add an "all uses" policy extension and include the text from
 	FileName as an "issuer statement".
 
+    -policy=OID
+	The first one of these sets the OID for the '-poltext' option if
+	present. Additional '-policy' arguments add extra policy extensions.
+
     -v3='OpenSSL extension config'
 	Add any x509 v3 extension config to the OpenSSL config file used
 	to create the certificate.

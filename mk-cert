@@ -45,6 +45,7 @@ SIGNPEM=
 SINGLEUSECA=
 PKCS12FN=
 POLICYTEXT=
+POLICYOID=
 ONEKEY=
 NOPROMPT=
 
@@ -212,6 +213,11 @@ do  case "$ar" in
     -v3policytext[=:]*|-policytext[=:]*|-poltext[=:]* )
 	V3=yes
 	POLICYTEXT="$(cat "${ar#*[=:]}")"
+	;;
+
+    -v3policy[=:]*|-policy[=:]* )
+	V3=yes
+	POLICYOID="$POLICYOID,${ar#*[=:]}"
 	;;
 
     -v3ns|-ns ) V3=yes ; V3NS=yes ;;
@@ -434,17 +440,26 @@ fi
 	    ${NL}$CRLURI$NL"
     }
 
-    # shellcheck disable=SC2016
-    [ "$POLICYTEXT" != "" ] && {
-	V3OPTS="$V3OPTS${NL}certificatePolicies=@x509_pol${NL}"
+    [ "$POLICYTEXT" != "" -o "$POLICYOID" != "" ] && {
+	POLICYOID="${POLICYOID#,}"
+	[ "$POLICYOID" = '' ] && POLICYOID=2.5.29.32.0
+
+	POLICYOID1="${POLICYOID%%,*}"
+	POLICYOIDX="${POLICYOID#$POLICYOID1}"
+
+	V3OPTS="$V3OPTS${NL}certificatePolicies=@x509_pol${POLICYOIDX}${NL}"
+
 	build_poltext() {
 	    echo '[ x509_pol ]'
-	    echo 'policyIdentifier = 2.5.29.32.0'
-	    echo 'userNotice=@notice'
-	    echo '[ notice ]'
-	    echo "$POLICYTEXT" |
-	    tr -d '"'"'" |
-	    sed -e '1s/^/explicitText=/; $b end; s:$:\\r\\n\\:; :end'
+	    echo "policyIdentifier = $POLICYOID1"
+	    # shellcheck disable=SC2016
+	    [ "$POLICYTEXT" != "" ] && {
+		echo 'userNotice=@notice'
+		echo '[ notice ]'
+		echo "$POLICYTEXT" |
+		tr -d '"'"'" |
+		sed -e '1s/^/explicitText=/; $b end; s:$:\\r\\n\\:; :end'
+	    }
 	    echo
 	}
 	V3EXTRAS="$V3EXTRAS${NL}$(build_poltext)$NL"
