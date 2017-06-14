@@ -16,7 +16,8 @@ whatssl bash script
 
 Gives a description of the contents of any OpenSSL related certificate,
 key or parameter file. If the file contains multiple items they are all
-described.
+described. If an item is encrypted a dictionary attack will be attempted,
+the dictionary is the blank password and "0000".
 
 mk-cert bash script
 ===================

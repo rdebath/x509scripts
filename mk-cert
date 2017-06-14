@@ -33,6 +33,7 @@ NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
 NOECPARAM="$(openssl no-ecparam >/dev/null 2>&1 && echo yes || echo no)"
 NOSETSERIAL=
 KEYPASS=
+PFXPASS="pass:"
 WANTCSR=no
 MAKECSR=no
 ADDDNQ=no
@@ -184,10 +185,10 @@ do  case "$ar" in
     -singleuseca|-suca ) MAKECSR=yes ; SINGLEUSECA=yes ;;
     -onekeyca ) ONEKEY=yes ; MAKECSR=yes ; SINGLEUSECA=yes ;;
 
-    -pkcs12[=:]* ) PKCS12FN="${ar#*[=:]}" ;;
+    -pkcs12[=:]*|-pfx[=:]* ) PKCS12FN="${ar#*[=:]}" ;;
 
-    -pass[=:]*:* ) KEYPASS="${ar#*[=:]}" ;;
-    -pass[=:]* ) KEYPASS="pass:${ar#*[=:]}" ;;
+    -pass[=:]*:* ) KEYPASS="${ar#*[=:]}" ; PFXPASS="$KEYPASS" ;;
+    -pass[=:]* ) KEYPASS="pass:${ar#*[=:]}" ; PFXPASS="$KEYPASS" ;;
 
     -ripemd160|-sha|-sha1|-sha224|-sha256|-sha384|-sha512|-whirlpool)
 	DGST=$ar ;;
@@ -706,10 +707,10 @@ fi
 [ "$PKCS12FN" != "" ] && {
     [ "$WANTCSR" = yes ] && { echo >&2 "PKCS12 files can't hold csr's"; exit 1;}
     # shellcheck disable=SC2086
-    openssl pkcs12 -export -passout pass: \
+    openssl pkcs12 -export -passout "$PFXPASS" \
 	-out "$PKCS12FN" \
 	-name "$CN til: $(echo "$SSCERT" | openssl x509 -noout -enddate |
-                  sed -n 's/.*= *//p')" \
+			  sed -n 's/.*= *//p')" \
 	-inkey <(echo "$SSKEY") \
 	-in <(echo "$SSCERT") \
 	${SIGNPEM:+-certfile <(echo "$SIGNPEM" | openssl x509) } \
@@ -747,6 +748,8 @@ outp() {
 outk() {
     if [ "$KEYPASS" != "" ]
     then echo "$SSKEY" | openssl pkey ${KEYPASS:+$CIPHER -passout "$KEYPASS"}
+	 echo 'Public key for above key is:'
+         echo "$SSKEY" | openssl pkey -pubout
     else echo "$SSKEY"
     fi
 }
