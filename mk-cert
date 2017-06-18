@@ -481,14 +481,17 @@ mk_rand() {
 
 [ "$MAKECSR" = yes ] && X509='' || X509=-x509
 
-[ "$NOPROMPT" = yes ] && {
+if [ "$NOPROMPT" = yes ]
+then
     [ "$SUBJTYPE" = '' -o "$SUBJTYPE" = conf -a "$SUBJ_ID" = 0 ] && {
 	if [ "$ADDDNQ" = yes ]
 	then SUBJTYPE=conf
 	else SUBJTYPE=arg ; SUBJ=/
 	fi
     }
-}
+elif [ "$SUBJTYPE" = '' ]
+then ADDDNQ=yes
+fi
 
 [ "$ADDDNQ" = yes ] && {
     [ "$SERIAL" = "" ] && DNQ="$(mk_rand 8)" || DNQ="$SERIAL"
