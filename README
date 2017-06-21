@@ -97,6 +97,7 @@ Usage: ./mk-cert [Common Name] [arguments]
     -dsa
     -dsa=1024
 	Generate DSA private keys.
+	NB: This also makes the default digest SHA1.
 
     -list-curves
     -show-curves
@@ -176,14 +177,17 @@ Version 3 certificate extensions.
 	Make a san from the common name even if there are no others.
 
     -v3ca, -ca
-	Add V3 extensions for a CA certificate.
+	Add normal V3 extensions for a CA certificate.
+
+    -v3basicca
+	Add only the basic extension for a CA certificate.
 
     -v3crlsign, -crlsign, -v3crl
 	For a V3 CA certificate, make sure it's allowed to sign CRLs.
 
     -v3lastca, -lastca
-	For a V3 CA certificate add the 'pathlen:0' to prevent certificates
-	that this CA signs being CAs.
+	Make a V3 CA certificate with the 'pathlen:0' option to prevent
+	certificates that this CA signs being CAs.
 
     -v3usr, -usr, -user
 	Prevent this V3 certificate begin used as a CA.

@@ -2,370 +2,404 @@
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 set -e
 
-export OPENSSL_CONF=/dev/null
-FN=
-KFN=
-CRLFN=
-CAFN=
-SERIAL=
-CERT_DAYS=
-DEFAULT_DAYS=7304
+main() {
+    init_vars
+    decode_args "$@"
+    check_args
 
-V3=no
-V3HEAD=
-SANLIST=
-V3SAN=
-V3OPTS=
-V3LIST=
-V3EXTRAS=
-V3CERTONLY=
-V3CA=
-V3CRL=
-V3CAPATH=
-V3CLIENT=no
-V3SERVER=no
-V3EMAIL=no
-V3CRITICAL=no
-V3NS=no
-V3ENS=
+    [ "$KFN" != '' -a "$KFN" != /dev/null -a -s "$KFN" ] &&
+	{ echo "ERROR: File $KFN already exists" ; exit 1 ; }
 
-NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
-NOECPARAM="$(openssl no-ecparam >/dev/null 2>&1 && echo yes || echo no)"
-NOSETSERIAL=
-KEYPASS=
-PFXPASS="pass:"
-WANTCSR=no
-MAKECSR=no
-ADDDNQ=no
-SHOWCSR=no
-SHOWCONF=
-CSRTEXT=
-SIGNPFX=
-SIGNPEM=
-SINGLEUSECA=
-PKCS12FN=
-POLICYTEXT=
-POLICYOID=
-ONEKEY=
-NOPROMPT=
+    [ "$KFN" != '' -a -s "$FN" ] &&
+	{ echo "ERROR: File $FN already exists" ; exit 1 ; }
 
-CIPHER=-aes128
-DGST=
+    build_v3_extensions
+    apply_options
+    create_main_cert	# or csr
+    create_suca_pem
+    sign_created_csr
 
-SUBJTYPE=
-SUBJ=
-CASUBJ=
+    create_crl_file
+    create_pfx_file
 
-SUBJ_ID=0
-SUBJ_C=
-SUBJ_ST=
-SUBJ_L=
-SUBJ_O=
-SUBJ_DC=
-SUBJ_OU=
-SUBJ_CN=
-SUBJ_DNQ=
-CRLURI=
-CRLURI_ID=0
+    [ "$KFN" = '' ] && umask 077
+    if [ "$FN" != '' ] ; then outp > "$FN" ; else outp ; fi
 
-# This is my default for making a key file.
-if [ "$NOECPARAM" = no ] ; then
-    mkkey() { openssl ecparam -name prime256v1 -genkey -noout ;}
-    mktmpkey() { openssl ecparam -name prime256v1 -genkey -noout ;}
-else
-    mkkey() { openssl genrsa ; }
-    mktmpkey() { openssl genrsa 512 2>/dev/null ; }
-fi
-# See also:
-# mkkey() { openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) ;}
+    exit 0
+}
 
-# Faketime prefix
-ft() { "$@" ; }
-
+init_vars() {
 NL='
 '
-X509SECT=req_x509
-V3INIT="x509_extensions = $X509SECT
-req_extensions = $X509SECT
-[ $X509SECT ]
-"
+    export OPENSSL_CONF=/dev/null
+    FN=
+    KFN=
+    CRLFN=
+    CAFN=
+    SERIAL=
+    CERT_DAYS=
+    DEFAULT_DAYS=7304
 
-UTF8=
-if [ "$(locale charmap 2>/dev/null)" = UTF-8 ]
-then
-    if openssl req -help 2>&1 | grep -q -e -utf8
-    then UTF8=-utf8
+    V3=no
+    V3HEAD=
+    SANLIST=
+    V3SAN=
+    V3OPTS=
+    V3LIST=
+    V3EXTRAS=
+    V3CERTONLY=
+    V3CA=
+    V3CRL=
+    V3CAPATH=
+    V3CLIENT=no
+    V3SERVER=no
+    V3EMAIL=no
+    V3CRITICAL=no
+    V3NS=no
+    V3ENS=
+
+    NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
+    NOECPARAM="$(openssl no-ecparam >/dev/null 2>&1 && echo yes || echo no)"
+    NOSETSERIAL=
+    KEYPASS=
+    PFXPASS="pass:"
+    WANTCSR=no
+    MAKECSR=no
+    ADDDNQ=no
+    SHOWCSR=no
+    SHOWCONF=
+    CSRTEXT=
+    SIGNPFX=
+    SIGNPEM=
+    SINGLEUSECA=
+    PKCS12FN=
+    POLICYTEXT=
+    POLICYOID=
+    ONEKEY=
+    NOPROMPT=
+
+    CIPHER=-aes128
+    DGST=
+
+    SUBJTYPE=
+    SUBJ=
+    CASUBJ=
+
+    SUBJ_ID=0
+    SUBJ_C=
+    SUBJ_ST=
+    SUBJ_L=
+    SUBJ_O=
+    SUBJ_DC=
+    SUBJ_OU=
+    SUBJ_CN=
+    SUBJ_DNQ=
+    CRLURI=
+    CRLURI_ID=0
+
+    # Faketime prefix
+    ft() { "$@" ; }
+
+    # This is my default for making a key file.
+    if [ "$NOECPARAM" = no ] ; then
+	mkkey() { openssl ecparam -name prime256v1 -genkey -noout ;}
+	mktmpkey() { openssl ecparam -name prime256v1 -genkey -noout ;}
+    else
+	mkkey() { openssl genrsa ; }
+	mktmpkey() { openssl genrsa 512 2>/dev/null ; }
     fi
-fi
+    # See also:
+    # mkkey() { openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) ;}
 
-for ar
-do  case "$ar" in
+    X509SECT=req_x509
+    V3INIT="x509_extensions = $X509SECT
+    req_extensions = $X509SECT
+    [ $X509SECT ]
+    "
 
-    -showconf ) SHOWCONF=yes ;;
-
-    -days[=:]* ) CERT_DAYS="${ar#*[=:]}" ;;
-    -alldays )
-	if faketime -h 2>/dev/null | grep -qi libfaketime
-	then ft() { faketime -f '1999-01-01 12:00:00' "$@" ; }
+    UTF8=
+    if [ "$(locale charmap 2>/dev/null)" = UTF-8 ]
+    then
+	if openssl req -help 2>&1 | grep -q -e -utf8
+	then UTF8=-utf8
 	fi
+    fi
+}
 
-	CERT_DAYS=$((2932896 - $(ft date +%s)/86400))
-	;;
+decode_args() {
+    for ar
+    do  case "$ar" in
 
-    -out[=:]* ) FN="${ar#*[=:]}" ;;
-    -keyout[=:]* ) KFN="${ar#*[=:]}" ;;
-    -crlout[=:]* ) CRLFN="${ar#*[=:]}" ; V3CRL=yes ;;
-    -caout[=:]* ) CAFN="${ar#*[=:]}" ;;
+	-showconf ) SHOWCONF=yes ;;
 
-    -ser[=:]??*|-serial[=:]??* ) SERIAL="${ar#*[=:]}" ;;
-    -dnq ) ADDDNQ=yes ;;
-    -dnq[=:]* )
-	SUBJTYPE="${SUBJTYPE:-conf}"
-	if [ "$SUBJTYPE" != "conf" ] ; then
-	    echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
-	fi
+	-days[=:]* ) CERT_DAYS="${ar#*[=:]}" ;;
+	-alldays )
+	    if faketime -h 2>/dev/null | grep -qi libfaketime
+	    then ft() { faketime -f '1999-01-01 12:00:00' "$@" ; }
+	    fi
 
-	SUBJ_ID=$((SUBJ_ID+1))
-	SUBJ_DNQ="$SUBJ_DNQ${NL}$SUBJ_ID.dnQualifier=${ar#*[=:]}"
-	;;
-
-    -rsa[=:]* ) eval "mkkey() { openssl genrsa '${ar#*[=:]}' ; }" ;;
-    -dsa[=:]* ) eval "mkkey() { openssl dsaparam -noout -genkey '${ar#*[=:]}' ; }" ;;
-    -ec[=:]* ) 
-	    ar="${ar#*[=:]}:" ; curve="${ar%%:*}"
-	    ar="${ar#*:}:" ; param="${ar%%:*}"
-	    ar="${ar#*:}:" ; noseed="${ar%%:*}"
-	    eval "mkkey() { openssl ecparam -name '$curve' ${param:+-param_enc $param} ${noseed:+-no_seed} -genkey -noout ; }"
+	    CERT_DAYS=$((2932896 - $(ft date +%s)/86400))
 	    ;;
 
-    -dsa )
-	# FIPS used to force 1024, so lots of hardware and protocols did too.
-	echo >&2 WARNING: Making weak 1024bit DSA key.
-	mkkey() { openssl dsaparam -noout -genkey 1024; }
-	DGST="${DGST:--sha1}"
-	;;
+	-out[=:]* ) FN="${ar#*[=:]}" ;;
+	-keyout[=:]* ) KFN="${ar#*[=:]}" ;;
+	-crlout[=:]* ) CRLFN="${ar#*[=:]}" ; V3CRL=yes ;;
+	-caout[=:]* ) CAFN="${ar#*[=:]}" ;;
 
-    -rsa ) mkkey() { openssl genrsa ; } ;;
-    -ec )  mkkey() { openssl ecparam -name prime256v1 -genkey -noout ; } ;;
+	-ser[=:]??*|-serial[=:]??* ) SERIAL="${ar#*[=:]}" ;;
+	-dnq ) ADDDNQ=yes ;;
+	-dnq[=:]* )
+	    SUBJTYPE="${SUBJTYPE:-conf}"
+	    if [ "$SUBJTYPE" != "conf" ] ; then
+		echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
+	    fi
 
-    -list[-_]curves|-show[_-]curves )
-	openssl ecparam -list_curves ; exit ;;
+	    SUBJ_ID=$((SUBJ_ID+1))
+	    SUBJ_DNQ="$SUBJ_DNQ${NL}$SUBJ_ID.dnQualifier=${ar#*[=:]}"
+	    ;;
 
-    -keyfile[=:]* )
-	eval "mkkey() { cat < '${ar#*[=:]}' ; }"
-	[ "$KFN" = "" ] && KFN=/dev/null
-	;;
+	-rsa[=:]* ) eval "mkkey() { openssl genrsa '${ar#*[=:]}' ; }" ;;
+	-dsa[=:]* ) eval "mkkey() { openssl dsaparam -noout -genkey '${ar#*[=:]}' ; }" ;;
+	-ec[=:]* ) 
+		ar="${ar#*[=:]}:" ; curve="${ar%%:*}"
+		ar="${ar#*:}:" ; param="${ar%%:*}"
+		ar="${ar#*:}:" ; noseed="${ar%%:*}"
+		eval "mkkey() { openssl ecparam -name '$curve' ${param:+-param_enc $param} ${noseed:+-no_seed} -genkey -noout ; }"
+		;;
 
-    -csr ) WANTCSR=yes ; MAKECSR=yes ;;
-    -csrin[=:]* )
-	eval "mkkey() { :; }"
-	CSRFN="${ar#*[=:]}"
-	KFN=/dev/null
-	;;
-    -showcsr ) SHOWCSR=yes ;;
+	-dsa )
+	    # FIPS used to force 1024, so lots of hardware and protocols did too.
+	    DGST="${DGST:--sha1}"
+	    mkkey() { openssl dsaparam -noout -genkey 1024; }
+	    echo >&2 "WARNING: Making weak 1024bit DSA key with ${DGST#-} hash."
+	    ;;
 
-    -sign[=:]*.pfx )
-	SIGNPFX="${ar#*[=:]}"
-	MAKECSR=yes
-	;;
+	-rsa ) mkkey() { openssl genrsa ; } ;;
+	-ec )  mkkey() { openssl ecparam -name prime256v1 -genkey -noout ; } ;;
 
-    -sign[=:]* )
-	SIGNPEM="$(cat "${ar#*[=:]}")"
-	MAKECSR=yes
-	;;
+	-list[-_]curves|-show[_-]curves )
+	    openssl ecparam -list_curves ; exit ;;
 
-    -singleuseca|-suca ) MAKECSR=yes ; SINGLEUSECA=yes ;;
-    -onekeyca ) ONEKEY=yes ; MAKECSR=yes ; SINGLEUSECA=yes ;;
+	-keyfile[=:]* )
+	    eval "mkkey() { cat < '${ar#*[=:]}' ; }"
+	    [ "$KFN" = "" ] && KFN=/dev/null
+	    ;;
 
-    -pkcs12[=:]*|-pfx[=:]* ) PKCS12FN="${ar#*[=:]}" ;;
+	-csr ) WANTCSR=yes ; MAKECSR=yes ;;
+	-csrin[=:]* )
+	    eval "mkkey() { :; }"
+	    CSRFN="${ar#*[=:]}"
+	    KFN=/dev/null
+	    ;;
+	-showcsr ) SHOWCSR=yes ;;
 
-    -pass[=:]*:* ) KEYPASS="${ar#*[=:]}" ; PFXPASS="$KEYPASS" ;;
-    -pass[=:]* ) KEYPASS="pass:${ar#*[=:]}" ; PFXPASS="$KEYPASS" ;;
+	-sign[=:]*.pfx )
+	    SIGNPFX="${ar#*[=:]}"
+	    MAKECSR=yes
+	    ;;
 
-    -ripemd160|-sha|-sha1|-sha224|-sha256|-sha384|-sha512|-whirlpool)
-	DGST=$ar ;;
+	-sign[=:]* )
+	    SIGNPEM="$(cat "${ar#*[=:]}")"
+	    MAKECSR=yes
+	    ;;
 
-    -dgst[=:]* ) DGST="${ar#*[=:]}" ; DGST="-${DGST%-}" ;;
-    -cipher[=:]* ) CIPHER="${ar#*[=:]}" ; CIPHER="-${CIPHER%-}" ;;
-    -openssl[:=]* ) eval "openssl() { command '${ar#*[=:]}' \"\$@\" ; }" ;;
+	-singleuseca|-suca ) MAKECSR=yes ; SINGLEUSECA=yes ;;
+	-onekeyca ) ONEKEY=yes ; MAKECSR=yes ; SINGLEUSECA=yes ;;
 
-    -v3 ) V3=yes ;;
-    -v3ca|-ca ) V3=yes ; V3CA=yes ;;
-    -v3crlsign|-crlsign|-v3crl ) V3=yes ; V3CRL=yes ;;
-    -v3lastca|-lastca ) V3=yes ; V3CA=yes ; V3CAPATH=0 ;;
-    -v3usr|-usr|-user ) V3=yes ; V3CA=no ;;
-    -v3server|-server ) V3=yes ; V3SERVER=yes ;;
-    -v3client|-client ) V3=yes ; V3CLIENT=yes ;;
-    -v3email|-email ) V3=yes ; V3EMAIL=yes ;;
-    -v3crit|-v3critical|-critical )
-	V3=yes ; V3CRITICAL=yes ; V3CA=${V3CA:-no}
-	;;
+	-pkcs12[=:]*|-pfx[=:]* ) PKCS12FN="${ar#*[=:]}" ;;
 
-    -v3basicca )
+	-pass[=:]*:* ) KEYPASS="${ar#*[=:]}" ; PFXPASS="$KEYPASS" ;;
+	-pass[=:]* ) KEYPASS="pass:${ar#*[=:]}" ; PFXPASS="$KEYPASS" ;;
+
+	-ripemd160|-sha|-sha1|-sha224|-sha256|-sha384|-sha512|-whirlpool)
+	    DGST=$ar ;;
+
+	-dgst[=:]* ) DGST="${ar#*[=:]}" ; DGST="-${DGST%-}" ;;
+	-cipher[=:]* ) CIPHER="${ar#*[=:]}" ; CIPHER="-${CIPHER%-}" ;;
+	-openssl[:=]* ) eval "openssl() { command '${ar#*[=:]}' \"\$@\" ; }" ;;
+
+	-v3 ) V3=yes ;;
+	-v3ca|-ca ) V3=yes ; V3CA=yes ;;
+	-v3crlsign|-crlsign|-v3crl ) V3=yes ; V3CRL=yes ;;
+	-v3lastca|-lastca ) V3=yes ; V3CA=yes ; V3CAPATH=0 ;;
+	-v3usr|-usr|-user ) V3=yes ; V3CA=no ;;
+	-v3server|-server ) V3=yes ; V3SERVER=yes ;;
+	-v3client|-client ) V3=yes ; V3CLIENT=yes ;;
+	-v3email|-email ) V3=yes ; V3EMAIL=yes ;;
+	-v3crit|-v3critical|-critical )
+	    V3=yes ; V3CRITICAL=yes ; V3CA=${V3CA:-no}
+	    ;;
+
+	-v3basicca )
+		V3=yes
+		V3LIST="$V3LIST${NL}basicConstraints = CA:TRUE"
+		;;
+
+	-v3policytext[=:]*|-policytext[=:]*|-poltext[=:]* )
 	    V3=yes
-	    V3LIST="$V3LIST${NL}basicConstraints = CA:TRUE"
+	    POLICYTEXT="$(cat "${ar#*[=:]}")"
 	    ;;
 
-    -v3policytext[=:]*|-policytext[=:]*|-poltext[=:]* )
-	V3=yes
-	POLICYTEXT="$(cat "${ar#*[=:]}")"
-	;;
-
-    -v3policy[=:]*|-policy[=:]* )
-	V3=yes
-	POLICYOID="$POLICYOID,${ar#*[=:]}"
-	;;
-
-    -v3ns|-ns ) V3=yes ; V3NS=yes ;;
-    -v3ns[=:]*|-ns[=:]* )
-	V3=yes
-	V3NS=yes
-	V3ENS="${ar#*[=:]}"
-	;;
-
-    -v3[=:]* )
+	-v3policy[=:]*|-policy[=:]* )
 	    V3=yes
-	    V3LIST="$V3LIST$NL${ar#*[=:]}"
+	    POLICYOID="$POLICYOID,${ar#*[=:]}"
 	    ;;
 
-    -v3xt[=:]*|-xt[=:]* )
+	-v3ns|-ns ) V3=yes ; V3NS=yes ;;
+	-v3ns[=:]*|-ns[=:]* )
 	    V3=yes
-	    V3EXTRAS="$V3EXTRAS$NL${ar#*[=:]}$NL"
+	    V3NS=yes
+	    V3ENS="${ar#*[=:]}"
 	    ;;
 
-    -v3san[=:]*|-san[=:]* )
-	    V3=yes ; V3SAN=yes
-	    sanlst="${ar#*[=:]}"
-	    for san in ${sanlst//,/ }
-	    do  [ "$SANLIST" != "" ] && SANLIST="${SANLIST%,},"
-		[ "$san" = '' -o "$san" = "$CN" ] && continue
-		case "$san" in
-		[0-9]*.*.*.*[0-9] ) SANLIST="${SANLIST}IP:$san" ;;
-		[0-9a-fA-F]*:*:*[0-9a-fA-F]|::*[0-9a-fA-F] )
-		    SANLIST="${SANLIST}IP:$san" ;;
-		*@* ) SANLIST="${SANLIST}email:$san" ;;
-		* ) SANLIST="${SANLIST}DNS:$san" ;;
-		esac
-	    done
-	    SANLIST="${SANLIST%,}"
+	-v3[=:]* )
+		V3=yes
+		V3LIST="$V3LIST$NL${ar#*[=:]}"
+		;;
+
+	-v3xt[=:]*|-xt[=:]* )
+		V3=yes
+		V3EXTRAS="$V3EXTRAS$NL${ar#*[=:]}$NL"
+		;;
+
+	-v3san[=:]*|-san[=:]* )
+		V3=yes ; V3SAN=yes
+		sanlst="${ar#*[=:]}"
+		for san in ${sanlst//,/ }
+		do  [ "$SANLIST" != "" ] && SANLIST="${SANLIST%,},"
+		    [ "$san" = '' -o "$san" = "$CN" ] && continue
+		    case "$san" in
+		    [0-9]*.*.*.*[0-9] ) SANLIST="${SANLIST}IP:$san" ;;
+		    [0-9a-fA-F]*:*:*[0-9a-fA-F]|::*[0-9a-fA-F] )
+			SANLIST="${SANLIST}IP:$san" ;;
+		    *@* ) SANLIST="${SANLIST}email:$san" ;;
+		    * ) SANLIST="${SANLIST}DNS:$san" ;;
+		    esac
+		done
+		SANLIST="${SANLIST%,}"
+		;;
+
+	-v3san|-san ) V3=yes ; V3SAN=yes ;;
+
+	-v3crluri[=:]*|-crluri[=:]* )
+	    V3=yes
+	    CRLURI_ID=$((CRLURI_ID+1))
+	    CRLURI="$CRLURI${NL}URI.$CRLURI_ID=${ar#*[=:]}"
 	    ;;
 
-    -v3san|-san ) V3=yes ; V3SAN=yes ;;
-
-    -v3crluri[=:]*|-crluri[=:]* )
-	V3=yes
-	CRLURI_ID=$((CRLURI_ID+1))
-	CRLURI="$CRLURI${NL}URI.$CRLURI_ID=${ar#*[=:]}"
-	;;
-
-    /*=* )
-	if [ "$SUBJTYPE" != "" ] ; then
-	    echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
-	fi
-	SUBJ="$ar"
-	SUBJTYPE=arg
-	;;
-
-    -no-prompt ) NOPROMPT=yes ;;
-
-    -subj[-_]c[=:]*|-subj[-_]st[=:]*|-subj[-_]l[=:]*|-subj[-_]o[=:]*|\
-    -subj[-_]dc[=:]*|-subj[-_]ou[=:]*|-subj[-_]cn[=:]* )
-	SUBJTYPE="${SUBJTYPE:-conf}"
-	if [ "$SUBJTYPE" != "conf" ] ; then
-	    echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
-	fi
-
-	V="${ar#??????}"
-	C="${V/=*/}"
-	# shellcheck disable=SC2018,SC2019
-	C="$(echo "$C" | tr 'a-z' 'A-Z')"
-
-	SUBJ_ID=$((SUBJ_ID+1))
-	eval "SUBJ_$C=\"\$SUBJ_$C\${NL}\$SUBJ_ID.$C=\${ar#*[=:]}\""
-
-	[ "$C" = CN -a "$CN" = '' ] &&
-	    CN="${ar#*[=:]}"
-	;;
-
-    -casubj[=:]* )
-	V="${ar#*[=:]}"
-	case "$V" in
 	/*=* )
-	    CASUBJ="${CASUBJ%/}${V%/}/"
+	    if [ "$SUBJTYPE" != "" ] ; then
+		echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
+	    fi
+	    SUBJ="$ar"
+	    SUBJTYPE=arg
 	    ;;
-	* ) if [ "$CASUBJ" = '' ]
-	    then CASUBJ="/CN=$V/"
-	    else CASUBJ="/OU=$V$CASUBJ"
+
+	-no-prompt ) NOPROMPT=yes ;;
+
+	-subj[-_]c[=:]*|-subj[-_]st[=:]*|-subj[-_]l[=:]*|-subj[-_]o[=:]*|\
+	-subj[-_]dc[=:]*|-subj[-_]ou[=:]*|-subj[-_]cn[=:]* )
+	    SUBJTYPE="${SUBJTYPE:-conf}"
+	    if [ "$SUBJTYPE" != "conf" ] ; then
+		echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
+	    fi
+
+	    V="${ar#??????}"
+	    C="${V/=*/}"
+	    # shellcheck disable=SC2018,SC2019
+	    C="$(echo "$C" | tr 'a-z' 'A-Z')"
+
+	    SUBJ_ID=$((SUBJ_ID+1))
+	    eval "SUBJ_$C=\"\$SUBJ_$C\${NL}\$SUBJ_ID.$C=\${ar#*[=:]}\""
+
+	    [ "$C" = CN -a "$CN" = '' ] &&
+		CN="${ar#*[=:]}"
+	    ;;
+
+	-casubj[=:]* )
+	    V="${ar#*[=:]}"
+	    case "$V" in
+	    /*=* )
+		CASUBJ="${CASUBJ%/}${V%/}/"
+		;;
+	    * ) if [ "$CASUBJ" = '' ]
+		then CASUBJ="/CN=$V/"
+		else CASUBJ="/OU=$V$CASUBJ"
+		fi
+		;;
+	    esac
+	    ;;
+
+	-*) echo >&2 "Unknown option: $ar" ; exit 1 ;;
+
+	* ) SUBJTYPE="${SUBJTYPE:-conf}"
+	    if [ "$SUBJTYPE" != "conf" ] ; then
+		echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
+	    fi
+
+	    if [ "$ar" = "" ]
+	    then SUBJ_CN="$SUBJ_CN${NL}"
+		 NOPROMPT=yes
+	    elif [ "$SUBJ_CN" = "" ]
+	    then SUBJ_ID=$((SUBJ_ID+1))
+		 SUBJ_CN="$SUBJ_CN${NL}${SUBJ_ID}.CN=$ar"
+		 CN="$ar"
+	    else SUBJ_ID=$((SUBJ_ID+1))
+		 SUBJ_OU="$SUBJ_OU${NL}${SUBJ_ID}.OU=$ar"
 	    fi
 	    ;;
 	esac
-	;;
-
-    -*) echo >&2 "Unknown option: $ar" ; exit 1 ;;
-
-    * ) SUBJTYPE="${SUBJTYPE:-conf}"
-	if [ "$SUBJTYPE" != "conf" ] ; then
-	    echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
-	fi
-
-	if [ "$ar" = "" ]
-	then SUBJ_CN="$SUBJ_CN${NL}"
-	     NOPROMPT=yes
-	elif [ "$SUBJ_CN" = "" ]
-	then SUBJ_ID=$((SUBJ_ID+1))
-	     SUBJ_CN="$SUBJ_CN${NL}${SUBJ_ID}.CN=$ar"
-	     CN="$ar"
-	else SUBJ_ID=$((SUBJ_ID+1))
-	     SUBJ_OU="$SUBJ_OU${NL}${SUBJ_ID}.OU=$ar"
-	fi
-	;;
-    esac
-done
-
-[ "$WANTCSR" = yes -a  "$SINGLEUSECA" = yes ] && {
-    echo >&2 "Options -csr and -singleuseca conflict"
-    exit 1
+    done
 }
 
-# Extract a (passworded) pfx file.
-[ "$SIGNPFX" != '' ] && SIGNPEM="$(openssl pkcs12 -nodes -in "$SIGNPFX")"
+check_args() {
+    [ "$WANTCSR" = yes -a  "$SINGLEUSECA" = yes ] && {
+	echo >&2 "Options -csr and -singleuseca conflict"
+	exit 1
+    }
 
-# Put the commonName at the start of the san list
-[ "$V3SAN" = yes ] && {
-    if [ "$CN" != "" ]
-    then SANLIST="subjectAltName=DNS:$CN,$SANLIST"
-    elif [ "$SANLIST" != '' ]
-    then SANLIST="subjectAltName=$SANLIST"
+    # Extract a (passworded) pfx file.
+    [ "$SIGNPFX" != '' ] && SIGNPEM="$(openssl pkcs12 -nodes -in "$SIGNPFX")"
+
+    # Put the commonName at the start of the san list
+    [ "$V3SAN" = yes ] && {
+	if [ "$CN" != "" ]
+	then SANLIST="subjectAltName=DNS:$CN,$SANLIST"
+	elif [ "$SANLIST" != '' ]
+	then SANLIST="subjectAltName=$SANLIST"
+	fi
+	SANLIST="${SANLIST%,}"
+    }
+
+    # Problems?
+    if ! openssl x509 -help 2>&1 | grep -qie -set_serial
+    then NOSETSERIAL=yes
     fi
-    SANLIST="${SANLIST%,}"
+
+    if openssl req -help 2>&1 | grep -qie -subject
+    then REQSUBJECT=-subject
+    else REQSUBJECT=-text
+    fi
 }
 
-# Problems?
-if ! openssl x509 -help 2>&1 | grep -qie -set_serial
-then NOSETSERIAL=yes
-fi
+build_v3_extensions() {
+    # Build some V3 certificate extension sets.
+    # Like the certificate extensions themselves this is very complex.
+    # Your best option is probably:
+    #   No option:  A v1 certificate, usually perfectly acceptable.
+    #   -v3         An bare v3 certificate; eg: a strict verifiable self signed.
+    #   -v3ca       A v3 CA certificate
+    #   -v3usr      A v3 certificate labeled as NOT a CA.
+    #   -server     A TLS (eg web) server
+    #   -client     A TLS client, eg a client certificate for a web server.
+    #
+    # This ignores the worst of the complexity, most of which was designed to
+    # allow CA's to charge more for "special" certificates.
+    #
+    # NOTE: Using the SAN fields forces this to be a v3 certificate.
 
-if openssl req -help 2>&1 | grep -qie -subject
-then REQSUBJECT=-subject
-else REQSUBJECT=-text
-fi
+    [ "$V3" != yes ] && return 0
 
-# Build some V3 certificate extension sets.
-# Like the certificate extensions themselves this is very complex.
-# Your best option is probably:
-#   No option:  A v1 certificate, usually perfectly acceptable.
-#   -v3         An bare v3 certificate; eg: a strict verifiable self signed.
-#   -v3ca       A v3 CA certificate
-#   -v3usr      A v3 certificate labeled as NOT a CA.
-#   -server     A TLS (eg web) server
-#   -client     A TLS client, eg a client certificate for a web server.
-#
-# This ignores the worst of the complexity, most of which was designed to
-# allow CA's to charge more for "special" certificates.
-#
-# NOTE: Using the SAN fields forces this to be a v3 certificate.
-
-[ "$V3" = yes ] && {
     V3HEAD="$V3INIT"
     V3XKU=; V3EKU=
     [ "$V3CRITICAL" != yes ] && CR='' || CR=critical,
@@ -464,13 +498,9 @@ fi
 	V3EXTRAS="$V3EXTRAS${NL}$(build_poltext)$NL"
 	unset build_poltext
     }
+
+    return 0
 }
-
-[ "$KFN" != '' -a "$KFN" != /dev/null -a -s "$KFN" ] &&
-    { echo ERROR: File $KFN already exists ; exit 1 ; }
-
-[ "$KFN" != '' -a -s "$FN" ] &&
-    { echo ERROR: File $FN already exists ; exit 1 ; }
 
 mk_rand() {
     RH="$(openssl rand -hex "$1" 2>/dev/null ||:)"
@@ -479,30 +509,34 @@ mk_rand() {
     echo "$RH"
 }
 
-[ "$MAKECSR" = yes ] && X509='' || X509=-x509
+apply_options() {
+    [ "$MAKECSR" = yes ] && X509='' || X509=-x509
 
-if [ "$NOPROMPT" = yes ]
-then
-    [ "$SUBJTYPE" = '' -o "$SUBJTYPE" = conf -a "$SUBJ_ID" = 0 ] && {
-	if [ "$ADDDNQ" = yes ]
-	then SUBJTYPE=conf
-	else SUBJTYPE=arg ; SUBJ=/
-	fi
+    if [ "$NOPROMPT" = yes ]
+    then
+	[ "$SUBJTYPE" = '' -o "$SUBJTYPE" = conf -a "$SUBJ_ID" = 0 ] && {
+	    if [ "$ADDDNQ" = yes ]
+	    then SUBJTYPE=conf
+	    else SUBJTYPE=arg ; SUBJ=/
+	    fi
+	}
+    elif [ "$SUBJTYPE" = '' ]
+    then ADDDNQ=yes
+    fi
+
+    [ "$ADDDNQ" = yes ] && {
+	[ "$SERIAL" = "" ] && DNQ="$(mk_rand 8)" || DNQ="$SERIAL"
+
+	[ "$SERIAL" = "" -a "$NOSETSERIAL" != yes ] &&
+	    SERIAL="$DNQ"
+
+	case "$SUBJTYPE" in
+	arg ) SUBJ="${SUBJ%/}/dnQualifier=$DNQ/" ;;
+	conf ) SUBJ_DNQ="$SUBJ_DNQ${NL}dnQualifier=$DNQ" ;;
+	esac
     }
-elif [ "$SUBJTYPE" = '' ]
-then ADDDNQ=yes
-fi
 
-[ "$ADDDNQ" = yes ] && {
-    [ "$SERIAL" = "" ] && DNQ="$(mk_rand 8)" || DNQ="$SERIAL"
-
-    [ "$SERIAL" = "" -a "$NOSETSERIAL" != yes ] &&
-	SERIAL="$DNQ"
-
-    case "$SUBJTYPE" in
-    arg ) SUBJ="${SUBJ%/}/dnQualifier=$DNQ/" ;;
-    conf ) SUBJ_DNQ="$SUBJ_DNQ${NL}dnQualifier=$DNQ" ;;
-    esac
+    return 0
 }
 
 mkreqconf() {
@@ -548,23 +582,29 @@ mkreqconf() {
     echo '#END'
 }
 
-SSKEY="$(mkkey)"
-if [ "$CSRFN" != "" ]
-then SSCERT="$(cat "$CSRFN")"
-else
-    [ "$SHOWCONF" = yes ] && mkreqconf $MAKECSR $WANTCSR
+create_main_cert() {
+    SSKEY="$(mkkey)"
+    if [ "$CSRFN" != "" ]
+    then SSCERT="$(cat "$CSRFN")"
+    else
+	[ "$SHOWCONF" = yes ] && mkreqconf $MAKECSR $WANTCSR
 
-    SSCERT="$(ft openssl req -new $UTF8 $X509 $DGST \
-	-days "${CERT_DAYS:-$DEFAULT_DAYS}" \
-	${SERIAL:+-set_serial 0x"$SERIAL"} \
-	${SUBJ:+-subj "$SUBJ"} \
-	-key <(echo "$SSKEY") \
-	-config <(mkreqconf $MAKECSR $WANTCSR) )"
+	SSCERT="$(ft openssl req -new $UTF8 $X509 $DGST \
+	    -days "${CERT_DAYS:-$DEFAULT_DAYS}" \
+	    ${SERIAL:+-set_serial 0x"$SERIAL"} \
+	    ${SUBJ:+-subj "$SUBJ"} \
+	    -key <(echo "$SSKEY") \
+	    -config <(mkreqconf $MAKECSR $WANTCSR) )"
 
-    [ "$MAKECSR" = yes ] && CSRTEXT="$SSCERT"
-fi
+	[ "$MAKECSR" = yes ] && CSRTEXT="$SSCERT"
+    fi
 
-[ "$SINGLEUSECA" = yes -a "$SIGNPEM" = '' ] && {
+    return 0
+}
+
+create_suca_pem() {
+    [ "$SINGLEUSECA" = yes -a "$SIGNPEM" = '' ] || return 0
+
     mksucareqconf() {
 	echo "# Configure file for a private CA"
 	echo '[req]'
@@ -622,9 +662,14 @@ fi
 	    -key <(echo "$CAKEY") \
 	    -config <(mksucareqconf)
 	echo "$CAKEY" )"
+
+    unset mksucareqconf
 }
 
-[ "$SIGNPEM" != "" ] && {
+sign_created_csr() {
+
+    [ "$SIGNPEM" = "" ] && return 0
+
     [ "$SERIAL" = "" ] && SERIAL="$(mk_rand 8)"
 
     # Default to days left on CA certificate
@@ -683,9 +728,13 @@ fi
 	    ${V3HEAD:+-extfile <(mkreqconf) -extensions "$X509SECT"} )"
 
     [ "$SERIALFN" != '' ] && rm "$SERIALFN" # Sigh
+
+    return 0
 }
 
-[ "$CRLFN" != "" ] && {
+create_crl_file() {
+    [ "$CRLFN" = "" ] && return 0
+
     [ "$WANTCSR" = yes ] && {
 	echo >&2 "ERROR: Cannot make a CRL for a CSR"
 	exit 1
@@ -721,9 +770,14 @@ fi
 	-out "$CRLFN"
 
     rm -fr "$TMP"
+
+    unset mkcacrlconf
+    return 0
 }
 
-[ "$PKCS12FN" != "" ] && {
+create_pfx_file() {
+    [ "$PKCS12FN" = "" ] && return 0
+
     [ "$WANTCSR" = yes ] && { echo >&2 "PKCS12 files can't hold csr's"; exit 1;}
     # shellcheck disable=SC2086
     openssl pkcs12 -export -passout "$PFXPASS" \
@@ -737,6 +791,8 @@ fi
 		-subject -nameopt multiline | sed -n 's/ *commonName *= //p'
 		) CA til: $(echo "$SIGNPEM" | openssl x509 -noout -enddate |
 		  sed -n 's/.*= *//p' )"}
+
+    return 0
 }
 
 outp() {
@@ -773,5 +829,4 @@ outk() {
     fi
 }
 
-[ "$KFN" = '' ] && umask 077
-if [ "$FN" != '' ] ; then outp > "$FN" ; else outp ; fi
+main "$@"
