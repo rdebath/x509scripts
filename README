@@ -225,6 +225,9 @@ Version 3 certificate extensions.
 	The first one of these sets the OID for the '-poltext' option if
 	present. Additional '-policy' arguments add extra policy extensions.
 
+    -v3crluri=..., -crlurl=...
+	Add a "CRL Distribution Point" item to the certificate extensions.
+
     -v3='OpenSSL extension config'
 	Add any x509 v3 extension config to the OpenSSL config file used
 	to create the certificate.

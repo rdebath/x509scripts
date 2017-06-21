@@ -281,7 +281,7 @@ decode_args() {
 
 	-v3san|-san ) V3=yes ; V3SAN=yes ;;
 
-	-v3crluri[=:]*|-crluri[=:]* )
+	-v3crlur[il][=:]*|-crlur[il][=:]* )
 	    V3=yes
 	    CRLURI_ID=$((CRLURI_ID+1))
 	    CRLURI="$CRLURI${NL}URI.$CRLURI_ID=${ar#*[=:]}"
