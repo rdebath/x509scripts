@@ -7,7 +7,7 @@ described. If an item is encrypted a dictionary attack will be attempted,
 the dictionary is the blank password and "0000".
 
 Note: It will not print any private part of a file, instead it will
-extract the related private key and describe the item as a "private key
+extract the related public key and describe the item as a "private key
 for" the displayed public part.
 
 mk-cert bash script
