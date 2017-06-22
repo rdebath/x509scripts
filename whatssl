@@ -17,6 +17,7 @@ then
 fi
 
 pubkey_id() {
+    [ "$NOPKEY" = yes ] && { echo No pkey command ; return; }
     echo $(echo "$1" |
 	openssl asn1parse |
 	awk '/OBJECT/{print $NF;}' |
@@ -31,8 +32,8 @@ pubkey_id() {
 	[ "$H" -gt 0 ] && echo "($((H/2*8)) bit)"
 	echo "$1" |
 	openssl pkey -pubin -outform DER |
-	openssl md5 |
-	awk '{print $NF;}'
+	openssl sha256 |
+	awk '{print substr($NF,1,16);}'
 	)
 }
 
@@ -129,10 +130,21 @@ do
 	then
 	    PREVCERTPUB="$CERTPUB"
 
-	    echo "$ITEM" |
-		openssl x509 -noout -text \
-		    -certopt no_sigdump,no_pubkey \
-		    -nameopt esc_ctrl${UTF8:+,utf8,-esc_msb}
+	    if openssl x509 -help 2>&1 | grep -qie -issuer_hash_old
+	    then
+		echo "$ITEM" |
+		    openssl x509 -noout -text \
+			-certopt no_sigdump,no_pubkey \
+			-nameopt esc_ctrl${UTF8:+,utf8,-esc_msb}
+	    elif openssl x509 -help 2>&1 | grep -qie -issuer_hash
+	    then
+		echo "$ITEM" |
+		    openssl x509 -noout -text \
+			-certopt compatible,no_sigdump,no_pubkey
+	    else
+		echo "$ITEM" |
+		    openssl x509 -noout -text
+	    fi
 
 	    echo "    Public key is: $(pubkey_id "$(echo "$ITEM" | openssl x509 -pubkey -noout)")"
 

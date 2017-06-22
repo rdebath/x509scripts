@@ -1,4 +1,16 @@
 #!/bin/bash
+#
+# mk-ss bash script
+# =================
+#
+# This is a small script to create a plain self-signed certificate
+# that expires in January 2038.  If given no arguments it creates a V1
+# x509 certificate with the common name 'localhost'. The first argument
+# is the Common Name, additional arguments are set as SAN hosts which
+# automatically converts the certificate to a plain V3 x509 certificate.
+# An empty second argument gives a SAN list of just the common name.
+#
+# The certificate and key are 2048 bit RSA and sent out the standard output.
 
 make_ss() {
     local CN="$1" SERIAL ; shift

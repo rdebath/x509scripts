@@ -287,6 +287,25 @@ decode_args() {
 	    CRLURI="$CRLURI${NL}URI.$CRLURI_ID=${ar#*[=:]}"
 	    ;;
 
+	-v3dv|-dv )
+	    # Make the certificate policy "Domain validated" and set most
+	    # of the other stuff that's supposed to be set.
+	    # BUT would also need:
+	    #   The certificate must be signed by a CA (not self-signed)
+	    #   Add authorityInformationAccess extension
+	    #   with OCSP over HTTP extension
+	    #   and HTTP URL for issuing certificate
+	    #
+	    # For example:
+	    # -suca \
+	    # -v3='authorityInfoAccess = OCSP;URI:http://ocsp.my.host/,caIssuers;URI:http://my.ca/ca.html'
+	    V3=yes
+	    V3SAN=yes
+	    V3SERVER=yes
+	    V3CLIENT=yes
+	    POLICYOID="$POLICYOID,2.23.140.1.2.1"
+	    ;;
+
 	/*=* )
 	    if [ "$SUBJTYPE" != "" ] ; then
 		echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
@@ -633,6 +652,14 @@ create_suca_pem() {
 	    if [ "$SERIAL" != '' ]
 	    then echo "dnQualifier=$SERIAL"
 	    else echo "dnQualifier=$(mk_rand 8)"
+	    fi
+
+	    # Most policies need the issuer subject to have a country code
+	    # and organisation. The XX code is valid for a CA, the org not
+	    # so much.
+	    if [ "$POLICYOID" != '' ]
+	    then echo "C=XX"
+		 echo "O=CA"
 	    fi
 
 	    if [ "$CN" != "" ]

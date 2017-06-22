@@ -1,16 +1,3 @@
-
-mk-ss bash script
-=================
-
-This is a very simple script to create a plain self-signed certificate
-that expires in January 2038.  If given no arguments it creates a V1
-x509 certificate with the common name 'localhost'. The first argument
-is the Common Name, additional arguments are set as SAN hosts which
-automatically converts the certificate to a plain V3 x509 certificate.
-An empty second argument gives a SAN list of just the common name.
-
-The certificate and key are 2048 bit RSA and sent out the standard output.
-
 whatssl bash script
 ===================
 
@@ -19,14 +6,18 @@ key or parameter file. If the file contains multiple items they are all
 described. If an item is encrypted a dictionary attack will be attempted,
 the dictionary is the blank password and "0000".
 
+Note: It will not print any private part of a file, instead it will
+extract the related private key and describe the item as a "private key
+for" the displayed public part.
+
 mk-cert bash script
 ===================
 
 This script can create most styles of x509 certificate from the command
 line.  All options can be configured from arguments and the standard
-OpenSSL configuration file is not used. The default is to prompt for
-a common name (plus OU and DNQ) and generate an ec:prime256r1 key and
-certificate which is sent to the standard out.
+OpenSSL configuration file is not used. The default is to prompt for a
+common name (plus OU and dnQualifier) and generate an ec:prime256r1 key
+and certificate which is sent to the standard output.
 
 Usage: ./mk-cert [Common Name] [arguments]
 
@@ -41,6 +32,9 @@ Usage: ./mk-cert [Common Name] [arguments]
 	Set a component of the certificate subject. Some items such as
 	DC, OU and CN are allowed to be duplicated. OpenSSL will accept
 	duplicates for any item.
+
+	The OU is the most likely to be accepted as a place to store
+	any unusual part of a name you may wish to include.
 
 	Any arguments without a "-" to make them an option are assumed
 	to be part of the subject too, the first is a common name the
@@ -78,6 +72,10 @@ Usage: ./mk-cert [Common Name] [arguments]
 
     -dnq
 	Generate and add a dnQualifier item to the subject.
+	This is the original way of making sure that the subject of
+	a certificate is unique. It was only needed within an org
+	as the other DN components were sufficient for identifing
+	organisations.
 
     -dnq=...
 	Add a dnQualifier item to the subject.
@@ -216,6 +214,8 @@ Version 3 certificate extensions.
 
     -v3crit, -v3critical, -critical
 	Mark CA, key usage and extended key usage extensions as critical.
+	Beware:
+	    https://en.wikipedia.org/wiki/X.509#Implementation_issues
 
     -poltext=FileName
 	Add an "all uses" policy extension and include the text from
@@ -228,6 +228,15 @@ Version 3 certificate extensions.
     -v3crluri=..., -crlurl=...
 	Add a "CRL Distribution Point" item to the certificate extensions.
 
+    -v3dv|-dv )
+	Make the certificate policy "Domain validated" and set most
+	of the other stuff that's supposed to be set.
+	BUT would also need:
+	    The certificate must be signed by a CA (not self-signed)
+	    Add authorityInformationAccess extension
+	    with OCSP over HTTP
+	    and HTTP URL for issuing certificate
+
     -v3='OpenSSL extension config'
 	Add any x509 v3 extension config to the OpenSSL config file used
 	to create the certificate.
@@ -239,16 +248,6 @@ Version 3 certificate extensions.
 
 	This item is placed after the all "-v3=" items so can be used when
 	the config file needs additional sections.
-
-mk-ovpn and mk-ovpn2 bash scripts
-=================================
-
-This script calls mk-cert to make certificates and keys for OpenVPN. The
-idea is to use the "singleuseca" mode to create a CA certificate
-specifically for every instance of OpenVPN (client and server) and only
-have the CA certificates that of the specific keys allowed to connect
-listed in the configuration file. The mk-ovpn2 script collects these CA
-keys and does the necessary selections for generating each ovpn config file.
 
 mk-winset script
 ================
@@ -263,3 +262,13 @@ arguments are passed to mk-cert.
 
 The files created use the common name as the base and have extensions:
     .crt .ca.crt .pfx .key .crl
+
+mk-ovpn and mk-ovpn2 bash scripts
+=================================
+
+This script calls mk-cert to make certificates and keys for OpenVPN. The
+idea is to use the "singleuseca" mode to create a CA certificate
+specifically for every instance of OpenVPN (client and server) and only
+have the CA certificates that of the specific keys allowed to connect
+listed in the configuration file. The mk-ovpn2 script collects these CA
+keys and does the necessary selections for generating each ovpn config file.
