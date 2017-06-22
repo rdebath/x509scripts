@@ -75,6 +75,7 @@ NL='
     SIGNPFX=
     SIGNPEM=
     SINGLEUSECA=
+    V3SUCA=
     PKCS12FN=
     POLICYTEXT=
     POLICYOID=
@@ -207,6 +208,8 @@ decode_args() {
 	    ;;
 
 	-singleuseca|-suca ) MAKECSR=yes ; SINGLEUSECA=yes ;;
+
+	-v3singleuseca|-v3suca ) MAKECSR=yes ; SINGLEUSECA=yes ; V3SUCA=yes ;;
 
 	-pkcs12[=:]*|-pfx[=:]* ) PKCS12FN="${ar#*[=:]}" ;;
 
@@ -642,7 +645,7 @@ create_suca_pem() {
 	echo '[req]'
 	echo 'distinguished_name = req_distinguished_name'
 	echo 'prompt = no'
-	if [ "$V3" = yes ]
+	if [ "$V3" = yes -o "$V3SUCA" = yes ]
 	then echo "$V3INIT"
 	     if [ "$V3CA" = no ]
 	     then
