@@ -56,6 +56,7 @@ NL='
     V3CLIENT=no
     V3SERVER=no
     V3EMAIL=no
+    V3TIMESTAMP=no
     V3CRITICAL=no
     V3NS=no
     V3ENS=
@@ -78,6 +79,7 @@ NL='
     POLICYTEXT=
     POLICYOID=
     NOPROMPT=
+    NOKEYID=
 
     CIPHER=-aes128
     DGST=
@@ -222,13 +224,15 @@ decode_args() {
 	-v3ca|-ca ) V3=yes ; V3CA=yes ;;
 	-v3crlsign|-crlsign|-v3crl ) V3=yes ; V3CRL=yes ;;
 	-v3lastca|-lastca ) V3=yes ; V3CA=yes ; V3CAPATH=0 ;;
-	-v3usr|-usr|-user ) V3=yes ; V3CA=no ;;
+	-v3usr|-usr|-v3user|-user ) V3=yes ; V3CA=no ;;
 	-v3server|-server ) V3=yes ; V3SERVER=yes ;;
 	-v3client|-client ) V3=yes ; V3CLIENT=yes ;;
 	-v3email|-email ) V3=yes ; V3EMAIL=yes ;;
+	-v3timestamp|-timestamp ) V3=yes ; V3TIMESTAMP=yes ; V3CRITICAL=yes ;;
 	-v3crit|-v3critical|-critical )
 	    V3=yes ; V3CRITICAL=yes ; V3CA=${V3CA:-no}
 	    ;;
+	-v3nokeyid|-nokeyid) NOKEYID=yes ;;
 
 	-v3basicca )
 		V3=yes
@@ -390,6 +394,12 @@ check_args() {
 	SANLIST="${SANLIST%,}"
     }
 
+    if [ "$V3TIMESTAMP" = yes -a "$V3CLIENT$V3SERVER$V3EMAIL" != nonono ]
+    then
+	echo >&2 "A timestamping certificate can only be for timestamping."
+	exit 1
+    fi
+
     # Problems?
     if ! openssl x509 -help 2>&1 | grep -qie -set_serial
     then NOSETSERIAL=yes
@@ -442,6 +452,7 @@ build_v3_extensions() {
     [ "$V3SERVER" = yes ] && V3EKU=$V3EKU,serverAuth
     [ "$V3CLIENT" = yes ] && V3EKU=$V3EKU,clientAuth
     [ "$V3EMAIL" = yes ] && V3EKU=$V3EKU,emailProtection
+    [ "$V3TIMESTAMP" = yes ] && V3EKU=$V3EKU,timeStamping
 
     [ "$V3EKU" != '' ] &&
 	V3OPTS="$V3OPTS${NL}extendedKeyUsage = $CR${V3EKU#,}"
@@ -455,6 +466,9 @@ build_v3_extensions() {
     elif [ "$V3CLIENT" = yes -a "$V3CA" != yes ]
     then
 	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}digitalSignature"
+    elif [ "$V3TIMESTAMP" = yes -a "$V3CA" != yes ]
+    then
+	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}nonRepudiation,digitalSignature"
     elif [ "$V3XKU" != '' ]
     then
 	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU%,}"
@@ -476,7 +490,7 @@ build_v3_extensions() {
     [ "$V3NS" = yes -a "$V3ENS" != '' ] &&
 	V3OPTS="$V3OPTS${NL}nsCertType = ${V3ENS#,}"
 
-    [ "$V3CA" != '' ] && {
+    [ "$V3CA" != '' -a "$NOKEYID" != yes ] && {
 	V3CERTONLY="$V3CERTONLY${NL}subjectKeyIdentifier=hash"
 	V3CERTONLY="$V3CERTONLY${NL}authorityKeyIdentifier=keyid,issuer${NL}"
     }
@@ -634,7 +648,7 @@ create_suca_pem() {
 	     then
 		[ "$V3CRITICAL" != yes ] && CR='' || CR=critical,
 		echo "basicConstraints = ${CR}CA:TRUE,pathlen:0"
-		if [ "$V3CA" = no ]
+		if [ "$V3CA" = no -a "$NOKEYID" != yes ]
 		then
 		    echo "subjectKeyIdentifier=hash"
 		    echo "authorityKeyIdentifier=keyid,issuer"

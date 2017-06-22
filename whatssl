@@ -169,6 +169,7 @@ do
 		    for STRICT in '-x509_strict' ''
 		    do
 			success=
+			failed=
 			tested=
 			for purpose in  '' \
 					sslclient sslserver nssslserver \
@@ -190,6 +191,7 @@ do
 				    success="${success}unspecified"
 			    elif [ "$purpose" = '' ]
 			    then break
+			    else failed="$failed $purpose"
 			    fi
 			done
 			[ "$success" ] && break
@@ -202,6 +204,9 @@ do
 		    then
 			echo "    This self signed certificate verifies the chain${STRICT:+ in strict mode}"
 			echo "        purposes:$success"
+			[ "$failed" != "" ] &&
+			    echo "        failed for:$failed"
+
 		    elif ! openssl verify -check_ss_sig \
 				    -CAfile <(echo "$ITEM") \
 				    -CApath /dev/null \
