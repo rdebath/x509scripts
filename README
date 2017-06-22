@@ -123,9 +123,6 @@ Usage: ./mk-cert [Common Name] [arguments]
 	certificate. Discard the CA key and send the CA certificate to the
 	output.
 
-    -onekeyca
-	Just like -singleuseca, except the CA key is copied from the host key.
-
     -casubj=...
 	Set the subject for the single use CA.
 

@@ -13,6 +13,8 @@ main() {
     [ "$KFN" != '' -a -s "$FN" ] &&
 	{ echo "ERROR: File $FN already exists" ; exit 1 ; }
 
+    SSKEY="$(mkkey)"
+
     build_v3_extensions
     apply_options
     create_main_cert	# or csr
@@ -75,7 +77,6 @@ NL='
     PKCS12FN=
     POLICYTEXT=
     POLICYOID=
-    ONEKEY=
     NOPROMPT=
 
     CIPHER=-aes128
@@ -204,7 +205,6 @@ decode_args() {
 	    ;;
 
 	-singleuseca|-suca ) MAKECSR=yes ; SINGLEUSECA=yes ;;
-	-onekeyca ) ONEKEY=yes ; MAKECSR=yes ; SINGLEUSECA=yes ;;
 
 	-pkcs12[=:]*|-pfx[=:]* ) PKCS12FN="${ar#*[=:]}" ;;
 
@@ -602,7 +602,6 @@ mkreqconf() {
 }
 
 create_main_cert() {
-    SSKEY="$(mkkey)"
     if [ "$CSRFN" != "" ]
     then SSCERT="$(cat "$CSRFN")"
     else
@@ -645,38 +644,31 @@ create_suca_pem() {
 	fi
 	echo '[ req_distinguished_name ]'
 
-	if [ "$ONEKEY" = yes -a "$CASER" != '' ]
-	then echo "dnQualifier=$CASER"
-	     echo "CN=Private CA"
-	else
-	    if [ "$SERIAL" != '' ]
-	    then echo "dnQualifier=$SERIAL"
-	    else echo "dnQualifier=$(mk_rand 8)"
-	    fi
+	if [ "$SERIAL" != '' ]
+	then echo "dnQualifier=$SERIAL"
+	else echo "dnQualifier=$(mk_rand 8)"
+	fi
 
-	    # Most policies need the issuer subject to have a country code
-	    # and organisation. The XX code is valid for a CA, the org not
-	    # so much.
-	    if [ "$POLICYOID" != '' ]
-	    then echo "C=XX"
-		 echo "O=CA"
-	    fi
+	# Most policies need the issuer subject to have a country code
+	# and organisation. The XX code is valid for a CA, the org not
+	# so much.
+	if [ "$POLICYOID" != '' ]
+	then echo "C=XX"
+	     echo "O=CA"
+	fi
 
-	    if [ "$CN" != "" ]
-	    then echo "OU=Private CA"
-		 echo "CN=$CN"
-	    else echo "CN=Private CA"
-	    fi
+	if [ "$CN" != "" ]
+	then echo "OU=Private CA"
+	     echo "CN=$CN"
+	else echo "CN=Private CA"
 	fi
 
 	echo '#END'
     }
 
     [ "$SERIAL" = "" ] && SERIAL="$(mk_rand 8)"
-    if [ "$ONEKEY" != yes ]
-    then CAKEY="$(mkkey)"
-    else CAKEY="$SSKEY"
-    fi
+    CAKEY="$(mkkey)"
+
     [ "$NOSETSERIAL" != yes ] && CASER="$(mk_rand 8)"
 
     [ "$SHOWCONF" = yes ] && mksucareqconf
