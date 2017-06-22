@@ -433,11 +433,9 @@ build_v3_extensions() {
     V3XKU=; V3EKU=
     [ "$V3CRITICAL" != yes ] && CR='' || CR=critical,
 
-    [ "$V3SERVER" = yes -o "$V3EMAIL" = yes -o "$V3CLIENT" = yes ] && {
+    [ "$V3SERVER" = yes -o "$V3EMAIL" = yes -o "$V3CLIENT" = yes -o "$V3TIMESTAMP" = yes ] && {
 	if [ "$SIGNPEM" != "" -o "$SINGLEUSECA" = yes ]
 	then V3CA="${V3CA:-no}"
-	elif [ "$V3CA" = '' ]
-	then V3XKU=keyCertSign,${V3CRL:+cRLSign,}
 	fi
     }
 
@@ -457,7 +455,9 @@ build_v3_extensions() {
     [ "$V3EKU" != '' ] &&
 	V3OPTS="$V3OPTS${NL}extendedKeyUsage = $CR${V3EKU#,}"
 
-    if [ "$V3SERVER" = yes -a "$V3CA" != yes ]
+    if [ "$V3CA" = '' ]
+    then :
+    elif [ "$V3SERVER" = yes -a "$V3CA" != yes ]
     then
 	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}keyEncipherment,digitalSignature,keyAgreement"
     elif [ "$V3EMAIL" = yes -a "$V3CA" != yes ]
