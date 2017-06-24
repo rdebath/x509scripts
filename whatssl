@@ -17,24 +17,43 @@ then
 fi
 
 pubkey_id() {
+    local TKEY H keyid
     [ "$NOPKEY" = yes ] && { echo No pkey command ; return; }
-    echo $(echo "$1" |
-	openssl asn1parse |
-	awk '/OBJECT/{print $NF;}' |
-	tr : ' ' |
-	sed -e 's/PublicKey//' -e 's/Encryption//'
-	echo "$1" |
-	openssl pkey -pubin -text -noout |
-	sed -n 's/Public-Key://p'
+
+    keyid="$(echo "$1" |
+	openssl asn1parse | tr ':' ' ' | awk '/OBJECT/{print $NF;}' |
+	tail -1 | sed -e 's/ *$//' -e 's/PublicKey//' -e 's/Encryption//'
+    )"
+
+    keyid="$keyid $(
+	H=$(echo "$1" |
+	openssl rsa -pubin -modulus -noout 2>/dev/null |
+	sed -n 's/.*=//p' | wc -c)
+	[ "$H" -gt 0 ] && echo "$((H/2*8)) bit"
+    )"
+    keyid="${keyid% }"
+
+    keyid="$keyid $(
 	H=$(echo "$1" |
 	openssl dsa -pubin -modulus -noout 2>/dev/null |
 	sed -n 's/.*=//p' | wc -c)
-	[ "$H" -gt 0 ] && echo "($((H/2*8)) bit)"
-	echo "$1" |
-	openssl pkey -pubin -outform DER |
-	openssl sha256 |
-	awk '{print substr($NF,1,16);}'
-	)
+	[ "$H" -gt 0 ] && echo "$((H/2*8)) bit"
+    )"
+    keyid="${keyid% }"
+
+    keyid="$keyid $(
+	TKEY=$(openssl ecparam -name prime256v1 -genkey -noout)
+	openssl req -subj / -new -key <(echo "$TKEY") |
+	openssl x509 2>/dev/null -req \
+	    -CA <(openssl req -subj / -new -key <(echo "$TKEY") -x509) \
+	    -CAkey <(echo "$TKEY") -set_serial 00 \
+	    -force_pubkey <(echo "$1") \
+	    -extfile <( echo subjectKeyIdentifier=hash ) |
+	openssl x509 -noout -text -certopt no_pubkey |
+	awk 'f==1{print $1;exit;} /Subject Key Identifier/{f=1;}'
+    )"
+
+    echo "      $keyid"
 }
 
 for file
@@ -146,7 +165,8 @@ do
 		    openssl x509 -noout -text
 	    fi
 
-	    echo "    Public key is: $(pubkey_id "$(echo "$ITEM" | openssl x509 -pubkey -noout)")"
+	    echo "    Public key is:"
+	    pubkey_id "$(echo "$ITEM" | openssl x509 -pubkey -noout)"
 
 	    [ "$CERTPUB" = "$FIRSTPKEYPUB" ] &&
 		echo "    The file contains a private key that matches this certificate."
@@ -238,14 +258,15 @@ do
 	elif [ "$NOPKEY" = no -a "$PKEYPUB" != "" ]
 	then
 	    echo 'A private key for this public key:'
-	    echo "    $(pubkey_id "$(echo "$ITEM" | openssl pkey -pubout $PW)")"
+	    pubkey_id "$(echo "$ITEM" | openssl pkey -pubout $PW)"
 	elif [ "$NOPKEY" = no -a "$PKEYPARAM" != "" ]
 	then
 	    echo Parameter file:
 	    echo "$PKEYPARAM"
 	elif [ "$NOPKEY" = no -a "$PUBKEY" != "" ]
 	then
-	    echo "Public key: $(pubkey_id "$ITEM")"
+	    echo "Public key:"
+	    pubkey_id "$ITEM"
 	elif [ "$PKEYPUB" != "" ]
 	then
 	    echo Item $k is a private key

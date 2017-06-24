@@ -41,6 +41,7 @@ NL='
     SERIAL=
     CERT_DAYS=
     DEFAULT_DAYS=7304
+    EC=P-256
 
     V3=no
     V3HEAD=
@@ -106,8 +107,8 @@ NL='
 
     # This is my default for making a key file.
     if [ "$NOECPARAM" = no ] ; then
-	mkkey() { openssl ecparam -name prime256v1 -genkey -noout ;}
-	mktmpkey() { openssl ecparam -name prime256v1 -genkey -noout ;}
+	mkkey() { openssl ecparam -name "$EC" -genkey -noout ;}
+	mktmpkey() { openssl ecparam -name "$EC" -genkey -noout ;}
     else
 	mkkey() { openssl genrsa ; }
 	mktmpkey() { openssl genrsa 512 2>/dev/null ; }
@@ -168,18 +169,29 @@ decode_args() {
 		ar="${ar#*[=:]}:" ; curve="${ar%%:*}"
 		ar="${ar#*:}:" ; param="${ar%%:*}"
 		ar="${ar#*:}:" ; noseed="${ar%%:*}"
+
+		case "$curve" in
+		128|192|224|256|384|521 ) curve="P-$curve" ;;
+		[0-9]*[0-9] )
+		    ncurve="$(openssl ecparam -list_curves| grep " $curve bit" |
+			    awk -F: '/:/{print $1;exit;}' | tr -d ' ' )"
+		    [ "$ncurve" != "" ] && curve="$ncurve"
+		    ;;
+		esac
+
 		eval "mkkey() { openssl ecparam -name '$curve' ${param:+-param_enc $param} ${noseed:+-no_seed} -genkey -noout ; }"
 		;;
 
 	-dsa )
 	    # FIPS used to force 1024, so lots of hardware and protocols did too.
+	    # 1024 bits is now considered unsafe against the most capable
+	    # attackers and barely safe against publicly known attacks.
 	    DGST="${DGST:--sha1}"
 	    mkkey() { openssl dsaparam -noout -genkey 1024; }
-	    echo >&2 "WARNING: Making weak 1024bit DSA key with ${DGST#-} hash."
 	    ;;
 
 	-rsa ) mkkey() { openssl genrsa ; } ;;
-	-ec )  mkkey() { openssl ecparam -name prime256v1 -genkey -noout ; } ;;
+	-ec )  mkkey() { openssl ecparam -name "$EC" -genkey -noout ; } ;;
 
 	-list[-_]curves|-show[_-]curves )
 	    openssl ecparam -list_curves ; exit ;;
