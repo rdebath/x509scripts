@@ -28,6 +28,7 @@ Usage: ./mk-cert [Common Name] [arguments]
     -subj-l=String
     -subj-st=String
     -subj-c=String
+    -subj:oid=value
 
 	Set a component of the certificate subject. Some items such as
 	DC, OU and CN are allowed to be duplicated. OpenSSL will accept
@@ -43,6 +44,12 @@ Usage: ./mk-cert [Common Name] [arguments]
 	If a argument begins with a "/" and contains an "=" it is
 	treated as an OpenSSL subject string. This conflicts with the
 	other options for building a subject.
+
+	The bare "-subj:" version copies the string "oid=value" to the
+	end of the section of the configuration. This allows any of the
+	possible name parts (surname, info, favouriteDrink, CSPName, etc)
+	to be added in any order. However, OpenSSL only allows OIDs that
+	it knows, numeric ones are not allowed.
 
 	If no subject is specified one will be prompted for by OpenSSL.
 	NOTE: If you are adding a SAN list the common name prompted for
@@ -69,6 +76,7 @@ Usage: ./mk-cert [Common Name] [arguments]
     -ser=0123456789abcdef
     -serial=0123456789abcdef
 	Set the certificate serial number (in hexadecimal).
+	Various noise characters will be removed.
 
     -dnq
 	Generate and add a dnQualifier item to the subject.

@@ -99,6 +99,7 @@ NL='
     SUBJ_OU=
     SUBJ_CN=
     SUBJ_DNQ=
+    SUBJ_XX=
     CRLURI=
     CRLURI_ID=0
 
@@ -151,7 +152,11 @@ decode_args() {
 	-crlout[=:]* ) CRLFN="${ar#*[=:]}" ; V3CRL=yes ;;
 	-caout[=:]* ) CAFN="${ar#*[=:]}" ;;
 
-	-ser[=:]??*|-serial[=:]??* ) SERIAL="${ar#*[=:]}" ;;
+	-ser[=:]??*|-serial[=:]??* )
+	    SERIAL="${ar#*[=:]}"
+	    SERIAL="${SERIAL//[-: .,;]/}"
+	    ;;
+
 	-dnq ) ADDDNQ=yes ;;
 	-dnq[=:]* )
 	    SUBJTYPE="${SUBJTYPE:-conf}"
@@ -352,6 +357,14 @@ decode_args() {
 
 	    [ "$C" = CN -a "$CN" = '' ] &&
 		CN="${ar#*[=:]}"
+	    ;;
+
+	-subj[=:]* )
+	    SUBJTYPE="${SUBJTYPE:-conf}"
+	    if [ "$SUBJTYPE" != "conf" ] ; then
+		echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
+	    fi
+	    SUBJ_XX="$SUBJ_XX$NL${ar#*[=:]}"
 	    ;;
 
 	-casubj[=:]* )
@@ -616,6 +629,7 @@ mkreqconf() {
 	echo "$SUBJ_DC"
 	echo "$SUBJ_OU"
 	echo "$SUBJ_CN"
+	echo "$SUBJ_XX"
 	;;
     "")
 	echo 'commonName = Common Name'
