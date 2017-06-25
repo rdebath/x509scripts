@@ -7,10 +7,10 @@ main() {
     decode_args "$@"
     check_args
 
-    [ "$KFN" != '' -a "$KFN" != /dev/null -a -s "$KFN" ] &&
+    [[ "$KFN" != '' && "$KFN" != /dev/null && -s "$KFN" ]] &&
 	{ echo "ERROR: File $KFN already exists" ; exit 1 ; }
 
-    [ "$FN" != '' -a -s "$FN" ] &&
+    [[ "$FN" != '' && -s "$FN" ]] &&
 	{ echo "ERROR: File $FN already exists" ; exit 1 ; }
 
     SSKEY="$(mkkey)"
@@ -24,8 +24,8 @@ main() {
     create_crl_file
     create_pfx_file
 
-    [ "$KFN" = '' ] && umask 077
-    if [ "$FN" != '' ] ; then outp > "$FN" ; else outp ; fi
+    [[ "$KFN" = '' ]] && umask 077
+    if [[ "$FN" != '' ]] ; then outp > "$FN" ; else outp ; fi
 
     exit 0
 }
@@ -108,7 +108,7 @@ NL='
     ft() { "$@" ; }
 
     # This is my default for making a key file.
-    if [ "$NOECPARAM" = no ] ; then
+    if [[ "$NOECPARAM" = no ]]; then
 	mkkey() { openssl ecparam -name "$EC" -genkey -noout ;}
 	mktmpkey() { openssl ecparam -name "$EC" -genkey -noout ;}
     else
@@ -125,7 +125,7 @@ NL='
     "
 
     UTF8=
-    if [ "$(locale charmap 2>/dev/null)" = UTF-8 ]
+    if [[ "$(locale charmap 2>/dev/null)" = UTF-8 ]]
     then
 	if openssl req -help 2>&1 | grep -q -e -utf8
 	then UTF8=-utf8
@@ -161,7 +161,7 @@ decode_args() {
 	-dnq ) ADDDNQ=yes ;;
 	-dnq[=:]* )
 	    SUBJTYPE="${SUBJTYPE:-conf}"
-	    if [ "$SUBJTYPE" != "conf" ] ; then
+	    if [[ "$SUBJTYPE" != "conf" ]] ; then
 		echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
 	    fi
 
@@ -181,7 +181,7 @@ decode_args() {
 		[0-9]*[0-9] )
 		    ncurve="$(openssl ecparam -list_curves| grep " $curve bit" |
 			    awk -F: '/:/{print $1;exit;}' | tr -d ' ' )"
-		    [ "$ncurve" != "" ] && curve="$ncurve"
+		    [[ "$ncurve" != "" ]] && curve="$ncurve"
 		    ;;
 		esac
 
@@ -204,7 +204,7 @@ decode_args() {
 
 	-keyfile[=:]* )
 	    eval "mkkey() { cat < '${ar#*[=:]}' ; }"
-	    [ "$KFN" = "" ] && KFN=/dev/null
+	    [[ "$KFN" = "" ]] && KFN=/dev/null
 	    ;;
 
 	-csr ) WANTCSR=yes ; MAKECSR=yes ;;
@@ -291,8 +291,8 @@ decode_args() {
 		V3=yes ; V3SAN=yes
 		sanlst="${ar#*[=:]}"
 		for san in ${sanlst//,/ }
-		do  [ "$SANLIST" != "" ] && SANLIST="${SANLIST%,},"
-		    [ "$san" = '' -o "$san" = "$CN" ] && continue
+		do  [[ "$SANLIST" != "" ]] && SANLIST="${SANLIST%,},"
+		    [[ "$san" = '' || "$san" = "$CN" ]] && continue
 		    case "$san" in
 		    [0-9]*.*.*.*[0-9] ) SANLIST="${SANLIST}IP:$san" ;;
 		    [0-9a-fA-F]*:*:*[0-9a-fA-F]|::*[0-9a-fA-F] )
@@ -332,7 +332,7 @@ decode_args() {
 	    ;;
 
 	/*=* )
-	    if [ "$SUBJTYPE" != "" ] ; then
+	    if [[ "$SUBJTYPE" != "" ]] ; then
 		echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
 	    fi
 	    SUBJ="$ar"
@@ -344,7 +344,7 @@ decode_args() {
 	-subj[-_]c[=:]*|-subj[-_]st[=:]*|-subj[-_]l[=:]*|-subj[-_]o[=:]*|\
 	-subj[-_]dc[=:]*|-subj[-_]ou[=:]*|-subj[-_]cn[=:]* )
 	    SUBJTYPE="${SUBJTYPE:-conf}"
-	    if [ "$SUBJTYPE" != "conf" ] ; then
+	    if [[ "$SUBJTYPE" != "conf" ]] ; then
 		echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
 	    fi
 
@@ -356,13 +356,13 @@ decode_args() {
 	    SUBJ_ID=$((SUBJ_ID+1))
 	    eval "SUBJ_$C=\"\$SUBJ_$C\${NL}\$SUBJ_ID.$C=\${ar#*[=:]}\""
 
-	    [ "$C" = CN -a "$CN" = '' ] &&
+	    [[ "$C" = CN && "$CN" = '' ]] &&
 		CN="${ar#*[=:]}"
 	    ;;
 
 	-subj[=:]* )
 	    SUBJTYPE="${SUBJTYPE:-conf}"
-	    if [ "$SUBJTYPE" != "conf" ] ; then
+	    if [[ "$SUBJTYPE" != "conf" ]] ; then
 		echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
 	    fi
 	    V="${ar#*[=:]}"
@@ -385,7 +385,7 @@ decode_args() {
 	    /*=* )
 		CASUBJ="${CASUBJ%/}${V%/}/"
 		;;
-	    * ) if [ "$CASUBJ" = '' ]
+	    * ) if [[ "$CASUBJ" = '' ]]
 		then CASUBJ="/CN=$V/"
 		else CASUBJ="/OU=$V$CASUBJ"
 		fi
@@ -396,14 +396,14 @@ decode_args() {
 	-*) echo >&2 "Unknown option: $ar" ; exit 1 ;;
 
 	* ) SUBJTYPE="${SUBJTYPE:-conf}"
-	    if [ "$SUBJTYPE" != "conf" ] ; then
+	    if [[ "$SUBJTYPE" != "conf" ]] ; then
 		echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
 	    fi
 
-	    if [ "$ar" = "" ]
+	    if [[ "$ar" = "" ]]
 	    then SUBJ_CN="$SUBJ_CN${NL}"
 		 NOPROMPT=yes
-	    elif [ "$SUBJ_CN" = "" ]
+	    elif [[ "$SUBJ_CN" = "" ]]
 	    then SUBJ_ID=$((SUBJ_ID+1))
 		 SUBJ_CN="$SUBJ_CN${NL}${SUBJ_ID}.CN=$ar"
 		 CN="$ar"
@@ -416,25 +416,25 @@ decode_args() {
 }
 
 check_args() {
-    [ "$WANTCSR" = yes -a  "$SINGLEUSECA" = yes ] && {
+    [[ "$WANTCSR" = yes && "$SINGLEUSECA" = yes ]] && {
 	echo >&2 "Options -csr and -singleuseca conflict"
 	exit 1
     }
 
     # Extract a (passworded) pfx file.
-    [ "$SIGNPFX" != '' ] && SIGNPEM="$(openssl pkcs12 -nodes -in "$SIGNPFX")"
+    [[ "$SIGNPFX" != '' ]] && SIGNPEM="$(openssl pkcs12 -nodes -in "$SIGNPFX")"
 
     # Put the commonName at the start of the san list
-    [ "$V3SAN" = yes ] && {
-	if [ "$CN" != "" ]
+    [[ "$V3SAN" = yes ]] && {
+	if [[ "$CN" != "" ]]
 	then SANLIST="subjectAltName=DNS:$CN,$SANLIST"
-	elif [ "$SANLIST" != '' ]
+	elif [[ "$SANLIST" != '' ]]
 	then SANLIST="subjectAltName=$SANLIST"
 	fi
 	SANLIST="${SANLIST%,}"
     }
 
-    if [ "$V3TIMESTAMP" = yes -a "$V3CLIENT$V3SERVER$V3EMAIL" != nonono ]
+    if [[ "$V3TIMESTAMP" = yes && "$V3CLIENT$V3SERVER$V3EMAIL" != nonono ]]
     then
 	echo >&2 "A timestamping certificate can only be for timestamping."
 	exit 1
@@ -467,75 +467,79 @@ build_v3_extensions() {
     #
     # NOTE: Using the SAN fields forces this to be a v3 certificate.
 
-    [ "$V3" != yes ] && return 0
+    [[ "$V3" != yes ]] && return 0
 
     V3HEAD="$V3INIT"
     V3XKU=; V3EKU=
-    [ "$V3CRITICAL" != yes ] && CR='' || CR=critical,
+    [[ "$V3CRITICAL" != yes ]] && CR= || CR=critical,
 
-    [ "$V3SERVER" = yes -o "$V3EMAIL" = yes -o "$V3CLIENT" = yes -o "$V3TIMESTAMP" = yes ] && {
-	if [ "$SIGNPEM" != "" -o "$SINGLEUSECA" = yes ]
+    if  [[ "$V3SERVER" = yes || "$V3EMAIL" = yes  || "$V3CLIENT" = yes || "$V3TIMESTAMP" = yes ]]
+    then
+	if [[ "$SIGNPEM" != "" || "$SINGLEUSECA" = yes ]]
 	then V3CA="${V3CA:-no}"
 	fi
-    }
+    fi
 
     V3P=${V3CAPATH:+, pathlen:$V3CAPATH}
 
     V3OPTS="$V3OPTS${NL}$SANLIST"
 
-    [ "$V3CA" = yes ] && V3OPTS="$V3OPTS${NL}basicConstraints = ${CR}CA:TRUE${V3P}"
-    [ "$V3CA" = yes ] && V3XKU=keyCertSign,${V3CRL:+cRLSign,}
-    [ "$V3CA" = no ] && V3OPTS="$V3OPTS${NL}basicConstraints = ${CR}CA:FALSE"
+    [[ "$V3CA" = yes ]] && V3OPTS="$V3OPTS${NL}basicConstraints = ${CR}CA:TRUE${V3P}"
+    [[ "$V3CA" = yes ]] && V3XKU=keyCertSign,${V3CRL:+cRLSign,}
+    [[ "$V3CA" = no ]] && V3OPTS="$V3OPTS${NL}basicConstraints = ${CR}CA:FALSE"
 
-    [ "$V3SERVER" = yes ] && V3EKU=$V3EKU,serverAuth
-    [ "$V3CLIENT" = yes ] && V3EKU=$V3EKU,clientAuth
-    [ "$V3EMAIL" = yes ] && V3EKU=$V3EKU,emailProtection
-    [ "$V3TIMESTAMP" = yes ] && V3EKU=$V3EKU,timeStamping
+    [[ "$V3SERVER" = yes ]] && V3EKU=$V3EKU,serverAuth
+    [[ "$V3CLIENT" = yes ]] && V3EKU=$V3EKU,clientAuth
+    [[ "$V3EMAIL" = yes ]] && V3EKU=$V3EKU,emailProtection
+    [[ "$V3TIMESTAMP" = yes ]] && V3EKU=$V3EKU,timeStamping
 
-    [ "$V3EKU" != '' ] &&
+    [[ "$V3EKU" != '' ]] &&
 	V3OPTS="$V3OPTS${NL}extendedKeyUsage = $CR${V3EKU#,}"
 
-    if [ "$V3CA" = '' ]
+    if [[ "$V3CA" = '' ]]
     then :
-    elif [ "$V3SERVER" = yes -a "$V3CA" != yes ]
+    elif [[ "$V3SERVER" = yes && "$V3CA" != yes ]]
     then
 	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}keyEncipherment,digitalSignature,keyAgreement"
-    elif [ "$V3EMAIL" = yes -a "$V3CA" != yes ]
+    elif [[ "$V3EMAIL" = yes && "$V3CA" != yes ]]
     then
 	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}keyEncipherment,digitalSignature"
-    elif [ "$V3CLIENT" = yes -a "$V3CA" != yes ]
+    elif [[ "$V3CLIENT" = yes && "$V3CA" != yes ]]
     then
 	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}digitalSignature"
-    elif [ "$V3TIMESTAMP" = yes -a "$V3CA" != yes ]
+    elif [[ "$V3TIMESTAMP" = yes && "$V3CA" != yes ]]
     then
 	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}nonRepudiation,digitalSignature"
-    elif [ "$V3XKU" != '' ]
+    elif [[ "$V3XKU" != '' ]]
     then
 	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU%,}"
     fi
 
-    if [ "$V3CA" = yes ]
+    if [[ "$V3CA" = yes ]]
     then
-	[ "$V3SERVER" = yes ] && V3ENS=$V3ENS,sslCA
-	[ "$V3CLIENT" = yes ] && V3ENS=$V3ENS,sslCA
-	[ "$V3EMAIL" = yes ] && V3ENS=$V3ENS,emailCA
-	[ "$V3SERVER" = no -a "$V3CLIENT" = no -a "$V3EMAIL" = no ] &&
+	[[ "$V3SERVER" = yes ]] && V3ENS=$V3ENS,sslCA
+	[[ "$V3CLIENT" = yes ]] && V3ENS=$V3ENS,sslCA
+	[[ "$V3EMAIL" = yes ]] && V3ENS=$V3ENS,emailCA
+	if [[ "$V3SERVER" = no && "$V3CLIENT" = no && \
+		"$V3EMAIL" = no && "$V3TIMESTAMP" = no ]]
+	then
 	    V3ENS=$V3ENS,sslCA,emailCA
+	fi
     else
-	[ "$V3SERVER" = yes ] && V3ENS=$V3ENS,server
-	[ "$V3CLIENT" = yes ] && V3ENS=$V3ENS,client
-	[ "$V3EMAIL" = yes ] && V3ENS=$V3ENS,email
+	[[ "$V3SERVER" = yes ]] && V3ENS=$V3ENS,server
+	[[ "$V3CLIENT" = yes ]] && V3ENS=$V3ENS,client
+	[[ "$V3EMAIL" = yes ]] && V3ENS=$V3ENS,email
     fi
 
-    [ "$V3NS" = yes -a "$V3ENS" != '' ] &&
+    [[ "$V3NS" = yes && "$V3ENS" != '' ]] &&
 	V3OPTS="$V3OPTS${NL}nsCertType = ${V3ENS#,}"
 
-    [ "$V3CA" != '' -a "$NOKEYID" != yes ] && {
+    [[ "$V3CA" != '' && "$NOKEYID" != yes ]] && {
 	V3CERTONLY="$V3CERTONLY${NL}subjectKeyIdentifier=hash"
 	V3CERTONLY="$V3CERTONLY${NL}authorityKeyIdentifier=keyid,issuer${NL}"
     }
 
-    [ "$CRLURI" != "" ] && {
+    [[ "$CRLURI" != "" ]] && {
 	V3OPTS="$V3OPTS${NL}crlDistributionPoints=crl_uri_sect${NL}"
 
 	# crlDistributionPoints ==> W.T.F.
@@ -546,9 +550,9 @@ build_v3_extensions() {
 	    ${NL}$CRLURI$NL"
     }
 
-    [ "$POLICYTEXT" != "" -o "$POLICYOID" != "" ] && {
+    [[ "$POLICYTEXT" != "" && "$POLICYOID" != "" ]] && {
 	POLICYOID="${POLICYOID#,}"
-	[ "$POLICYOID" = '' ] && POLICYOID=2.5.29.32.0
+	[[ "$POLICYOID" = '' ]] && POLICYOID=2.5.29.32.0
 
 	POLICYOID1="${POLICYOID%%,*}"
 	POLICYOIDX="${POLICYOID#$POLICYOID1}"
@@ -559,7 +563,7 @@ build_v3_extensions() {
 	    echo '[ x509_pol ]'
 	    echo "policyIdentifier = $POLICYOID1"
 	    # shellcheck disable=SC2016
-	    [ "$POLICYTEXT" != "" ] && {
+	    [[ "$POLICYTEXT" != "" ]] && {
 		echo 'userNotice=@notice'
 		echo '[ notice ]'
 		echo "$POLICYTEXT" |
@@ -577,30 +581,31 @@ build_v3_extensions() {
 
 mk_rand() {
     RH="$(openssl rand -hex "$1" 2>/dev/null ||:)"
-    [ "$RH" = '' ] &&
+    [[ "$RH" = '' ]] &&
 	RH="$(openssl rand "$1" | od -x | sed -n '1{s/^[^ ]*//;s/ //gp;}' )"
     echo "$RH"
 }
 
 apply_options() {
-    [ "$MAKECSR" = yes ] && X509='' || X509=-x509
+    [[ "$MAKECSR" = yes ]] && X509= || X509=-x509
 
-    if [ "$NOPROMPT" = yes ]
+    if [[ "$NOPROMPT" = yes ]]
     then
-	[ "$SUBJTYPE" = '' -o "$SUBJTYPE" = conf -a "$SUBJ_ID" = 0 ] && {
-	    if [ "$ADDDNQ" = yes ]
+	if [[ "$SUBJTYPE" = '' || "$SUBJTYPE.$SUBJ_ID" = conf.0 ]]
+	then
+	    if [[ "$ADDDNQ" = yes ]]
 	    then SUBJTYPE=conf
 	    else SUBJTYPE=arg ; SUBJ=/
 	    fi
-	}
-    elif [ "$SUBJTYPE" = '' ]
+	fi
+    elif [[ "$SUBJTYPE" = '' ]]
     then ADDDNQ=yes
     fi
 
-    [ "$ADDDNQ" = yes ] && {
-	[ "$SERIAL" = "" ] && DNQ="$(mk_rand 8)" || DNQ="$SERIAL"
+    [[ "$ADDDNQ" = yes ]] && {
+	[[ "$SERIAL" = "" ]] && DNQ="$(mk_rand 8)" || DNQ="$SERIAL"
 
-	[ "$SERIAL" = "" -a "$NOSETSERIAL" != yes ] &&
+	[[ "$SERIAL" = "" && "$NOSETSERIAL" != yes ]] &&
 	    SERIAL="$DNQ"
 
 	case "$SUBJTYPE" in
@@ -617,19 +622,20 @@ mkreqconf() {
     echo 'oid_section = oid_section'
     echo '[req]'
     echo 'distinguished_name = req_distinguished_name'
-    [ "$SUBJTYPE" = conf ] &&
+    [[ "$SUBJTYPE" = conf ]] &&
 	echo 'prompt = no'
 
-    if [ "$2" != no -o "$1" = no ]
+    if [[ "$2" != no || "$1" = no ]]
     then
-	[ "$V3OPTS$V3LIST$V3EXTRAS" != "" -o "$1" != "yes" ] && {
+	if [[ "$V3OPTS$V3LIST$V3EXTRAS" != "" || "$1" != "yes" ]]
+	then
 	    echo "$V3HEAD"
 	    echo "$V3OPTS"
-	    [ "$1" != yes ] &&
+	    [[ "$1" != yes ]] &&
 		echo "$V3CERTONLY"
 	    echo "$V3LIST"
 	    echo "$V3EXTRAS"
-	}
+	fi
     fi
     echo '[ req_distinguished_name ]'
     case "$SUBJTYPE" in
@@ -648,7 +654,7 @@ mkreqconf() {
 	echo 'commonName = Common Name'
 	echo 'organizationalUnitName = Organizational Unit Name'
 	echo "dnQualifier= Additional subject qualifier"
-	if [ "$SERIAL" != "" ]
+	if [[ "$SERIAL" != "" ]]
 	then echo "dnQualifier_default=$SERIAL"
 	else echo "dnQualifier_default=$(mk_rand 8)"
 	fi
@@ -660,10 +666,10 @@ mkreqconf() {
 }
 
 create_main_cert() {
-    if [ "$CSRFN" != "" ]
+    if [[ "$CSRFN" != "" ]]
     then SSCERT="$(cat "$CSRFN")"
     else
-	[ "$SHOWCONF" = yes ] && mkreqconf $MAKECSR $WANTCSR
+	[[ "$SHOWCONF" = yes ]] && mkreqconf $MAKECSR $WANTCSR
 
 	SSCERT="$(ft openssl req -new $UTF8 $X509 $DGST \
 	    -days "${CERT_DAYS:-$DEFAULT_DAYS}" \
@@ -672,27 +678,27 @@ create_main_cert() {
 	    -key <(echo "$SSKEY") \
 	    -config <(mkreqconf $MAKECSR $WANTCSR) )"
 
-	[ "$MAKECSR" = yes ] && CSRTEXT="$SSCERT"
+	[[ "$MAKECSR" = yes ]] && CSRTEXT="$SSCERT"
     fi
 
     return 0
 }
 
 create_suca_pem() {
-    [ "$SINGLEUSECA" = yes -a "$SIGNPEM" = '' ] || return 0
+    [[ "$SINGLEUSECA" != yes || "$SIGNPEM" != '' ]] && return 0
 
     mksucareqconf() {
 	echo "# Configure file for a private CA"
 	echo '[req]'
 	echo 'distinguished_name = req_distinguished_name'
 	echo 'prompt = no'
-	if [ "$V3" = yes -o "$V3SUCA" = yes ]
+	if [[ "$V3" = yes || "$V3SUCA" = yes ]]
 	then echo "$V3INIT"
-	     if [ "$V3CA" = no ]
+	     if [[ "$V3CA" = no ]]
 	     then
-		[ "$V3CRITICAL" != yes ] && CR='' || CR=critical,
+		[[ "$V3CRITICAL" != yes ]] && CR= || CR=critical,
 		echo "basicConstraints = ${CR}CA:TRUE,pathlen:0"
-		if [ "$V3CA" = no -a "$NOKEYID" != yes ]
+		if [[ "$V3CA" = no && "$NOKEYID" != yes ]]
 		then
 		    echo "subjectKeyIdentifier=hash"
 		    echo "authorityKeyIdentifier=keyid,issuer"
@@ -702,7 +708,7 @@ create_suca_pem() {
 	fi
 	echo '[ req_distinguished_name ]'
 
-	if [ "$SERIAL" != '' ]
+	if [[ "$SERIAL" != '' ]]
 	then echo "dnQualifier=$SERIAL"
 	else echo "dnQualifier=$(mk_rand 8)"
 	fi
@@ -710,12 +716,12 @@ create_suca_pem() {
 	# Most policies need the issuer subject to have a country code
 	# and organisation. The XX code is valid for a CA, the org not
 	# so much.
-	if [ "$POLICYOID" != '' ]
+	if [[ "$POLICYOID" != '' ]]
 	then echo "C=XX"
 	     echo "O=CA"
 	fi
 
-	if [ "$CN" != "" ]
+	if [[ "$CN" != "" ]]
 	then echo "OU=Private CA"
 	     echo "CN=$CN"
 	else echo "CN=Private CA"
@@ -724,12 +730,12 @@ create_suca_pem() {
 	echo '#END'
     }
 
-    [ "$SERIAL" = "" ] && SERIAL="$(mk_rand 8)"
+    [[ "$SERIAL" = "" ]] && SERIAL="$(mk_rand 8)"
     CAKEY="$(mkkey)"
 
-    [ "$NOSETSERIAL" != yes ] && CASER="$(mk_rand 8)"
+    [[ "$NOSETSERIAL" != yes ]] && CASER="$(mk_rand 8)"
 
-    [ "$SHOWCONF" = yes ] && mksucareqconf
+    [[ "$SHOWCONF" = yes ]] && mksucareqconf
 
     # shellcheck disable=SC2086
     SIGNPEM="$(ft openssl req -new $UTF8 -x509 $DGST \
@@ -745,20 +751,20 @@ create_suca_pem() {
 
 sign_created_csr() {
 
-    [ "$SIGNPEM" = "" ] && return 0
+    [[ "$SIGNPEM" = "" ]] && return 0
 
-    [ "$SERIAL" = "" ] && SERIAL="$(mk_rand 8)"
+    [[ "$SERIAL" = "" ]] && SERIAL="$(mk_rand 8)"
 
     # Default to days left on CA certificate
-    [ "$CERT_DAYS" = "" ] && {
+    [[ "$CERT_DAYS" = "" ]] && {
 	ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in <(echo "$SIGNPEM") | sed 's/^[^=]*=//')" ||:)"
 	TODAY="$(ft date +%s)"
-	[ "$ENDDAY" = "" ] && ENDDAY=2932896 || ENDDAY=$((ENDDAY/86400))
+	[[ "$ENDDAY" = "" ]] && ENDDAY=2932896 || ENDDAY=$((ENDDAY/86400))
 	CERT_DAYS=$((ENDDAY - TODAY/86400))
     }
 
     # Do we have to override the CSR's common name?
-    if [ "$CSRFN" != "" -a "$SUBJTYPE" != "" ]
+    if [[ "$CSRFN" != "" && "$SUBJTYPE" != "" ]]
     then
 	if ! openssl x509 -help 2>&1 | grep -qie -force_pubkey
 	then echo >&2 "ERROR: Cannot override name from csr with $(openssl version)"
@@ -771,7 +777,7 @@ sign_created_csr() {
 	# Openssl req requires a key, make it something quick.
 	TMPKEY="$(mktmpkey)"
 
-	[ "$SHOWCONF" = yes ] && mkreqconf yes no
+	[[ "$SHOWCONF" = yes ]] && mkreqconf yes no
 
 	# Make the new request with the new name.
 	SSCERT="$(openssl req -new $UTF8 \
@@ -783,7 +789,7 @@ sign_created_csr() {
     fi
 
     # Very old versions of openssl ...
-    if [ "$NOSETSERIAL" = yes ]
+    if [[ "$NOSETSERIAL" = yes ]]
     then
 	SERIALFN=/tmp/_$$.tmp
 	echo "$SERIAL" > "$SERIALFN"
@@ -791,7 +797,7 @@ sign_created_csr() {
     else SERIALFN=
     fi
 
-    [ "$SHOWCONF" = yes ] && mkreqconf
+    [[ "$SHOWCONF" = yes ]] && mkreqconf
 
     # shellcheck disable=SC2086
     SSCERT="$(ft openssl x509 -req $DGST \
@@ -804,20 +810,20 @@ sign_created_csr() {
 	    ${FORCEPUB:+-force_pubkey <(echo "$FORCEPUB") } \
 	    ${V3HEAD:+-extfile <(mkreqconf) -extensions "$X509SECT"} )"
 
-    [ "$SERIALFN" != '' ] && rm "$SERIALFN" # Sigh
+    [[ "$SERIALFN" != '' ]] && rm "$SERIALFN" # Sigh
 
     return 0
 }
 
 create_crl_file() {
-    [ "$CRLFN" = "" ] && return 0
+    [[ "$CRLFN" = "" ]] && return 0
 
-    [ "$WANTCSR" = yes ] && {
+    [[ "$WANTCSR" = yes ]] && {
 	echo >&2 "ERROR: Cannot make a CRL for a CSR"
 	exit 1
     }
 
-    if [ "$SIGNPEM" != '' ]
+    if [[ "$SIGNPEM" != '' ]]
     then CRLSIGN="$SIGNPEM"
     else CRLSIGN="$SSCERT$NL$SSKEY"
     fi
@@ -827,7 +833,7 @@ create_crl_file() {
 	echo 'default_ca = CA_default'
 	echo '[CA_default]'
 	echo "database = $TMP/index.txt"
-	if [ "$NOPKEY" = no ]
+	if [[ "$NOPKEY" = no ]]
 	then echo 'default_md = default'
 	else echo 'default_md = sha256'
 	fi
@@ -853,9 +859,9 @@ create_crl_file() {
 }
 
 create_pfx_file() {
-    [ "$PKCS12FN" = "" ] && return 0
+    [[ "$PKCS12FN" = "" ]] && return 0
 
-    [ "$WANTCSR" = yes ] && { echo >&2 "PKCS12 files can't hold csr's"; exit 1;}
+    [[ "$WANTCSR" = yes ]] && { echo >&2 "PKCS12 files can't hold csr's"; exit 1;}
     # shellcheck disable=SC2086
     openssl pkcs12 -export -passout "$PFXPASS" \
 	-out "$PKCS12FN" \
@@ -873,24 +879,24 @@ create_pfx_file() {
 }
 
 outp() {
-    if [ "$WANTCSR" = yes ]
+    if [[ "$WANTCSR" = yes ]]
     then echo "$SSCERT" | openssl req $REQSUBJECT
     else echo "$SSCERT" | openssl x509 -subject -issuer -fingerprint -serial -dates
     fi
 
-    [ "$SINGLEUSECA" = yes ] && {
-	if [ "$CAFN" != '' ]
+    [[ "$SINGLEUSECA" = yes ]] && {
+	if [[ "$CAFN" != '' ]]
 	then echo "$SIGNPEM" | openssl x509 -subject -serial -dates >"$CAFN"
 	else echo "$SIGNPEM" | openssl x509 -subject -serial -dates
 	fi
     }
 
-    [ "$CSRTEXT" != "" -a "$SHOWCSR" = yes ] &&
+    [[ "$CSRTEXT" != "" && "$SHOWCSR" = yes ]] &&
 	echo "$CSRTEXT"
 
-    if [ "$KFN" = '/dev/null' ]
+    if [[ "$KFN" = '/dev/null' ]]
     then :
-    elif [ "$KFN" != '' ]
+    elif [[ "$KFN" != '' ]]
     then umask 077
 	 outk > "$KFN"
     else outk
@@ -898,7 +904,7 @@ outp() {
 }
 
 outk() {
-    if [ "$KEYPASS" != "" ]
+    if [[ "$KEYPASS" != "" ]]
     then echo "$SSKEY" | openssl pkey ${KEYPASS:+$CIPHER -passout "$KEYPASS"}
 	 echo 'Public key for above key is:'
 	 echo "$SSKEY" | openssl pkey -pubout
