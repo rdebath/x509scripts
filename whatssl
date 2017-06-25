@@ -285,8 +285,14 @@ do
 		    -lastupdate -nextupdate -issuer \
 		    -nameopt multiline,esc_ctrl${UTF8:+,utf8,-esc_msb}
 	    else
+		FIRSTOBJ="$(echo "$ITEM" | openssl asn1parse 2>/dev/null | awk '/OBJECT/{print $NF;exit;}')"
 		PEM="$(echo "$ITEM" | sed -n 's/^-----BEGIN \(.*\)$/\1/p' | sed 's/-*\s*$//')"
-		echo "PEM style item $k not identified: $PEM"
+		if [ "$FIRSTOBJ" != '' ]
+		then
+		    echo "PEM item $k with name $PEM and object $FIRSTOBJ"
+		else
+		    echo "PEM style item $k not identified: $PEM"
+		fi
 	    fi
 	fi
     done
