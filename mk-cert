@@ -10,7 +10,7 @@ main() {
     [ "$KFN" != '' -a "$KFN" != /dev/null -a -s "$KFN" ] &&
 	{ echo "ERROR: File $KFN already exists" ; exit 1 ; }
 
-    [ "$KFN" != '' -a -s "$FN" ] &&
+    [ "$FN" != '' -a -s "$FN" ] &&
 	{ echo "ERROR: File $FN already exists" ; exit 1 ; }
 
     SSKEY="$(mkkey)"
@@ -834,7 +834,7 @@ create_crl_file() {
     }
 
     TMP=/tmp/ca_tmp.$$
-    mkdir -p -m u=rwx "$TMP"
+    mkdir -m u=rwx "$TMP"
     touch $TMP/index.txt
     touch $TMP/index.txt.attr
 
