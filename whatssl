@@ -1,20 +1,39 @@
-#!/bin/bash
+#!/bin/bash -
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
-[ $# -eq 0 ] && set -- -
 
+main() {
+    [ $# -eq 0 ] && set -- -
+
+    init_vars
+
+    for file
+    do
+	[ "$#" -gt 1 ] && echo -e "Contents of File $file\n"
+
+	get_file_data "$file" || continue
+
+	decode_data "$DATA"
+
+	[ "$#" -gt 1 ] && echo
+    done
+    exit 0
+}
+
+init_vars() {
 NL='
 '
+    NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
+    PW="-passin pass:${PASSWORD:-0000}"
 
-NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
-PW="-passin pass:${PASSWORD:-0000}"
-
-UTF8=
-if [ "$(locale charmap 2>/dev/null)" = UTF-8 ]
-then
-    if openssl req -help 2>&1 | grep -q -e -utf8
-    then UTF8=yes
+    UTF8=
+    if [ "$(locale charmap 2>/dev/null)" = UTF-8 ]
+    then
+	if openssl req -help 2>&1 | grep -q -e -utf8
+	then UTF8=yes
+	fi
     fi
-fi
+    return 0
+}
 
 pubkey_id() {
     local TKEY H keyid
@@ -56,8 +75,9 @@ pubkey_id() {
     echo "      $keyid"
 }
 
-for file
-do
+get_file_data() {
+    local file="$1" XDATA
+
     if [ ".$file" != .- ]
     then XDATA="$(openssl enc -base64 <"$file")"
     else XDATA="$(openssl enc -base64)"
@@ -84,19 +104,30 @@ do
 		 DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs7 -inform der -print_certs)"
 	    elif echo "$XDATA" | openssl enc -base64 -d | openssl asn1parse -inform DER | grep -qi 'OBJECT *:pkcs7-data'
 	    then echo "PKCS7/12 format data, encrypted pfx?"
-		 continue
+		 return 1
 	    else 
 		 OBJ="$(echo "$XDATA" | openssl enc -base64 -d | openssl asn1parse -inform DER | awk '/OBJECT/{print $NF;exit;}')"
 		 echo "File contents not identified; starts with$OBJ"
-		 continue
+		 return 1
 	    fi
 	}
     elif [ "$XDATA" = '' ]
-    then continue
+    then return 1
     else
 	echo >&2 "File not in PEM or DER format"
-	continue
+	return 1
     fi
+
+    return 0
+}
+
+decode_data() {
+    local ITEM CERTPUB REQPUB PKEYPUB FIRSTCERTPUB FIRSTPKEYPUB
+    local PKEYPARAM PUBKEY STRICT SUBJ ENCKEY CRLITEM PKCS7DATA
+    local failed success purpose tested
+    local k=0 found=0 ISSU= CHAIN= PREVCERTPUB= C=
+
+    local DATA="$1"
 
     CERTPUB="$(echo "$DATA" | openssl x509 -pubkey -noout 2>/dev/null)"
     REQPUB="$(echo "$DATA" | openssl req -pubkey -noout 2>/dev/null)"
@@ -114,13 +145,7 @@ do
 
     FIRSTCERTPUB="$CERTPUB"
     FIRSTPKEYPUB="$PKEYPUB"
-    FIRSTREQPUB="$REQPUB"
-    ISSU=
-    CHAIN=
-    PRECERTPUB=
 
-    k=0
-    found=0
     while :
     do
 	((k+=1))
@@ -272,7 +297,8 @@ do
 	    echo Item $k is a private key
 	else
 	    ENCKEY=$(echo "$ITEM" | openssl pkey -pubout $PW 2>&1 | grep -qi 'bad.\(decrypt\|pass\)' && echo yes)
-	    CRLITEM=$(echo "$ITEM" | openssl crl 2>/dev/null)
+	    CRLITEM=$(echo "$ITEM" | openssl crl 2>/dev/null ||:)
+	    PKCS7DATA=$(echo "$ITEM" | openssl pkcs7 -print_certs 2>/dev/null ||:)
 
 	    if [ "$ENCKEY" = "yes" ]
 	    then
@@ -284,6 +310,13 @@ do
 		echo "$ITEM" | openssl crl -noout \
 		    -lastupdate -nextupdate -issuer \
 		    -nameopt multiline,esc_ctrl${UTF8:+,utf8,-esc_msb}
+	    elif [ "$PKCS7DATA" != "" ]
+	    then
+		echo A PKCS7 bag with the contents ...
+		decode_data "$PKCS7DATA"
+		echo
+		echo End of PKCS7 file
+		echo
 	    else
 		FIRSTOBJ="$(echo "$ITEM" | openssl asn1parse 2>/dev/null | awk '/OBJECT/{print $NF;exit;}')"
 		PEM="$(echo "$ITEM" | sed -n 's/^-----BEGIN \(.*\)$/\1/p' | sed 's/-*\s*$//')"
@@ -298,5 +331,8 @@ do
     done
     [ "$found" -eq 0 ] &&
 	echo No PEM data found in "$file"
-done
-exit 0
+
+    return 0
+}
+
+main "$@"
