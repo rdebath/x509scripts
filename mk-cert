@@ -278,6 +278,15 @@ main() {
     [[ "$FN" != '' && -s "$FN" ]] &&
 	{ echo "ERROR: File $FN already exists" ; exit 1 ; }
 
+    [[ "$CAFN" != '' && -s "$CAFN" ]] &&
+	{ echo "ERROR: File $CAFN already exists" ; exit 1 ; }
+
+    [[ "$PKCS12FN" != '' && -s "$PKCS12FN" ]] &&
+	{ echo "ERROR: File $PKCS12FN already exists" ; exit 1 ; }
+
+    [[ "$CRLFN" != '' && -s "$CRLFN" ]] &&
+	{ echo "ERROR: File $CRLFN already exists" ; exit 1 ; }
+
     SSKEY="$(mkkey)"
 
     build_v3_extensions
@@ -384,10 +393,7 @@ NL='
     # mkkey() { openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) ;}
 
     X509SECT=req_x509
-    V3INIT="x509_extensions = $X509SECT
-    req_extensions = $X509SECT
-    [ $X509SECT ]
-    "
+    V3INIT="x509_extensions=$X509SECT${NL}req_extensions=$X509SECT$NL[$X509SECT]$NL"
 
     UTF8=
     if [[ "$(locale charmap 2>/dev/null)" = UTF-8 ]]
@@ -495,7 +501,10 @@ decode_args() {
 
 	-v3singleuseca|-v3suca ) MAKECSR=yes ; SINGLEUSECA=yes ; V3SUCA=yes ;;
 
-	-pkcs12[=:]*|-pfx[=:]* ) PKCS12FN="${ar#*[=:]}" ;;
+	-pkcs12[=:]*|-pfx[=:]* )
+	    PKCS12FN="${ar#*[=:]}"
+	    [[ "$FN" = "" ]] && FN=/dev/null
+	    ;;
 
 	-pass[=:]*:* ) KEYPASS="${ar#*[=:]}" ; PFXPASS="$KEYPASS" ;;
 	-pass[=:]* ) KEYPASS="pass:${ar#*[=:]}" ; PFXPASS="$KEYPASS" ;;
