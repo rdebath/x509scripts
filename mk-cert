@@ -550,7 +550,7 @@ build_v3_extensions() {
 	    ${NL}$CRLURI$NL"
     }
 
-    [[ "$POLICYTEXT" != "" && "$POLICYOID" != "" ]] && {
+    [[ "$POLICYTEXT" != "" || "$POLICYOID" != "" ]] && {
 	POLICYOID="${POLICYOID#,}"
 	[[ "$POLICYOID" = '' ]] && POLICYOID=2.5.29.32.0
 
@@ -562,13 +562,12 @@ build_v3_extensions() {
 	build_poltext() {
 	    echo '[ x509_pol ]'
 	    echo "policyIdentifier = $POLICYOID1"
-	    # shellcheck disable=SC2016
 	    [[ "$POLICYTEXT" != "" ]] && {
 		echo 'userNotice=@notice'
 		echo '[ notice ]'
 		echo "$POLICYTEXT" |
 		tr -d '"'"'" |
-		sed -e '1s/^/explicitText=/; $b end; s:$:\\r\\n\\:; :end'
+		sed -e '1s/^/explicitText=/; $ b end; s:$:\\r\\n\\:; :end'
 	    }
 	    echo
 	}
@@ -737,7 +736,6 @@ create_suca_pem() {
 
     [[ "$SHOWCONF" = yes ]] && mksucareqconf
 
-    # shellcheck disable=SC2086
     SIGNPEM="$(ft openssl req -new $UTF8 -x509 $DGST \
 	    -days "${CERT_DAYS:-$DEFAULT_DAYS}" \
 	    ${CASER:+-set_serial 0x"$CASER"} \
@@ -799,7 +797,6 @@ sign_created_csr() {
 
     [[ "$SHOWCONF" = yes ]] && mkreqconf
 
-    # shellcheck disable=SC2086
     SSCERT="$(ft openssl x509 -req $DGST \
 	    -days "${CERT_DAYS:-$DEFAULT_DAYS}" \
 	    ${SERIAL:+-set_serial 0x"$SERIAL"} \
@@ -862,7 +859,7 @@ create_pfx_file() {
     [[ "$PKCS12FN" = "" ]] && return 0
 
     [[ "$WANTCSR" = yes ]] && { echo >&2 "PKCS12 files can't hold csr's"; exit 1;}
-    # shellcheck disable=SC2086
+
     openssl pkcs12 -export -passout "$PFXPASS" \
 	-out "$PKCS12FN" \
 	-name "$CN til: $(echo "$SSCERT" | openssl x509 -noout -enddate |
