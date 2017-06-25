@@ -315,7 +315,7 @@ NL='
     SERIAL=
     CERT_DAYS=
     DEFAULT_DAYS=7304
-    EC=P-256
+    EC=prime256v1
 
     V3=no
     V3HEAD=
@@ -449,7 +449,12 @@ decode_args() {
 		ar="${ar#*:}:" ; noseed="${ar%%:*}"
 
 		case "$curve" in
-		128|192|224|256|384|521 ) curve="P-$curve" ;;
+		192 ) curve=prime192v1 ;;
+		224 ) curve=secp224r1 ;;
+		256 ) curve=prime256v1 ;;
+		384 ) curve=secp384r1 ;;
+		521 ) curve=secp521r1 ;;
+
 		[0-9]*[0-9] )
 		    ncurve="$(openssl ecparam -list_curves| grep " $curve bit" |
 			    awk -F: '/:/{print $1;exit;}' | tr -d ' ' )"
