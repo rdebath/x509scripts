@@ -1,6 +1,271 @@
 #!/bin/bash
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 set -e
+PROGRAM="$0"
+
+show_help_text() {
+
+    echo "Usage: $PROGRAM [Common Name] [arguments]"
+
+cat <<\!
+
+This script can create most styles of x509 certificate from the command
+line.  All options can be configured from arguments and the standard
+OpenSSL configuration file is not used. The default is to prompt for a
+common name (plus OU and dnQualifier) and generate an ec:prime256r1 key
+and certificate which is sent to the standard output.
+
+Options:
+
+    -subj-cn=String
+    -subj-ou=String
+    -subj-dc=String
+    -subj-o=String
+    -subj-l=String
+    -subj-st=String
+    -subj-c=String
+    -subj:oid=value
+
+	Set a component of the certificate subject. Some items such as
+	DC, OU and CN are allowed to be duplicated. OpenSSL will accept
+	duplicates for any item.
+
+	The OU is the most likely to be accepted as a place to store
+	any unusual part of a name you may wish to include.
+
+	Any arguments without a "-" to make them an option are assumed
+	to be part of the subject too, the first is a common name the
+	remainder are "OU" items.
+
+	If a argument begins with a "/" and contains an "=" it is
+	treated as an OpenSSL subject string. This conflicts with the
+	other options for building a subject.
+
+	The bare "-subj:" version copies the string "oid=value" to the
+	end of the section of the configuration. This allows any of the
+	possible name parts (surname, info, favouriteDrink, CSPName, etc)
+	to be added in any order. If OpenSSL doesn't know a particular
+	oid the numeric value can be used.
+
+	If no subject is specified one will be prompted for by OpenSSL.
+	NOTE: If you are adding a SAN list the common name prompted for
+	by OpenSSL will NOT be in the list unless you add it there too.
+
+    -days=7304
+	How many days should the certificate run for?
+
+    -alldays
+	Make the certificate run until 9999-12-31
+
+    -out=FileName
+	Put the certificate, and any other items in a file.
+
+    -keyout=FileName
+	Put the private key in a specific file not "-out=" or stdout.
+
+    -crlout=FileName
+	Generate an empty CRL using the certificate used to sign.
+
+    -caout=FileName
+	Put the certificate used to sign in a specific file.
+
+    -ser=0123456789abcdef
+    -serial=0123456789abcdef
+	Set the certificate serial number (in hexadecimal).
+	Various noise characters will be removed.
+
+    -dnq
+	Generate and add a dnQualifier item to the subject.
+	This is the original way of making sure that the subject of
+	a certificate is unique. It was only needed within an org
+	as the other DN components were sufficient for identifing
+	organisations.
+
+    -dnq=...
+	Add a dnQualifier item to the subject.
+
+    -no-prompt
+	Prevent OpenSSL prompting for any part of the subject.
+
+    -ec:prime256v1
+    -ec:curve:encoding
+    -ec:curve:encoding:no_seed
+	Use OpenSSL ecparam to generate an EC key.
+
+    -rsa
+    -rsa=2048
+	Generate RSA private keys.
+
+    -dsa
+    -dsa=1024
+	Generate DSA private keys.
+	NB: This also makes the default digest SHA1.
+
+    -list-curves
+    -show-curves
+	List the EC curves that OpenSSL supports.
+
+    -keyfile=FileName
+	Don't generate a key, use the one in FileName
+
+    -csr
+	Create a CSR not a certificate
+
+    -csrin=FileName
+	Use the CSR from FileName instead of generating a new key.
+
+    -showcsr
+	Dump any CSR we use to the output too.
+
+    -sign=FileName
+	Use the key and certificate in FileName to sign the certificate,
+	note if it's a PFX file it must have a ".pfx" extension.
+
+    -singleuseca
+    -suca
+	Generate a new CA key for the CA certificate and to sign the standard
+	certificate. Discard the CA key and send the CA certificate to the
+	output.
+
+    -v3singleuseca
+    -v3suca
+	Same but always make the CA a V3 certificate with the CA flag.
+
+    -casubj=...
+	Set the subject for the single use CA.
+
+    -pkcs12=FileName
+    -pfx=FileName
+	Create a "pfx" file with the certificate, private key and the
+	CA certificate used to sign the certificate.
+
+    -pass:password
+    -pass=OpenSSL:pass
+	Set a password on the key.
+
+    -dgst=sha1
+    -ripemd160, -sha, -sha1, -sha224, -sha256, -sha384, -sha512, -whirlpool
+	Select the digest used for signing.
+
+    -cipher=name
+	Select the cipher used for encrypting.
+
+    -openssl=/path/to/executable/openssl
+	Use the specified copy of openssl, not the one in the PATH.
+
+    -showconf
+	Debugging option, show the config files generated for OpenSSL
+
+Version 3 certificate extensions.
+
+    Note V3 extensions are used to limit the uses that a certificate
+    can be put to. If you're not concerned with limiting use of the
+    private key (ie the user is trusted) then these generally have
+    no use. However, some validators insist on certain V3 extensions
+    being present.
+
+    The SAN extension is a minor exception to this as it allows multiple
+    wildcard DNS names whereas browsers only accept one wildcard CN
+    item in the subject. In addition some browsers are rejecting all
+    certificates that don't have a SAN extension.
+
+    -v3
+	Make the certificate V3, don't add any extensions though.
+
+    -v3san=SanName
+    -san=SanName
+	Add a SAN name, or multiple items seperated by commas.
+	A dumb huristic is used to identify DNS vs IP vs email items.
+
+    -v3san, -san
+	Make a san from the common name even if there are no others.
+
+    -v3ca, -ca
+	Add normal V3 extensions for a CA certificate.
+
+    -v3basicca
+	Add only the basic extension for a CA certificate.
+
+    -v3crlsign, -crlsign, -v3crl
+	For a V3 CA certificate, make sure it's allowed to sign CRLs.
+
+    -v3lastca, -lastca
+	Make a V3 CA certificate with the 'pathlen:0' option to prevent
+	certificates that this CA signs being CAs.
+
+    -v3nokeyid, -nokeyid
+	Disable the "Subject Key Identifier" and "Authority Key Identifier"
+	additions.
+
+    -v3usr, -v3user, -usr, -user
+	Prevent this V3 certificate begin used as a CA.
+
+    -v3server, -server
+	Add V3 key usage extensions to prevent the certificate being used
+	as anything except an SSL server.
+	NB: Can be combined with -v3client or -v3email to allow those.
+
+    -v3client, -client
+	Add V3 key usage extensions to prevent the certificate being used
+	as anything except an SSL client.
+	NB: Can be combined with -v3server or -v3email to allow those.
+
+    -v3email, -email
+	Add V3 key usage extensions to prevent the certificate being used
+	as anything except a MIME signing or encryption certificate.
+	NB: Can be combined with -v3server or -v3client to allow those.
+
+    -v3timestamp, -timestamp
+	Add V3 key usage extensions for timestamp signing. This can NOT
+	be combined with other key usages.
+
+    -v3ns, -ns
+	Add the netscape Client/server extensions too.
+
+    -v3ns=...
+    -ns=...
+	Add a specific list of netscape usages.
+
+    -v3crit, -v3critical, -critical
+	Mark CA, key usage and extended key usage extensions as critical.
+	Beware:
+	    https://en.wikipedia.org/wiki/X.509#Implementation_issues
+
+    -poltext=FileName
+	Add an "all uses" policy extension and include the text from
+	FileName as an "issuer statement".
+
+    -policy=OID
+	The first one of these sets the OID for the '-poltext' option if
+	present. Additional '-policy' arguments add extra policy extensions.
+
+    -v3crluri=..., -crlurl=...
+	Add a "CRL Distribution Point" item to the certificate extensions.
+
+    -v3dv|-dv )
+	Make the certificate policy "Domain validated" and set most
+	of the other stuff that's supposed to be set.
+	BUT would also need:
+	    The certificate must be signed by a CA (not self-signed)
+	    Add authorityInformationAccess extension
+	    with OCSP over HTTP
+	    and HTTP URL for issuing certificate
+
+    -v3='OpenSSL extension config'
+	Add any x509 v3 extension config to the OpenSSL config file used
+	to create the certificate.
+
+    -v3xt='OpenSSL extension config'
+    -xt='OpenSSL extension config'
+	Add any x509 v3 extension config to the OpenSSL config file used
+	to create the certificate.
+
+	This item is placed after the all "-v3=" items so can be used when
+	the config file needs additional sections.
+!
+
+    exit 0
+}
 
 main() {
     init_vars
@@ -136,6 +401,7 @@ NL='
 decode_args() {
     for ar
     do  case "$ar" in
+	-h|-help|--help) show_help_text ;;
 
 	-showconf ) SHOWCONF=yes ;;
 
@@ -393,7 +659,7 @@ decode_args() {
 	    esac
 	    ;;
 
-	-*) echo >&2 "Unknown option: $ar" ; exit 1 ;;
+	-*) echo >&2 "Unknown option: $ar, use -help for help text." ; exit 1 ;;
 
 	* ) SUBJTYPE="${SUBJTYPE:-conf}"
 	    if [[ "$SUBJTYPE" != "conf" ]] ; then

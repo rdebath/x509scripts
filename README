@@ -139,6 +139,7 @@ Usage: ./mk-cert [Common Name] [arguments]
 	Set the subject for the single use CA.
 
     -pkcs12=FileName
+    -pfx=FileName
 	Create a "pfx" file with the certificate, private key and the
 	CA certificate used to sign the certificate.
 
