@@ -269,6 +269,7 @@ Version 3 certificate extensions.
 
 main() {
     init_vars
+    test_for_windows
     decode_args "$@"
     check_args
 
@@ -1186,6 +1187,26 @@ outk() {
 	 echo 'Public key for above key is:'
 	 echo "$SSKEY" | openssl pkey -pubout
     else echo "$SSKEY"
+    fi
+}
+
+test_for_windows() {
+    # MINGW has two copies of openssl, one compiled for Windows and one
+    # compiled for Unix. The Windows version cannot be used with process
+    # substitution ( the <(...) stuff ). Check to see if the default is
+    # working, if not try to find the other one.
+    local pgm
+
+    if [ "$(openssl enc -a -in <(echo ok) 2>/dev/null )" != b2sK ]
+    then
+	for pgm in $(which -a openssl)
+	do
+	    eval "openssl() { command '$pgm' \"\$@\"; }"
+
+	    if [ "$(openssl enc -a -in <(echo ok) 2>/dev/null )" = b2sK ]
+	    then break
+	    fi
+	done
     fi
 }
 

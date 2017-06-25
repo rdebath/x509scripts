@@ -5,6 +5,7 @@ main() {
     [ $# -eq 0 ] && set -- -
 
     init_vars
+    test_for_windows
 
     for file
     do
@@ -333,6 +334,26 @@ decode_data() {
 	echo No PEM data found in "$file"
 
     return 0
+}
+
+test_for_windows() {
+    # MINGW has two copies of openssl, one compiled for Windows and one
+    # compiled for Unix. The Windows version cannot be used with process
+    # substitution ( the <(...) stuff ). Check to see if the default is
+    # working, if not try to find the other one.
+    local pgm
+
+    if [ "$(openssl enc -a -in <(echo ok) 2>/dev/null )" != b2sK ]
+    then
+	for pgm in $(which -a openssl)
+	do
+	    eval "openssl() { command '$pgm' \"\$@\"; }"
+
+	    if [ "$(openssl enc -a -in <(echo ok) 2>/dev/null )" = b2sK ]
+	    then break
+	    fi
+	done
+    fi
 }
 
 main "$@"
