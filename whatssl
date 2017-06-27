@@ -11,7 +11,12 @@ main() {
     do
 	[ "$#" -gt 1 ] && echo -e "Contents of File $file\n"
 
-	get_file_data "$file" || continue
+	if [ ".$file" != .- ]
+	then XDATA="$(openssl enc -base64 <"$file")"
+	else XDATA="$(openssl enc -base64)"
+	fi
+
+	decode_binary_data "$XDATA" || continue
 
 	decode_data "$DATA"
 
@@ -76,13 +81,9 @@ pubkey_id() {
     echo "      $keyid"
 }
 
-get_file_data() {
-    local file="$1" XDATA
+decode_binary_data() {
+    local XDATA="$1"
 
-    if [ ".$file" != .- ]
-    then XDATA="$(openssl enc -base64 <"$file")"
-    else XDATA="$(openssl enc -base64)"
-    fi
     if echo "$XDATA" | openssl enc -base64 -d 2>/dev/null | grep -iq ^-----BEGIN
     then DATA="$(echo "$XDATA" | openssl enc -base64 -d )"
     elif echo "$XDATA" | openssl enc -base64 -d | openssl asn1parse -inform der >/dev/null 2>&1
@@ -324,6 +325,10 @@ decode_data() {
 		if [ "$FIRSTOBJ" != '' ]
 		then
 		    echo "PEM item $k with name $PEM and object $FIRSTOBJ"
+		    (
+			decode_binary_data "$ITEM" &&
+			decode_data "$DATA"
+		    )
 		else
 		    echo "PEM style item $k not identified: $PEM"
 		fi
