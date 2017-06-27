@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 D="${1:-localhost}" ; shift
 PATH="$PATH:$(pwd)"
@@ -18,3 +18,9 @@ mk-cert \
     -out="$D".crt \
     -subj-cn="$D" \
     "$@"
+
+for i in "$D".crl "$D".key "$D".ca.crt "$D".crt
+do  [ -s "$i" ] && {
+	sed $'s/$/\r/' < "$i" > "$i".tmp && mv "$i".tmp "$i"
+    }
+done
