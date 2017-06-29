@@ -179,13 +179,13 @@ decode_data() {
 	    if openssl x509 -help 2>&1 | grep -qie -issuer_hash_old
 	    then
 		echo "$ITEM" |
-		    openssl x509 -noout -text \
+		    openssl x509 -noout -text -fingerprint \
 			-certopt no_sigdump,no_pubkey \
 			-nameopt esc_ctrl${UTF8:+,utf8,-esc_msb}
 	    elif openssl x509 -help 2>&1 | grep -qie -issuer_hash
 	    then
 		echo "$ITEM" |
-		    openssl x509 -noout -text \
+		    openssl x509 -noout -text -fingerprint \
 			-certopt compatible,no_sigdump,no_pubkey
 	    else
 		echo "$ITEM" |
@@ -274,10 +274,14 @@ decode_data() {
 	then
 	    PREVCERTPUB=
 	    echo "$ITEM" | openssl req -noout -text -reqopt no_sigdump,no_pubkey
-	    [ "$REQPUB" = "$FIRSTPKEYPUB" ] &&
-		echo "    WARNING: The file contains a private key that matches this request"
-	    [ "$REQPUB" = "$FIRSTCERTPUB" ] &&
-		echo "    This request matches the first certificate"
+	    if [ "$REQPUB" = "$FIRSTPKEYPUB" ]
+	    then echo "    WARNING: The file contains a private key that matches this request"
+	    elif [ "$REQPUB" = "$FIRSTCERTPUB" ]
+	    then echo "    This request matches the first certificate"
+	    else
+		echo "    Public key is:"
+		pubkey_id "$(echo "$ITEM" | openssl req -pubkey -noout)"
+	    fi
 	elif [ "$PKEYPUB" != "" -a "$PKEYPUB" = "$FIRSTPKEYPUB" -a "$PKEYPUB" = "$FIRSTCERTPUB" ]
 	then :
 	elif [ "$PKEYPUB" != "" -a "$PKEYPUB" = "$PREVCERTPUB" ]
