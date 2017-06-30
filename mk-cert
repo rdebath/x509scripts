@@ -712,6 +712,12 @@ check_args() {
 	SANLIST="${SANLIST%,}"
     }
 
+    if [[ "$NOPROMPT" != yes && "$CN" = '' && "$V3SAN" = yes ]]
+    then
+	echo >&2 "The -san option cannot be used with OpenSSL prompting for the name"
+	exit 1
+    fi
+
     if [[ "$V3TIMESTAMP" = yes && "$V3CLIENT$V3SERVER$V3EMAIL" != nonono ]]
     then
 	echo >&2 "A timestamping certificate can only be for timestamping."
