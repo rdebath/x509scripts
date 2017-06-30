@@ -186,9 +186,6 @@ Version 3 certificate extensions.
     -v3basicca
 	Add only the basic extension for a CA certificate.
 
-    -v3crlsign, -crlsign, -v3crl
-	For a V3 CA certificate, make sure it's allowed to sign CRLs.
-
     -v3lastca, -lastca
 	Make a V3 CA certificate with the 'pathlen:0' option to prevent
 	certificates that this CA signs being CAs.
@@ -327,7 +324,6 @@ NL='
     V3EXTRAS=
     V3CERTONLY=
     V3CA=
-    V3CRL=
     V3CAPATH=
     V3CLIENT=no
     V3SERVER=no
@@ -423,7 +419,7 @@ decode_args() {
 
 	-out[=:]* ) FN="${ar#*[=:]}" ;;
 	-keyout[=:]* ) KFN="${ar#*[=:]}" ;;
-	-crlout[=:]* ) CRLFN="${ar#*[=:]}" ; V3CRL=yes ;;
+	-crlout[=:]* ) CRLFN="${ar#*[=:]}" ;;
 	-caout[=:]* ) CAFN="${ar#*[=:]}" ;;
 
 	-ser[=:]??*|-serial[=:]??* )
@@ -524,7 +520,6 @@ decode_args() {
 
 	-v3 ) V3=yes ;;
 	-v3ca|-ca ) V3=yes ; V3CA=yes ;;
-	-v3crlsign|-crlsign|-v3crl ) V3=yes ; V3CRL=yes ;;
 	-v3lastca|-lastca ) V3=yes ; V3CA=yes ; V3CAPATH=0 ;;
 	-v3usr|-usr|-v3user|-user ) V3=yes ; V3CA=no ;;
 	-v3server|-server ) V3=yes ; V3SERVER=yes ;;
@@ -768,7 +763,7 @@ build_v3_extensions() {
     V3OPTS="$V3OPTS${NL}$SANLIST"
 
     [[ "$V3CA" = yes ]] && V3OPTS="$V3OPTS${NL}basicConstraints = ${CR}CA:TRUE${V3P}"
-    [[ "$V3CA" = yes ]] && V3XKU=keyCertSign,${V3CRL:+cRLSign,}
+    [[ "$V3CA" = yes ]] && V3XKU=keyCertSign,cRLSign,
     [[ "$V3CA" = no ]] && V3OPTS="$V3OPTS${NL}basicConstraints = ${CR}CA:FALSE"
 
     [[ "$V3SERVER" = yes ]] && V3EKU=$V3EKU,serverAuth

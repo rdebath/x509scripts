@@ -1,3 +1,12 @@
 certs
 demoCA
-domain-key.pfx
+
+# You don't need to see my identification.
+*.pem
+*.pfx
+*.crt
+*.cer
+*.key
+*.crl
+*.jks
+*.csr

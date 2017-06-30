@@ -67,9 +67,6 @@ Usage: ./mk-cert [Common Name] [arguments]
     -keyout=FileName
 	Put the private key in a specific file not "-out=" or stdout.
 
-    -crlout=FileName
-	Generate an empty CRL using the certificate used to sign.
-
     -caout=FileName
 	Put the certificate used to sign in a specific file.
 
@@ -183,6 +180,8 @@ Version 3 certificate extensions.
 
     -v3san, -san
 	Make a san from the common name even if there are no others.
+	This is now required by Chrome in direct contravention of the
+	requirements of RFC 2818 (HTTP over SSL).
 
     -v3ca, -ca
 	Add normal V3 extensions for a CA certificate.
