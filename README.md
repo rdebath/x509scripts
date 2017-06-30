@@ -1,12 +1,16 @@
+The mk-cert program
+===================
+
 The `mk-cert` program is used to make private keys, certificates and
 certificate requests. To "make a certificate" all you have to do is run
 the script, it will allow openssl to prompt you for the name to put on
 the certificate and create a small but secure key and certificate on
 the standard output ready to copy & paste to where you need them.
 
-If instead you give the script one or more non-option (without
-a hyphen) arguments these will be used as the "commonName" and
-"organizationalUnitName" fields in the certificate "subject".
+If instead you give the script a non-option (without a hyphen) argument
+this will be used as the "commonName". Addition arguments will be used
+as SAN entries if they look kinda like DNS names or IP addresses and
+"organizationalUnitName" field values otherwise.
 
 The default period for the certificate is 20 years, if this is not right
 for you the `-days=365` option allows you to choose any period you wish,
@@ -35,10 +39,11 @@ that extensions be added (which converts the certificate to "Version 3").
 
 The most useful extension is probably the "Subject Alternative Name"
 or SAN which web browsers use to specify multiple common names (instead
-of, you know, specifing multiple common names).  Just adding `-san`
-adds an entry for the common name. If you specify an argument to the
-option like `-san=testhost.xy` this will be added and another name to
-the san list. You can add as many as you need.
+of, you know, specifing multiple common names).  Just adding `-san` adds
+an entry for the common name. If you specify an argument to the option
+like `-san=testhost.xy` this will be added and another name to the san
+list. Inserting a tag identifier `-san=DNS:example.com` specifies the
+type of this SAN entry. You can add as many as you need.
 
 BEWARE: Chrome requires the SAN or it will give a "Common name invalid"
 error even if the common name is perfectly correct and legal on it's own.

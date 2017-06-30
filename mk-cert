@@ -570,13 +570,18 @@ decode_args() {
 		for san in ${sanlst//,/ }
 		do  [[ "$SANLIST" != "" ]] && SANLIST="${SANLIST%,},"
 		    [[ "$san" = '' || "$san" = "$CN" ]] && continue
-		    case "$san" in
-		    [0-9]*.*.*.*[0-9] ) SANLIST="${SANLIST}IP:$san" ;;
-		    [0-9a-fA-F]*:*:*[0-9a-fA-F]|::*[0-9a-fA-F] )
-			SANLIST="${SANLIST}IP:$san" ;;
-		    *@* ) SANLIST="${SANLIST}email:$san" ;;
-		    * ) SANLIST="${SANLIST}DNS:$san" ;;
-		    esac
+		    if [[ "$san" =~ ^(IP|DNS|email|URI|RID|dirName|otherName): ]]
+		    then SANLIST="${SANLIST}$san"
+		    elif add_good_san "$san"
+		    then :
+		    else
+			case "$san" in
+			[0-9a-fA-F]*:*:*[0-9a-fA-F]|::*[0-9a-fA-F] )
+			    SANLIST="${SANLIST}IP:$san" ;;
+			*@* ) SANLIST="${SANLIST}email:$san" ;;
+			* ) SANLIST="${SANLIST}DNS:$san" ;;
+			esac
+		    fi
 		done
 		SANLIST="${SANLIST%,}"
 		;;
@@ -689,13 +694,35 @@ decode_args() {
 	    then SUBJ_ID=$((SUBJ_ID+1))
 		 SUBJ_CN="$SUBJ_CN${NL}${SUBJ_ID}.CN=$ar"
 		 CN="$ar"
-	    else SUBJ_ID=$((SUBJ_ID+1))
-		 SUBJ_OU="$SUBJ_OU${NL}${SUBJ_ID}.OU=$ar"
+	    else
+		 add_good_san "$ar" || {
+		     SUBJ_ID=$((SUBJ_ID+1))
+		     SUBJ_OU="$SUBJ_OU${NL}${SUBJ_ID}.OU=$ar"
+		 }
 	    fi
 	    ;;
 	esac
     done
 
+    return 0
+}
+
+add_good_san() {
+    local san=
+
+    if [[ "$1" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]
+    then san="IP:$1"
+    elif [[ "$1" =~ ^(\*\.)?[a-zA-Z][a-zA-Z0-9.]*\.[a-zA-Z][a-zA-Z]+$ ]]
+    then san="DNS:$1"
+    elif [[ "$1" =~ ^[a-zA-Z][a-zA-Z0-9.]+$ ]]
+    then san="DNS:$1"
+    else return 1
+    fi
+
+    V3=yes ; V3SAN=yes
+    [[ "$SANLIST" != "" ]] && SANLIST="${SANLIST%,},"
+    SANLIST="${SANLIST}$san"
+    SANLIST="${SANLIST%,}"
     return 0
 }
 
