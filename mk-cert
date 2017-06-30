@@ -353,6 +353,7 @@ NL='
     POLICYOID=
     NOPROMPT=
     NOKEYID=
+    WANTDVCERT=
 
     CIPHER=-aes128
     DGST=
@@ -600,6 +601,10 @@ decode_args() {
 	    # For example:
 	    # -suca \
 	    # -v3='authorityInfoAccess = OCSP;URI:http://ocsp.my.host/,caIssuers;URI:http://my.ca/ca.html'
+	    #
+	    # In addition the commonName is "deprecated", but all CA's still
+	    # include it.
+	    WANTDVCERT=yes
 	    V3=yes
 	    V3SAN=yes
 	    V3SERVER=yes
@@ -700,6 +705,11 @@ check_args() {
 	exit 1
     }
 
+    # Force a CA signed certificate for DV certs
+    [[ "$WANTDVCERT" = yes && "$WANTCSR" != yes ]] && {
+	MAKECSR=yes ; SINGLEUSECA=yes
+    }
+
     # Extract a (passworded) pfx file.
     [[ "$SIGNPFX" != '' ]] && SIGNPEM="$(openssl pkcs12 -nodes -in "$SIGNPFX")"
 
@@ -715,7 +725,10 @@ check_args() {
 
     if [[ "$NOPROMPT" != yes && "$CN" = '' && "$V3SAN" = yes ]]
     then
-	echo >&2 "The -san option cannot be used with OpenSSL prompting for the name"
+	if [[ "$WANTDVCERT" = yes ]]
+	then echo >&2 "The -dv option cannot be used with OpenSSL prompting for the name"
+	else echo >&2 "The -san option cannot be used with OpenSSL prompting for the name"
+	fi
 	exit 1
     fi
 
@@ -997,15 +1010,14 @@ create_suca_pem() {
 	else echo "dnQualifier=$(mk_rand 8)"
 	fi
 
-	# Most policies need the issuer subject to have a country code
-	# and organisation. The XX code is valid for a CA, the org not
-	# so much.
-	if [[ "$POLICYOID" != '' ]]
+	# DV certificates need the issuer subject to have a country
+	# code and organisation. The XX code is valid for a CA, the
+	# org is supposed to be the CA's company name.
+	if [[ "$WANTDVCERT" = yes ]]
 	then echo "C=XX"
-	     echo "O=CA"
-	fi
-
-	if [[ "$CN" != "" ]]
+	     echo "O=Private CA"
+	     echo "CN=${CN:-CA}"
+	elif [[ "$CN" != "" ]]
 	then echo "OU=Private CA"
 	     echo "CN=$CN"
 	else echo "CN=Private CA"
