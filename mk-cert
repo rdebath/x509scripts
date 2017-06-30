@@ -605,6 +605,7 @@ decode_args() {
 	    V3SERVER=yes
 	    V3CLIENT=yes
 	    POLICYOID="$POLICYOID,2.23.140.1.2.1"
+	    DEFAULT_DAYS=1187
 	    ;;
 
 	/*=* )
