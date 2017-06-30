@@ -10,7 +10,8 @@ the standard output ready to copy & paste to where you need them.
 If instead you give the script a non-option (without a hyphen) argument
 this will be used as the "commonName". Addition arguments will be used
 as SAN entries if they look kinda like DNS names or IP addresses and
-"organizationalUnitName" field values otherwise.
+"organizationalUnitName" field values otherwise. (If you don't want the
+script to guess, use the options mentioned below)
 
 The default period for the certificate is 20 years, if this is not right
 for you the `-days=365` option allows you to choose any period you wish,
@@ -21,7 +22,7 @@ that this generates so the `-rsa` option switches to the traditional
 "RSA" style keys. Adding an argument to the option `-rsa:4096` allows
 you to choose a specific size for this key.
 
-RSA keys are somewhat larger than their "EC" equivalents so you will
+RSA keys are significantly larger than their "EC" equivalents so you will
 probably want to write the output to a file with `-out=Filename`. If you
 want the key in a separate file the `-keyout=KeyFilename` will do that.
 
@@ -33,9 +34,9 @@ added by options like `-subj=favouriteDrink=Whisky` or even by using an
 "OID" number directly... `-subj:2.16.840.1.113883.19.5.1091='malty brew
 with a slight caramel sweetness'`.
 
-Without additional prompting a "Version 1" certificate is created, this
-is a simple and secure type of certificate, but some applications insist
-that extensions be added (which converts the certificate to "Version 3").
+By default a "Version 1" certificate is created, this is a simple and
+secure type of certificate, but some applications insist that extensions
+be added (which converts the certificate to "Version 3").
 
 The most useful extension is probably the "Subject Alternative Name"
 or SAN which web browsers use to specify multiple common names (instead
@@ -57,8 +58,8 @@ constructed to allow those usages and deny others.
 
 The problem with this is that an application that insists on this
 sort of configuration is likely to also be unhappy with a self-signed
-certificate. The simplest and most secure solution to this problem is
-the "Single use CA" (option `-singleuseca` or `-suca`).
+certificate. The simplest and most secure solution to this problem is the
+"Single use CA" (option `-singleuseca` or `-suca`).
 
 This option instructs the script to create two certificates with different
 keys, the first is a "CA certificate". It's key used to sign the second
@@ -75,6 +76,12 @@ available... the `-crlout=filename` option will create an empty, signed
 these applications. The application may also need a "CRL Distribution
 Point" extension with the URL it can download the CRL from, the option
 `-crlurl=http://example.com/path/file.crl` does this.
+
+Using even these options to create a certificate that matches a "Domain
+validated" certificate you might get from a public CA is still quite
+long. The `-dv` option configures the script to do this.  The main
+missing item is the `authorityInformationAccess` extension that would
+need you to provide a website just for that item.
 
 Many of these options can be used when creating a CSR (or "Certificate
 signing request") just choose the options as normal and add `-csr` to

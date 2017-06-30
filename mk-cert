@@ -598,17 +598,15 @@ decode_args() {
 	    # Make the certificate policy "Domain validated" and set most
 	    # of the other stuff that's supposed to be set.
 	    # BUT would also need:
-	    #   The certificate must be signed by a CA (not self-signed)
 	    #   Add authorityInformationAccess extension
 	    #   with OCSP over HTTP extension
 	    #   and HTTP URL for issuing certificate
 	    #
 	    # For example:
-	    # -suca \
 	    # -v3='authorityInfoAccess = OCSP;URI:http://ocsp.my.host/,caIssuers;URI:http://my.ca/ca.html'
 	    #
-	    # In addition the commonName is "deprecated", but all CA's still
-	    # include it.
+	    # In addition the commonName is "deprecated",
+	    # but all public CA's still include it.
 	    WANTDVCERT=yes
 	    V3=yes
 	    V3SAN=yes
