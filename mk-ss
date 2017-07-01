@@ -3,25 +3,21 @@
 # mk-ss bash script
 # =================
 #
-# This is a small script to create a plain self-signed certificate
-# that expires in January 2038.  If given no arguments it creates a V1
-# x509 certificate with the common name 'localhost'. The first argument
-# is the Common Name, additional arguments are set as SAN hosts which
-# automatically converts the certificate to a plain V3 x509 certificate.
-# An empty second argument gives a SAN list of just the common name.
+# This is a small bash function to create a self-signed certificate that
+# expires in January 2038.  If given no arguments it uses 'localhost' as
+# the common name.  The first argument is the Common Name and is copied
+# into the SAN list additional arguments are set as extra SAN hosts.
 #
 # The certificate and key are 2048 bit RSA and sent out the standard output.
 
 make_ss() {
-    local CN="$1" SERIAL ; shift
+    local CN="$1" SERIAL SSKEY SSCERT
     [ "$CN" = "" ] && CN=localhost
 
     make_ss_reqconf() {
 	local SANLIST=''
-	[ "$#" -gt 0 ] && {
-	    SANLIST="$(echo "$CN $*" | xargs)"
-	    SANLIST="DNS:${SANLIST// /,DNS:}"
-	}
+	SANLIST="$(echo "$*" | xargs)"
+	SANLIST="DNS:${SANLIST// /,DNS:}"
 	echo '[req]'
 	echo 'distinguished_name = rdn'
 	echo 'prompt = no'
@@ -43,9 +39,9 @@ make_ss() {
 	    -key <(echo "$SSKEY") \
 	    -config <(make_ss_reqconf "$@") )"
     unset make_ss_reqconf
+
+    echo "$SSCERT" | openssl x509 -subject -serial -dates
+    echo "$SSKEY"
 }
 
 make_ss "$@"
-
-echo "$SSCERT" | openssl x509 -subject -serial -dates
-echo "$SSKEY"

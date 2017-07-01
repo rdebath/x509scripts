@@ -729,14 +729,12 @@ eval 2>/dev/null '
     then san="$1"
     elif [[ "$1" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]
     then san="IP:$1"
-    elif [[ "$1" =~ ^(\*\.)?[a-zA-Z][a-zA-Z0-9.]*\.[a-zA-Z][a-zA-Z]+$ ]]
-    then san="DNS:$1"
-    elif [[ "$1" =~ ^[a-zA-Z][a-zA-Z0-9.]+$ ]]
+    elif [[ "$1" =~ ^(\*\.)?([a-zA-Z][-a-zA-Z0-9]*\.)*[a-zA-Z][-a-zA-Z0-9]+$ ]]
     then san="DNS:$1"
     fi
 '
     [[ "$san" = '' ]] && return 1
-    add_san "$san"
+    add_san "$san" ${2:+"$2"}
 }
 
 add_san() {
@@ -770,7 +768,7 @@ check_args() {
 
     # Put the commonName at the start of the san list
     [[ "$V3SAN" = yes && "$CN" != "" ]] && {
-	add_san "DNS:$CN" start
+	add_good_san "$CN" start ||:
     }
 
     if  [[ "$NOPROMPT" != yes ]] &&
@@ -870,7 +868,7 @@ build_v3_extensions() {
 	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU%,}"
     fi
 
-    [[ "$V3SAN" = yes ]] && {
+    [[ "$V3SAN" = yes && "$SANSECT" != '' ]] && {
 	local SUBCRIT=
 	[[ "$V3CRITICAL" = yes ]] &&
 	    [[ "$SUBJTYPE" = '' || "$SUBJTYPE.$SUBJ_ID" = conf.0 ]] &&

@@ -10,6 +10,34 @@ Note: It will not print any private part of a file, instead it will
 extract the related public key and describe the item as a "private key
 for" the displayed public part.
 
+mk-winset script
+================
+The calls mk-cert with default arguments that create the file types normally
+needed by Windows server applications. Windows applications usually prefer
+CA+server certificate pairs, RSA keys and pfx files. Current web browsers
+like to have a SAN entry even if it only includes the CN.
+
+The first argument is the common name, the second, if it doesn't begin
+with a '-' is a directory to put the files in. The remainder of the
+arguments are passed to mk-cert.
+
+The files created use the common name as the base and have extensions:
+    .crt .ca.crt .pfx .key .crl
+
+mk-ovpn and mk-ovpn2 bash scripts
+=================================
+
+The mk-ovpn script calls mk-cert to make certificates and keys for
+OpenVPN. The idea is to use the "singleuseca" mode to create a CA
+certificate specifically for every instance of OpenVPN (client and server)
+and only have the CA certificates that of the specific keys allowed to
+connect listed in the configuration file. The mk-ovpn2 script collects
+these CA certificates (and the user certificates and keys) does the
+necessary selections for generating each ovpn config file.
+
+At least one of the certificates must be marked as a server and a,
+possibly empty, pattern file is needed to prefix the client setups.
+
 mk-cert bash script
 ===================
 
@@ -272,26 +300,3 @@ Version 3 certificate extensions.
 	This item is placed after the all "-v3=" items so can be used when
 	the config file needs additional sections.
 
-mk-winset script
-================
-The calls mk-cert with default arguments that create the file types normally
-needed by Windows server applications. Windows applications usually prefer
-CA+server certificate pairs, RSA keys and pfx files. Current web browsers
-like to have a SAN entry even if it only includes the CN.
-
-The first argument is the common name, the second, if it doesn't begin
-with a '-' is a directory to put the files in. The remainder of the
-arguments are passed to mk-cert.
-
-The files created use the common name as the base and have extensions:
-    .crt .ca.crt .pfx .key .crl
-
-mk-ovpn and mk-ovpn2 bash scripts
-=================================
-
-This script calls mk-cert to make certificates and keys for OpenVPN. The
-idea is to use the "singleuseca" mode to create a CA certificate
-specifically for every instance of OpenVPN (client and server) and only
-have the CA certificates that of the specific keys allowed to connect
-listed in the configuration file. The mk-ovpn2 script collects these CA
-keys and does the necessary selections for generating each ovpn config file.
