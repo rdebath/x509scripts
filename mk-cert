@@ -771,8 +771,7 @@ check_args() {
 	add_good_san "$CN" start ||:
     }
 
-    if  [[ "$NOPROMPT" != yes ]] &&
-	[[ "$V3SAN" = yes ]] &&
+    if  [[ "$NOPROMPT" != yes && "$V3SAN" = yes && "$CSRFN" = '' ]] &&
 	[[ "$SUBJTYPE" = '' || "$SUBJTYPE.$SUBJ_ID" = conf.0 ]]
     then
 	if [[ "$WANTDVCERT" = yes ]]

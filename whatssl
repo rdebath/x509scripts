@@ -46,7 +46,6 @@ NL='
 
 pubkey_id() {
     local TKEY H keyid
-    [ "$NOPKEY" = yes ] && { echo No pkey command ; return; }
 
     keyid="$(echo "$1" |
 	openssl asn1parse | tr ':' ' ' | awk '/OBJECT/{print $NF;}' |
@@ -69,17 +68,27 @@ pubkey_id() {
     )"
     keyid="${keyid% }"
 
-    keyid="$keyid $(
-	TKEY=$(openssl ecparam -name prime256v1 -genkey -noout)
-	openssl req -subj / -new -key <(echo "$TKEY") |
-	openssl x509 2>/dev/null -req \
-	    -CA <(openssl req -subj / -new -key <(echo "$TKEY") -x509) \
-	    -CAkey <(echo "$TKEY") -set_serial 00 \
-	    -force_pubkey <(echo "$1") \
-	    -extfile <( echo subjectKeyIdentifier=hash ) |
-	openssl x509 -noout -text -certopt no_pubkey |
-	awk 'f==1{print $1;exit;} /Subject Key Identifier/{f=1;}'
-    )"
+    if ! openssl x509 -help 2>&1 | grep -qie -force_pubkey
+    then
+	local Z=$(:|openssl sha1 -hex | awk '{print $NF;}' )
+	H=$(echo "$1" | openssl rsa -pubin -outform DER 2>/dev/null | openssl sha1 -hex | awk '{print $NF;}' )
+	[[ "$H" = "$Z" ]] && H=$(echo "$1" | openssl dsa -pubin -outform DER 2>/dev/null | openssl sha1 -hex | awk '{print $NF;}' )
+	[[ "$H" = "$Z" ]] && H=$(echo "$1" | openssl ec -pubin -outform DER 2>/dev/null | openssl sha1 -hex | awk '{print $NF;}' )
+	[[ "$H" = "$Z" ]] && H='?'
+	keyid="$keyid DER:$H"
+    else
+	keyid="$keyid $(
+	    TKEY=$(openssl ecparam -name prime256v1 -genkey -noout)
+	    openssl req -subj / -new -key <(echo "$TKEY") |
+	    openssl x509 -req 2>/dev/null \
+		-CA <(openssl req -subj / -new -key <(echo "$TKEY") -x509) \
+		-CAkey <(echo "$TKEY") -set_serial 00 \
+		-force_pubkey <(echo "$1") \
+		-extfile <( echo subjectKeyIdentifier=hash ) |
+	    openssl x509 -noout -text -certopt no_pubkey |
+	    awk 'f==1{print $1;exit;} /Subject Key Identifier/{f=1;}'
+	)"
+    fi
 
     echo "      $keyid"
 }
@@ -343,7 +352,7 @@ decode_data() {
 	    elif [ "$CRLITEM" != "" ]
 	    then
 		C=$(echo "$ITEM" | openssl crl -noout -text | grep 'Serial Number:' | wc -l)
-		echo A CRL file with $C entries:
+		echo "A CRL file with $C entries:"
 		echo "$ITEM" | openssl crl -noout \
 		    -lastupdate -nextupdate -issuer \
 		    -nameopt multiline,esc_ctrl${UTF8:+,utf8,-esc_msb}
