@@ -383,9 +383,11 @@ NL='
     if [[ "$NOECPARAM" = no ]]; then
 	mkkey() { openssl ecparam -name "$EC" -genkey -noout ;}
 	mktmpkey() { openssl ecparam -name "$EC" -genkey -noout ;}
+	KEYCLASS=ec
     else
 	mkkey() { openssl genrsa ; }
 	mktmpkey() { openssl genrsa 512 2>/dev/null ; }
+	KEYCLASS=rsa
     fi
     # See also:
     # mkkey() { openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) ;}
@@ -439,8 +441,14 @@ decode_args() {
 	    SUBJ_DNQ="$SUBJ_DNQ${NL}$SUBJ_ID.dnQualifier=${ar#*[=:]}"
 	    ;;
 
-	-rsa[=:]* ) eval "mkkey() { openssl genrsa '${ar#*[=:]}' ; }" ;;
-	-dsa[=:]* ) eval "mkkey() { openssl dsaparam -noout -genkey '${ar#*[=:]}' ; }" ;;
+	-rsa[=:]* )
+	    KEYCLASS=rsa
+	    eval "mkkey() { openssl genrsa '${ar#*[=:]}' ; }"
+	    ;;
+	-dsa[=:]* )
+	    KEYCLASS=
+	    eval "mkkey() { openssl dsaparam -noout -genkey '${ar#*[=:]}' ; }"
+	    ;;
 	-ec[=:]* ) 
 		ar="${ar#*[=:]}:" ; curve="${ar%%:*}"
 		ar="${ar#*:}:" ; param="${ar%%:*}"
@@ -461,6 +469,7 @@ decode_args() {
 		esac
 
 		eval "mkkey() { openssl ecparam -name '$curve' ${param:+-param_enc $param} ${noseed:+-no_seed} -genkey -noout ; }"
+		KEYCLASS=ec
 		;;
 
 	-dsa )
@@ -469,10 +478,11 @@ decode_args() {
 	    # attackers and barely safe against publicly known attacks.
 	    DGST="${DGST:--sha1}"
 	    mkkey() { openssl dsaparam -noout -genkey 1024; }
+	    KEYCLASS=
 	    ;;
 
-	-rsa ) mkkey() { openssl genrsa ; } ;;
-	-ec )  mkkey() { openssl ecparam -name "$EC" -genkey -noout ; } ;;
+	-rsa ) mkkey() { openssl genrsa ; } ; KEYCLASS=rsa ;;
+	-ec )  mkkey() { openssl ecparam -name "$EC" -genkey -noout ; } ; KEYCLASS=ec ;;
 
 	-list[-_]curves|-show[_-]curves )
 	    openssl ecparam -list_curves ; exit ;;
@@ -480,6 +490,7 @@ decode_args() {
 	-keyfile[=:]* )
 	    eval "mkkey() { cat < '${ar#*[=:]}' ; }"
 	    [[ "$KFN" = "" ]] && KFN=/dev/null
+	    KEYCLASS=
 	    ;;
 
 	-csr ) WANTCSR=yes ; MAKECSR=yes ;;
@@ -487,6 +498,7 @@ decode_args() {
 	    eval "mkkey() { :; }"
 	    CSRFN="${ar#*[=:]}"
 	    KFN=/dev/null
+	    KEYCLASS=
 	    ;;
 	-showcsr ) SHOWCSR=yes ;;
 
@@ -612,6 +624,7 @@ decode_args() {
 	    V3SAN=yes
 	    V3SERVER=yes
 	    V3CLIENT=yes
+	    V3CRITICAL=yes
 	    POLICYOID="$POLICYOID,2.23.140.1.2.1"
 	    DEFAULT_DAYS=1187
 	    ;;
@@ -818,14 +831,21 @@ build_v3_extensions() {
     [[ "$V3EKU" != '' ]] &&
 	V3OPTS="$V3OPTS${NL}extendedKeyUsage = $CR${V3EKU#,}"
 
+    if [[ "$WANTDVCERT" = yes && "$KEYCLASS" = ec ]]
+    then KEYENCY= ; KEYAGR=keyAgreement,
+    elif [[ "$WANTDVCERT" = yes && "$KEYCLASS" = rsa ]]
+    then KEYENCY=keyEncipherment, ; KEYAGR=
+    else KEYENCY=keyEncipherment, ; KEYAGR=keyAgreement,
+    fi
+
     if [[ "$V3CA" = '' ]]
     then :
     elif [[ "$V3SERVER" = yes && "$V3CA" != yes ]]
     then
-	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}keyEncipherment,digitalSignature,keyAgreement"
+	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}${KEYENCY}${KEYAGR}digitalSignature"
     elif [[ "$V3EMAIL" = yes && "$V3CA" != yes ]]
     then
-	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}keyEncipherment,digitalSignature"
+	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}${KEYENCY}digitalSignature"
     elif [[ "$V3CLIENT" = yes && "$V3CA" != yes ]]
     then
 	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}digitalSignature"
