@@ -271,6 +271,8 @@ Version 3 certificate extensions.
 }
 
 main() {
+    eval "declare -A SANDUP # bash4" 2>/dev/null && BASH3=no || BASH3=yes
+
     init_vars
     test_for_windows
     decode_args "$@"
@@ -338,8 +340,6 @@ NL='
     V3NS=no
     V3ENS=
 
-    # NB: %GLOBAL% declare
-    declare -g -A SANDUP
     SANSECT=
     SAN_ID=0
 
@@ -739,8 +739,10 @@ eval 2>/dev/null '
 
 add_san() {
     V3=yes ; V3SAN=yes
-    [[ ${SANDUP[$1]} = 1 ]] && return 0
-    SANDUP[$1]=1
+    [[ "$BASH3" = no ]] && {
+	[[ ${SANDUP[$1]} = 1 ]] && return 0
+	SANDUP[$1]=1
+    }
 
     SAN_ID=$((SAN_ID+1))
     if [[ "$2" = '' ]]
