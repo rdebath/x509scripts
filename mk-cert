@@ -582,9 +582,7 @@ decode_args() {
 		for san in ${sanlst//,/ }
 		do  [[ "$SANLIST" != "" ]] && SANLIST="${SANLIST%,},"
 		    [[ "$san" = '' || "$san" = "$CN" ]] && continue
-		    if [[ "$san" =~ ^(IP|DNS|email|URI|RID|dirName|otherName): ]]
-		    then SANLIST="${SANLIST}$san"
-		    elif add_good_san "$san"
+		    if add_good_san "$san"
 		    then :
 		    else
 			case "$san" in
@@ -722,7 +720,11 @@ decode_args() {
 add_good_san() {
     local san=
 
-    if [[ "$1" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]
+    # Bash regex's at runtime so we can still mostly work on V2 bash.
+eval 2>/dev/null '
+    if [[ "$1" =~ ^(IP|DNS|email|URI|RID|dirName|otherName): ]]
+    then san="$1"
+    elif [[ "$1" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]
     then san="IP:$1"
     elif [[ "$1" =~ ^(\*\.)?[a-zA-Z][a-zA-Z0-9.]*\.[a-zA-Z][a-zA-Z]+$ ]]
     then san="DNS:$1"
@@ -730,6 +732,8 @@ add_good_san() {
     then san="DNS:$1"
     else return 1
     fi
+'
+    [[ "$san" = '' ]] && return 1
 
     V3=yes ; V3SAN=yes
     [[ "$SANLIST" != "" ]] && SANLIST="${SANLIST%,},"
@@ -744,13 +748,13 @@ check_args() {
 	exit 1
     }
 
-    # Force a CA signed certificate for DV certs
-    [[ "$WANTDVCERT" = yes && "$WANTCSR" != yes ]] && {
-	MAKECSR=yes ; SINGLEUSECA=yes
-    }
-
     # Extract a (passworded) pfx file.
     [[ "$SIGNPFX" != '' ]] && SIGNPEM="$(openssl pkcs12 -nodes -in "$SIGNPFX")"
+
+    # Force a CA signed certificate for DV certs
+    [[ "$WANTDVCERT" = yes && "$WANTCSR" != yes && "$SIGNPEM" = '' ]] && {
+	MAKECSR=yes ; SINGLEUSECA=yes
+    }
 
     # Put the commonName at the start of the san list
     [[ "$V3SAN" = yes ]] && {
@@ -762,7 +766,9 @@ check_args() {
 	SANLIST="${SANLIST%,}"
     }
 
-    if [[ "$NOPROMPT" != yes ]] && [[ "$SUBJTYPE" = '' || "$SUBJTYPE.$SUBJ_ID" = conf.0 ]]
+    if  [[ "$NOPROMPT" != yes ]] &&
+	[[ "$V3SAN" = yes ]] &&
+	[[ "$SUBJTYPE" = '' || "$SUBJTYPE.$SUBJ_ID" = conf.0 ]]
     then
 	if [[ "$WANTDVCERT" = yes ]]
 	then echo >&2 "The -dv option cannot be used with OpenSSL prompting for the name"
