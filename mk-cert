@@ -174,11 +174,17 @@ Version 3 certificate extensions.
 
     -v3san=SanName
     -san=SanName
-	Add a SAN name, or multiple items seperated by commas.
-	A dumb huristic is used to identify DNS vs IP vs email items.
+	Add a SAN name.
+	It may include the type prefix ie: DNS:www.example.com otherwise
+	a dumb huristic is used to identify the type of the item. This
+	option can be repeated as many times as needed.
+
+	Note: the common name will normally be added automatically too.
 
     -v3san, -san
 	Make a san from the common name even if there are no others.
+	This is now required by Chrome in direct contravention of the
+	requirements of RFC 2818 (HTTP over SSL).
 
     -v3ca, -ca
 	Add normal V3 extensions for a CA certificate.
@@ -317,7 +323,6 @@ NL='
 
     V3=no
     V3HEAD=
-    SANLIST=
     V3SAN=
     V3OPTS=
     V3LIST=
@@ -332,6 +337,11 @@ NL='
     V3CRITICAL=no
     V3NS=no
     V3ENS=
+
+    # NB: %GLOBAL% declare
+    declare -g -A SANDUP
+    SANSECT=
+    SAN_ID=0
 
     NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
     NOECPARAM="$(openssl no-ecparam >/dev/null 2>&1 && echo yes || echo no)"
@@ -577,23 +587,16 @@ decode_args() {
 		;;
 
 	-v3san[=:]*|-san[=:]* )
-		V3=yes ; V3SAN=yes
-		sanlst="${ar#*[=:]}"
-		for san in ${sanlst//,/ }
-		do  [[ "$SANLIST" != "" ]] && SANLIST="${SANLIST%,},"
-		    [[ "$san" = '' || "$san" = "$CN" ]] && continue
-		    if add_good_san "$san"
-		    then :
-		    else
-			case "$san" in
-			[0-9a-fA-F]*:*:*[0-9a-fA-F]|::*[0-9a-fA-F] )
-			    SANLIST="${SANLIST}IP:$san" ;;
-			*@* ) SANLIST="${SANLIST}email:$san" ;;
-			* ) SANLIST="${SANLIST}DNS:$san" ;;
-			esac
-		    fi
-		done
-		SANLIST="${SANLIST%,}"
+		if ! add_good_san "${ar#*[=:]}"
+		then
+		    san="${ar#*[=:]}"
+		    case "$san" in
+		    [0-9a-fA-F]*:*:*[0-9a-fA-F]|::*[0-9a-fA-F] )
+			add_san "IP:$san" ;;
+		    *@* ) add_san "email:$san" ;;
+		    * ) add_san "DNS:$san" ;;
+		    esac
+		fi
 		;;
 
 	-v3san|-san ) V3=yes ; V3SAN=yes ;;
@@ -730,15 +733,24 @@ eval 2>/dev/null '
     then san="DNS:$1"
     elif [[ "$1" =~ ^[a-zA-Z][a-zA-Z0-9.]+$ ]]
     then san="DNS:$1"
-    else return 1
     fi
 '
     [[ "$san" = '' ]] && return 1
+    add_san "$san"
+}
 
+add_san() {
     V3=yes ; V3SAN=yes
-    [[ "$SANLIST" != "" ]] && SANLIST="${SANLIST%,},"
-    SANLIST="${SANLIST}$san"
-    SANLIST="${SANLIST%,}"
+    [[ ${SANDUP[$1]} = 1 ]] && return 0
+    SANDUP[$1]=1
+
+    SAN_ID=$((SAN_ID+1))
+    if [[ "$2" = '' ]]
+    then
+	SANSECT="${SANSECT}${1/:/.$SAN_ID=}${NL}"
+    else
+	SANSECT="${1/:/.$SAN_ID=}${NL}${SANSECT}"
+    fi
     return 0
 }
 
@@ -757,13 +769,8 @@ check_args() {
     }
 
     # Put the commonName at the start of the san list
-    [[ "$V3SAN" = yes ]] && {
-	if [[ "$CN" != "" ]]
-	then SANLIST="subjectAltName=DNS:$CN,$SANLIST"
-	elif [[ "$SANLIST" != '' ]]
-	then SANLIST="subjectAltName=$SANLIST"
-	fi
-	SANLIST="${SANLIST%,}"
+    [[ "$V3SAN" = yes && "$CN" != "" ]] && {
+	add_san "DNS:$CN" start
     }
 
     if  [[ "$NOPROMPT" != yes ]] &&
@@ -863,7 +870,13 @@ build_v3_extensions() {
 	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU%,}"
     fi
 
-    V3OPTS="$V3OPTS${NL}$SANLIST"
+    [[ "$V3SAN" = yes ]] && {
+	local SUBCRIT=
+	[[ "$SUBJTYPE" = '' || "$SUBJTYPE.$SUBJ_ID" = conf.0 ]] &&
+	    SUBCRIT=critical,
+	V3OPTS="$V3OPTS${NL}subjectAltName=${SUBCRIT}@san"
+	V3EXTRAS="$V3EXTRAS${NL}[san]${NL}${SANSECT}"
+    }
 
     if [[ "$V3CA" = yes ]]
     then
