@@ -28,8 +28,10 @@ main() {
 init_vars() {
 NL='
 '
+    DICTIONARY=(${PASSWORD:+"$PASSWORD"} 0000 1234 12345 123456 12345678 password qwerty)
+    PASSWORD="${PASSWORD:-0000}"
     NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
-    PW="-passin pass:${PASSWORD:-0000}"
+    PW=(-passin pass:"$PASSWORD")
 
     UTF8=
     if [ "$(locale charmap 2>/dev/null)" = UTF-8 ]
@@ -95,11 +97,16 @@ decode_binary_data() {
 	    DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl $cmd -inform DER 2>/dev/null)"
 	done
 	[ "$DATA" = "" ] &&
-	    DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs8 -inform DER $PW 2>/dev/null)"
-	[ "$DATA" = "" ] &&
-	    DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs12 -nodes $PW 2>/dev/null)"
-	[ "$DATA" = "" ] &&
 	    DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs12 -nodes -passin pass: 2>/dev/null)"
+
+	for PASS in ${PASSWORD:+"$PASSWORD"} "${DICTIONARY[@]}"
+	do
+	    [ "$DATA" = "" ] &&
+		DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs8 -inform DER ${PASS:+-passin pass:"$PASS"} 2>/dev/null)"
+	    [ "$DATA" = "" ] &&
+		DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs12 -nodes ${PASS:+-passin pass:"$PASS"} 2>/dev/null)"
+	done
+
 	[ "$DATA" = "" ] && {
 	    if echo "$XDATA" | openssl enc -base64 -d | openssl asn1parse -inform DER | grep -qi 'OBJECT *:pkcs7-signedData'
 	    then echo "PKCS7 format data file:"
@@ -133,13 +140,13 @@ decode_data() {
 
     CERTPUB="$(echo "$DATA" | openssl x509 -pubkey -noout 2>/dev/null)"
     REQPUB="$(echo "$DATA" | openssl req -pubkey -noout 2>/dev/null)"
-    PKEYPUB="$(echo "$DATA" | openssl pkey -pubout $PW 2>/dev/null)"
+    PKEYPUB="$(echo "$DATA" | openssl pkey -pubout "${PW[@]}" 2>/dev/null)"
     [ "$NOPKEY" = yes -a "$PKEYPUB" = '' ] &&
-	PKEYPUB="$(echo "$DATA" | openssl rsa -pubout $PW 2>/dev/null)"
+	PKEYPUB="$(echo "$DATA" | openssl rsa -pubout "${PW[@]}" 2>/dev/null)"
     [ "$NOPKEY" = yes -a "$PKEYPUB" = '' ] &&
-	PKEYPUB="$(echo "$DATA" | openssl ec -pubout $PW 2>/dev/null)"
+	PKEYPUB="$(echo "$DATA" | openssl ec -pubout "${PW[@]}" 2>/dev/null)"
     [ "$NOPKEY" = yes -a "$PKEYPUB" = '' ] &&
-	PKEYPUB="$(echo "$DATA" | openssl dsa -pubout $PW 2>/dev/null)"
+	PKEYPUB="$(echo "$DATA" | openssl dsa -pubout "${PW[@]}" 2>/dev/null)"
 
     [ "$CERTPUB" != "" ] && CERTPUB="$(echo "$CERTPUB" | openssl md5 | awk '{print $NF;}')"
     [ "$REQPUB" != "" ] && REQPUB="$(echo "$REQPUB" | openssl md5 | awk '{print $NF;}')"
@@ -157,16 +164,36 @@ decode_data() {
 
 	CERTPUB="$(echo "$ITEM" | openssl x509 -pubkey -noout 2>/dev/null)"
 	REQPUB="$(echo "$ITEM" | openssl req -pubkey -noout 2>/dev/null)"
-	PKEYPUB="$(echo "$ITEM" | openssl pkey -pubout $PW 2>/dev/null)"
+	PKEYPUB="$(echo "$ITEM" | openssl pkey -pubout "${PW[@]}" 2>/dev/null)"
 	PKEYPARAM="$(echo "$ITEM" | openssl pkeyparam -text -noout 2>/dev/null)"
 	PUBKEY="$(echo "$ITEM" | openssl pkey -pubin 2>/dev/null)"
 
 	[ "$NOPKEY" = yes -a "$PKEYPUB$CERTPUB$REQPUB$PKEYPARAM$PUBKEY" = '' ] &&
-	    PKEYPUB="$(echo "$ITEM" | openssl rsa -pubout $PW 2>/dev/null)"
+	    PKEYPUB="$(echo "$ITEM" | openssl rsa -pubout "${PW[@]}" 2>/dev/null)"
 	[ "$NOPKEY" = yes -a "$PKEYPUB$CERTPUB$REQPUB$PKEYPARAM$PUBKEY" = '' ] &&
-	    PKEYPUB="$(echo "$ITEM" | openssl ec -pubout $PW 2>/dev/null)"
+	    PKEYPUB="$(echo "$ITEM" | openssl ec -pubout "${PW[@]}" 2>/dev/null)"
 	[ "$NOPKEY" = yes -a "$PKEYPUB$CERTPUB$REQPUB$PKEYPARAM$PUBKEY" = '' ] &&
-	    PKEYPUB="$(echo "$ITEM" | openssl dsa -pubout $PW 2>/dev/null)"
+	    PKEYPUB="$(echo "$ITEM" | openssl dsa -pubout "${PW[@]}" 2>/dev/null)"
+
+	[ "$PKEYPUB$CERTPUB$REQPUB$PKEYPARAM$PUBKEY" = '' ] && {
+
+	    for PASS in "${DICTIONARY[@]}"
+	    do
+		[ "$NOPKEY" = no -a "$PKEYPUB" = '' ] &&
+		    PKEYPUB="$(echo "$ITEM" | openssl pkey -pubout ${PASS:+-passin pass:"$PASS"} 2>/dev/null)"
+		[ "$NOPKEY" = yes -a "$PKEYPUB" = '' ] &&
+		    PKEYPUB="$(echo "$ITEM" | openssl rsa -pubout ${PASS:+-passin pass:"$PASS"} 2>/dev/null)"
+		[ "$NOPKEY" = yes -a "$PKEYPUB" = '' ] &&
+		    PKEYPUB="$(echo "$ITEM" | openssl ec -pubout ${PASS:+-passin pass:"$PASS"} 2>/dev/null)"
+		[ "$NOPKEY" = yes -a "$PKEYPUB" = '' ] &&
+		    PKEYPUB="$(echo "$ITEM" | openssl dsa -pubout ${PASS:+-passin pass:"$PASS"} 2>/dev/null)"
+		[ "$PKEYPUB" != '' ] && {
+		    PASSWORD="$PASS"
+		    PW=(-passin pass:"$PASSWORD")
+		    break
+		}
+	    done
+	}
 
 	[ "$CERTPUB" != "" ] && CERTPUB="$(echo "$CERTPUB" | openssl md5 | awk '{print $NF;}')"
 	[ "$PKEYPUB" != "" ] && PKEYPUB="$(echo "$PKEYPUB" | openssl md5 | awk '{print $NF;}')"
@@ -289,7 +316,7 @@ decode_data() {
 	elif [ "$NOPKEY" = no -a "$PKEYPUB" != "" ]
 	then
 	    echo 'A private key for this public key:'
-	    pubkey_id "$(echo "$ITEM" | openssl pkey -pubout $PW)"
+	    pubkey_id "$(echo "$ITEM" | openssl pkey -pubout "${PW[@]}")"
 	elif [ "$NOPKEY" = no -a "$PKEYPARAM" != "" ]
 	then
 	    echo Parameter file:
@@ -302,7 +329,7 @@ decode_data() {
 	then
 	    echo Item $k is a private key
 	else
-	    ENCKEY=$(echo "$ITEM" | openssl pkey -pubout $PW 2>&1 | grep -qi 'bad.\(decrypt\|pass\)' && echo yes)
+	    ENCKEY=$(echo "$ITEM" | openssl pkey -pubout "${PW[@]}" 2>&1 | grep -qi 'bad.\(decrypt\|pass\)' && echo yes)
 	    CRLITEM=$(echo "$ITEM" | openssl crl 2>/dev/null ||:)
 	    PKCS7DATA=$(echo "$ITEM" | openssl pkcs7 -print_certs 2>/dev/null ||:)
 

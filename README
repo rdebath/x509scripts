@@ -2,9 +2,9 @@ whatssl bash script
 ===================
 
 Gives a description of the contents of any OpenSSL related certificate,
-key or parameter file. If the file contains multiple items they are all
-described. If an item is encrypted a dictionary attack will be attempted,
-the dictionary is the blank password and "0000".
+key or parameter file. If the file contains multiple items they are
+all described. If an item is encrypted a tiny dictionary attack will
+be attempted.
 
 Note: It will not print any private part of a file, instead it will
 extract the related public key and describe the item as a "private key
