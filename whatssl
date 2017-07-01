@@ -28,10 +28,11 @@ main() {
 init_vars() {
 NL='
 '
-    DICTIONARY=(${PASSWORD:+"$PASSWORD"} 0000 1234 12345 123456 12345678 password qwerty)
-    PASSWORD="${PASSWORD:-0000}"
+    MYPASS="$PASSWORD"
+    DICTIONARY=(${MYPASS:+"$MYPASS"} 0000 1234 12345 123456 12345678 password qwerty)
+    MYPASS="${MYPASS:-0000}"
     NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
-    PW=(-passin pass:"$PASSWORD")
+    PW=(-passin pass:"$MYPASS")
 
     UTF8=
     if [ "$(locale charmap 2>/dev/null)" = UTF-8 ]
@@ -99,7 +100,7 @@ decode_binary_data() {
 	[ "$DATA" = "" ] &&
 	    DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs12 -nodes -passin pass: 2>/dev/null)"
 
-	for PASS in ${PASSWORD:+"$PASSWORD"} "${DICTIONARY[@]}"
+	for PASS in "${DICTIONARY[@]}"
 	do
 	    [ "$DATA" = "" ] &&
 		DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs8 -inform DER ${PASS:+-passin pass:"$PASS"} 2>/dev/null)"
@@ -188,8 +189,11 @@ decode_data() {
 		[ "$NOPKEY" = yes -a "$PKEYPUB" = '' ] &&
 		    PKEYPUB="$(echo "$ITEM" | openssl dsa -pubout ${PASS:+-passin pass:"$PASS"} 2>/dev/null)"
 		[ "$PKEYPUB" != '' ] && {
-		    PASSWORD="$PASS"
-		    PW=(-passin pass:"$PASSWORD")
+		    [[ "$PASS" != "$PASSWORD" ]] &&
+			echo "NOTE: Data encrypted with trivial password '$PASS'"
+
+		    MYPASS="$PASS"
+		    PW=(-passin pass:"$MYPASS")
 		    break
 		}
 	    done
