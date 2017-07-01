@@ -137,7 +137,7 @@ decode_data() {
     local failed success purpose tested
     local k=0 found=0 ISSU= CHAIN= PREVCERTPUB= C=
 
-    local DATA="$1"
+    local DATA="$1" NOLOOP="$2"
 
     CERTPUB="$(echo "$DATA" | openssl x509 -pubkey -noout 2>/dev/null)"
     REQPUB="$(echo "$DATA" | openssl req -pubkey -noout 2>/dev/null)"
@@ -357,12 +357,12 @@ decode_data() {
 	    else
 		FIRSTOBJ="$(echo "$ITEM" | openssl asn1parse 2>/dev/null | awk '/OBJECT/{print $NF;exit;}')"
 		PEM="$(echo "$ITEM" | sed -n 's/^-----BEGIN \(.*\)$/\1/p' | sed 's/-*\s*$//')"
-		if [ "$FIRSTOBJ" != '' ]
+		if [[ "$FIRSTOBJ" != '' && "$NOLOOP" = '' ]]
 		then
 		    echo "PEM item $k with name $PEM and object $FIRSTOBJ"
 		    (
 			decode_binary_data "$ITEM" &&
-			decode_data "$DATA"
+			decode_data "$DATA" yes
 		    )
 		else
 		    echo "PEM style item $k not identified: $PEM"
