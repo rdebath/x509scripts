@@ -872,8 +872,9 @@ build_v3_extensions() {
 
     [[ "$V3SAN" = yes ]] && {
 	local SUBCRIT=
-	[[ "$SUBJTYPE" = '' || "$SUBJTYPE.$SUBJ_ID" = conf.0 ]] &&
-	    SUBCRIT=critical,
+	[[ "$V3CRITICAL" = yes ]] &&
+	    [[ "$SUBJTYPE" = '' || "$SUBJTYPE.$SUBJ_ID" = conf.0 ]] &&
+		SUBCRIT=critical,
 	V3OPTS="$V3OPTS${NL}subjectAltName=${SUBCRIT}@san"
 	V3EXTRAS="$V3EXTRAS${NL}[san]${NL}${SANSECT}"
     }
