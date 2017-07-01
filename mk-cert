@@ -1242,8 +1242,10 @@ outp() {
     else echo "$SSCERT" | openssl x509 -subject -issuer -fingerprint -serial -dates
     fi
 
-    [[ "$SINGLEUSECA" = yes ]] && {
-	if [[ "$CAFN" != '' ]]
+    [[ "$SINGLEUSECA" = yes || "$CAFN" != '' ]] && {
+	if [[ "$SIGNPEM" = '' && "$CAFN" != '' ]]
+	then echo "$SSCERT" | openssl x509 -subject -serial -dates > "$CAFN"
+	elif [[ "$CAFN" != '' ]]
 	then echo "$SIGNPEM" | openssl x509 -subject -serial -dates >"$CAFN"
 	else echo "$SIGNPEM" | openssl x509 -subject -serial -dates
 	fi
