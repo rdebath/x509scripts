@@ -16,7 +16,7 @@ mk-cert \
     -keyout="$D".key \
     -caout="$D".ca.crt \
     -out="$D".crt \
-    -subj-cn="$D" \
+    -cn="$D" \
     "$@"
 
 for i in "$D".crl "$D".key "$D".ca.crt "$D".crt

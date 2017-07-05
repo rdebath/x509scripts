@@ -51,6 +51,7 @@ and certificate which is sent to the standard output.
 
 Options:
 
+    -cn=String
     -subj-cn=String
     -subj-ou=String
     -subj-dc=String
@@ -67,9 +68,14 @@ Options:
 	The OU is the most likely to be accepted as a place to store
 	any unusual part of a name you may wish to include.
 
+	The "-cn=" option is taken as both a common name, a SAN and the
+	official common name for generic use. The "-subj-cn=" option
+	string will only be used in the subject.
+
 	Any arguments without a "-" to make them an option are assumed
-	to be part of the subject too, the first is a common name the
-	remainder are "OU" items.
+	to be names too, the first one is a common name, like the "-cn"
+	option.  The rest are san names if they look like domain names
+	or IP addresses and OU items if they don't.
 
 	If a argument begins with a "/" and contains an "=" it is
 	treated as an OpenSSL subject string. This conflicts with the
@@ -299,4 +305,3 @@ Version 3 certificate extensions.
 
 	This item is placed after the all "-v3=" items so can be used when
 	the config file needs additional sections.
-
