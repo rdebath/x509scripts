@@ -1311,4 +1311,10 @@ test_for_windows() {
     fi
 }
 
+(eval '[ "$(cat <(echo ok) )" = ok ]')2>/dev/null||
+{
+    echo 'This shell does not have working process substitution.' >&2
+    exit 250
+}
+
 main "$@"
