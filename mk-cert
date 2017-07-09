@@ -277,7 +277,7 @@ Version 3 certificate extensions.
 }
 
 main() {
-    eval "declare -A SANDUP # bash4" 2>/dev/null && BASH3=no || BASH3=yes
+    eval "typeset -A SANDUP # bash4/ksh" 2>/dev/null && BASH3=no || BASH3=yes
 
     init_vars
     test_for_windows
