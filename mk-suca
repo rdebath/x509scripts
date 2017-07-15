@@ -1,0 +1,192 @@
+#!/bin/bash
+#
+# This script takes a file that contains a public key and creates
+# a certificate and single use CA certificate for the key.
+#
+# This key may be contained in a certificate, certificate request,
+# private key or in a file on it's own.
+#
+# Process:
+#
+# The script then generates a second key to match the type of this
+# key and creates a CA certificate. This CA certificate (and key)
+# is used to create and sign a certificate for the public key, the
+# common name and SAN DNS names for the certificate are the remaining
+# arguments to the script.
+#
+# Finally the two generated certificates are output and the CA key
+# is discarded. If the key file name is '.' a key is generated and
+# the private key is output at the end.
+# 
+
+main() {
+    [ "$#" -lt 2 ] && {
+	echo >&2 "Usage: $0 keyfile common_name [san list]"
+	exit 1
+    }
+
+    KFNAME="$1"
+    if [ "$KFNAME" = '.' ]
+    then KEYFILE="$(make_a_key /dev/null)"
+    else KEYFILE="$(cat "$KFNAME")"
+    fi
+    shift
+
+    for PEMTYPE in x509 req pkey pubkey rsa ec dsa
+    do
+        PUBKEY=
+	if [ "$PEMTYPE" = 'pubkey' ]
+	then ITEM="$(echo "$KEYFILE" | openssl pkey -pubin 2>/dev/null)"
+	elif [[ "$PEMTYPE" = rsa || "$PEMTYPE" = dsa || "$PEMTYPE" = ec ]]
+	then ITEM="$(echo "$KEYFILE" | openssl "$PEMTYPE" -passin pass:0000 2>/dev/null)"
+	else ITEM="$(echo "$KEYFILE" | openssl "$PEMTYPE" 2>/dev/null)"
+	fi
+
+	[ "$ITEM" = "" ] && continue
+
+        case "$PEMTYPE" in
+        x509 ) PUBKEY="$(echo "$ITEM" | openssl x509 -pubkey -noout 2>/dev/null)" ;;
+        req ) PUBKEY="$(echo "$ITEM" | openssl req -pubkey -noout 2>/dev/null)" ;;
+        pkey ) PUBKEY="$(echo "$ITEM" | openssl pkey -pubout "${PW[@]}" 2>/dev/null)" ;;
+        pubkey ) PUBKEY="$(echo "$ITEM" | openssl pkey -pubin 2>/dev/null)" ;;
+
+        rsa|ec|dsa )
+            PUBKEY="$(echo "$ITEM" | openssl "$PEMTYPE" -pubout "${PW[@]}" 2>/dev/null)" ;;
+        esac
+
+	[ "$PUBKEY" = "" ] || break
+    done
+
+    [ "$PUBKEY" = '' ] && {
+	echo >&2 "Cannot find public key in $KFNAME, it needs to be unencrypted and in PEM format"
+	exit 1
+    }
+
+    [ "$CERTDAYS" = '' ] && {
+	CERTDAYS=$((24842 - $(date +%s)/86400))
+	[ "$CERTDAYS" -lt 3652 ] && CERTDAYS=3652
+    }
+
+    CAKEY=$(make_ca)
+
+    make_cert "$@"
+
+    echo "$CAKEY" | openssl x509 -subject -serial -dates
+
+    [ "$KFNAME" = '.' ] && echo "$KEYFILE"
+    exit 0
+}
+
+make_ca() {
+    local SERIAL SSKEY SSCERT
+
+    SERIAL="$(openssl rand -hex 8)"
+    SSKEY="$(make_a_key "$PUBKEY" )"
+    SSCERT="$(openssl req -new -x509 \
+	    -days "$CERTDAYS" \
+	    -set_serial 0x"$SERIAL" \
+	    -key <(echo "$SSKEY") \
+	    -config <(
+		echo '[req]'
+		echo 'distinguished_name = rdn'
+		echo 'prompt = no'
+		echo 'x509_extensions = x509v3'
+		echo '[rdn]'
+		echo "dnQualifier=$SERIAL"
+		echo "CN=Private CA"
+		echo '[x509v3]'
+		echo 'basicConstraints = CA:TRUE, pathlen:0'
+	    ) )"
+
+    echo "$SSCERT" | openssl x509 -subject -serial -dates
+    echo "$SSKEY"
+}
+
+make_cert() {
+    local CN="$1" SERIAL NEWCERT
+    [ "$CN" = "" ] && CN=localhost
+
+    make_cert_conf() {
+	local SANLIST=''
+	SANLIST="$(echo "$*" | xargs)"
+	SANLIST="DNS:${SANLIST// /,DNS:}"
+	echo '[req]'
+	echo 'distinguished_name = rdn'
+	echo 'prompt = no'
+	[ "$SANLIST" != "" ] && echo 'x509_extensions = x509v3'
+	echo '[rdn]'
+	# echo "dnQualifier=$SERIAL"
+	echo "CN=$CN"
+	[ "$SANLIST" != "" ] && {
+	    echo '[x509v3]'
+	    echo "subjectAltName=$SANLIST"
+	}
+    }
+
+    SERIAL="$(openssl rand -hex 8)"
+    TMPKEY="$(openssl ecparam -name prime256v1 -genkey -noout)"
+    NEWCERT="$(openssl req -new \
+	    -key <(echo "$TMPKEY") \
+	    -config <(make_cert_conf "$@") |
+	    openssl x509 -req \
+	    -days "$CERTDAYS" \
+	    -set_serial 0x"$SERIAL" \
+	    -force_pubkey <(echo "$PUBKEY") \
+	    -CA <(echo "$CAKEY") \
+            -CAkey <(echo "$CAKEY") \
+	    -extfile <(make_cert_conf "$@") -extensions x509v3
+	)"
+
+    unset make_cert_conf
+
+    echo "$NEWCERT" | openssl x509 -subject -serial -dates
+}
+
+make_a_key() {
+    local INKEY="$1" ECTYPE RSABITS DSALEN DSABITS
+
+    # Match a named EC curve using an ASN1 OID.
+    # Recommend:
+    #   secp256r1, secp384r1, secp521r1  Supported by browsers.
+
+    ECTYPE=$(echo "$INKEY" | openssl ec -pubin -noout -text 2>&1 |
+	awk '/^ASN1 OID:/ {print $3;}')
+
+    # Do we have an EC curve name ?
+    [ "$ECTYPE" != "" ] && {
+	openssl ecparam -noout -name "$ECTYPE" -genkey
+	return
+    }
+
+    # Match the RSA bitsize of the key
+    RSABITS=$(echo "$INKEY" | openssl rsa -pubin -text -noout 2>&1 |
+	awk '/^Public.Key: .*bit/{gsub("[^0-9]","",$2); print $2;}')
+
+    # Do we have an RSA bit size ?
+    [ "$RSABITS" != "" ] && {
+	openssl genrsa "$RSABITS"
+	return
+    }
+
+    # Match the DSA bitsize of the key
+    DSABITS=$(echo "$INKEY" | openssl dsa -pubin -text -noout 2>&1 |
+	awk '/^Public.Key: .*bit/{gsub("[^0-9]","",$2); print $2;}')
+
+    DSALEN=$(echo "$INKEY" |
+        openssl dsa -pubin -modulus -noout 2>/dev/null |
+        sed -n 's/.*=//p' | wc -c)
+    [ "$DSALEN" -gt 0 ] && DSABITS="$((DSALEN*4/8*8))"
+
+    # Do we have a DSA bit size ?
+    [ "$DSABITS" != "" ] && {
+	openssl dsaparam -noout -genkey "$DSABITS"
+	return
+    }
+
+    # Humm, dunno what we had, hopefully this will do.
+    openssl ecparam -name prime256v1 -genkey -noout
+
+    return 0
+}
+
+main "$@"
