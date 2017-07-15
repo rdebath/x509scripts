@@ -1,4 +1,6 @@
-#!/bin/bash -
+#!/bin/bash
+# shellcheck disable=SC1007
+
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 
 main() {
@@ -64,7 +66,7 @@ pubkey_id() {
 	H=$(echo "$1" |
 	openssl rsa -pubin -modulus -noout 2>/dev/null |
 	sed -n 's/.*=//p' | wc -c)
-	[ "$H" -gt 0 ] && echo "$((H/2*8)) bit"
+	[ "$H" -gt 0 ] && echo "$((H*4/8*8)) bit"
     )"
     keyid="${keyid% }"
 
@@ -72,13 +74,13 @@ pubkey_id() {
 	H=$(echo "$1" |
 	openssl dsa -pubin -modulus -noout 2>/dev/null |
 	sed -n 's/.*=//p' | wc -c)
-	[ "$H" -gt 0 ] && echo "$((H/2*8)) bit"
+	[ "$H" -gt 0 ] && echo "$((H*4/8*8)) bit"
     )"
     keyid="${keyid% }"
 
     if ! openssl x509 -help 2>&1 | grep -qie -force_pubkey
     then
-	local Z=$(:|openssl sha1 -hex | awk '{print $NF;}' ||:)
+	local -r Z=$(:|openssl sha1 -hex | awk '{print $NF;}')
 	H=$(echo "$1" | openssl rsa -pubin -outform DER 2>/dev/null | openssl sha1 -hex | awk '{print $NF;}' )
 	[[ "$H" = "$Z" ]] && H=$(echo "$1" | openssl dsa -pubin -outform DER 2>/dev/null | openssl sha1 -hex | awk '{print $NF;}' )
 	[[ "$H" = "$Z" ]] && H=$(echo "$1" | openssl ec -pubin -outform DER 2>/dev/null | openssl sha1 -hex | awk '{print $NF;}' )
@@ -368,7 +370,7 @@ decode_data() {
 
 	elif [ "$PEMTYPE" = "crl" ]
 	then
-	    C=$(echo "$ITEM" | openssl crl -noout -text | grep 'Serial Number:' | wc -l)
+	    C=$(echo "$ITEM" | openssl crl -noout -text | grep -c 'Serial Number:')
 	    echo "A CRL file with $C entries:"
 	    echo "$ITEM" | openssl crl -noout \
 		-lastupdate -nextupdate -issuer \
