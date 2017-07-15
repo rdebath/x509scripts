@@ -1175,7 +1175,7 @@ sign_created_csr() {
     else SERIALFN=
     fi
 
-    [[ "$SHOWCONF" = yes ]] && mkreqconf
+    [[ "$SHOWCONF" = yes && "$V3HEAD" != "" ]] && mkreqconf
 
     SSCERT="$(ft openssl x509 -req $DGST \
 	    -days "${CERT_DAYS:-$DEFAULT_DAYS}" \
