@@ -17,7 +17,7 @@ make_ss() {
     make_ss_reqconf() {
 	local SANLIST=''
 	SANLIST="$(echo "$*" | xargs)"
-	SANLIST="DNS:${SANLIST// /,DNS:}"
+	[ "$SANLIST" != "" ] && SANLIST="DNS:${SANLIST// /,DNS:}"
 	echo '[req]'
 	echo 'distinguished_name = rdn'
 	echo 'prompt = no'
