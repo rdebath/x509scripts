@@ -303,8 +303,13 @@ main() {
     apply_options
     create_main_cert	# or csr
     create_suca_pem
-    sign_created_csr
 
+    if [[ "$CSRFN" != "" && "$SIGNPEM" = '' ]]
+    then echo 'ERROR: Cannot make a self signed certificate from a csr' >&2
+	 exit 1;
+    fi
+
+    sign_created_csr
     create_crl_file
     create_pfx_file
 
@@ -1203,7 +1208,10 @@ create_crl_file() {
 
     if [[ "$SIGNPEM" != '' ]]
     then CRLSIGN="$SIGNPEM"
-    else CRLSIGN="$SSCERT$NL$SSKEY"
+    elif [[ "$SSCERT" != '' && "$SSKEY" != '' ]]
+    then CRLSIGN="$SSCERT$NL$SSKEY"
+    else echo 'ERROR: No keys available to sign the CRL.' >&2
+	 exit 1
     fi
 
     mkcacrlconf() {
@@ -1240,6 +1248,11 @@ create_pfx_file() {
     [[ "$PKCS12FN" = "" ]] && return 0
 
     [[ "$WANTCSR" = yes ]] && { echo >&2 "PKCS12 files can't hold csr's"; exit 1;}
+
+    [[ "$SSKEY" = '' ]] && {
+	echo 'ERROR: A pfx file needs a private key' >&1
+	exit 1
+    }
 
     openssl pkcs12 -export -passout "$PFXPASS" \
 	-out "$PKCS12FN" \
