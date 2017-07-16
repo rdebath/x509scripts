@@ -299,8 +299,6 @@ main() {
     [[ "$CRLFN" != '' && -s "$CRLFN" ]] &&
 	{ echo "ERROR: File $CRLFN already exists" ; exit 1 ; }
 
-    SSKEY="$(mkkey)"
-
     build_v3_extensions
     apply_options
     create_main_cert	# or csr
@@ -391,6 +389,7 @@ NL='
     CRLURI=
     CRLURI_ID=0
     EXTRA_OIDS=
+    SSKEY=
 
     # Faketime prefix
     ft() { "$@" ; }
@@ -519,7 +518,6 @@ decode_args() {
 
 	-csr ) WANTCSR=yes ; MAKECSR=yes ;;
 	-csrin[=:]* )
-	    eval "mkkey() { :; }"
 	    CSRFN="${ar#*[=:]}"
 	    KFN=/dev/null
 	    KEYCLASS=
@@ -1050,6 +1048,9 @@ create_main_cert() {
     then SSCERT="$(cat "$CSRFN")"
     else
 	[[ "$SHOWCONF" = yes ]] && mkreqconf $MAKECSR $WANTCSR
+
+	[[ "$SSKEY" = '' ]] &&
+	    SSKEY="$(mkkey)"
 
 	SSCERT="$(ft openssl req -new $UTF8 $X509 $DGST \
 	    -days "${CERT_DAYS:-$DEFAULT_DAYS}" \
