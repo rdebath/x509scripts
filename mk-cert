@@ -464,7 +464,10 @@ decode_args() {
 		;;
 	    -cn* )
 		SUBJ_CN="$SUBJ_CN${NL}$SUBJ_ID.commonName=${ar#*[=:]}"
-		[[ "$CN" = '' ]] && CN="${ar#*[=:]}"
+		if [[ "$CN" = '' ]]
+		then CN="${ar#*[=:]}"
+		else ! add_good_san "${ar#*[=:]}"
+		fi
 		;;
 	    esac
 	    ;;
@@ -1141,7 +1144,8 @@ sign_created_csr() {
 
     # Default to days left on CA certificate
     [[ "$CERT_DAYS" = "" ]] && {
-	ENDDAY="$(date +%s --date="$(openssl x509 -noout -enddate -in <(echo "$SIGNPEM") | sed 's/^[^=]*=//')" ||:)"
+	ENDDAY="$(openssl x509 -noout -enddate -in <(echo "$SIGNPEM") )"
+	ENDDAY="$(date +%s --date="$(sed 's/^[^=]*=//' <<< "$ENDDAY")" ||:)"
 	TODAY="$(ft date +%s)"
 	[[ "$ENDDAY" = "" ]] && ENDDAY=2932896 || ENDDAY=$((ENDDAY/86400))
 	CERT_DAYS=$((ENDDAY - TODAY/86400))
