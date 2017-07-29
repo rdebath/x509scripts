@@ -84,10 +84,11 @@ missing item is the `authorityInformationAccess` extension that would
 need you to provide a website just for that item.
 
 Many of these options can be used when creating a CSR (or "Certificate
-signing request") just choose the options as normal and add `-csr` to
-the end. Note when making a CSR I would strongly suggest you always put
-the key in a separate file; you don't want to be sending it to the CA
-by accident after all.
+signing request") just choose the options as normal and add `-csr`
+to the end. Note when making a CSR the script will not send them to
+the same output you will need to use the `-keyout=KeyFilename` option.
+This is so that it's much less likely to for the key to be accidentally
+sent over an insecure link.
 
 If you want to use a long term CA certificate then `-v3ca` option
 will give it the extensions expected for a certificate and the

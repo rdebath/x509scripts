@@ -114,11 +114,20 @@ Options:
     -keyfile=FileName
 	Don't generate a key, use the one in FileName
 
-    -csr
-	Create a CSR not a certificate
-
     -csrin=FileName
 	Use the CSR from FileName instead of generating a new key.
+	This cannot be used to create a self-signed certificate.
+
+    -pubin=FileName
+	Use the public key from the item in FileName instead of generating
+	a new key. This works just like -csrin except the certificate
+	request is bypassed and all details except the key are entered
+	as arguments. Note, however, that the contents of the file don't
+	have to be a public key file, just something that contains one.
+
+    -csr
+	Create a certificate signing request not a certificate
+	Must use -keyout= option too.
 
     -showcsr
 	Dump any CSR we use to the output too.
@@ -308,6 +317,10 @@ main() {
     then echo 'ERROR: Cannot make a self signed certificate from a csr' >&2
 	 exit 1;
     fi
+    if [[ "$FORCEPUB" != "" && "$SIGNPEM" = '' ]]
+    then echo 'ERROR: Cannot make a self signed certificate from a public key' >&2
+	 exit 1;
+    fi
 
     sign_created_csr
     create_crl_file
@@ -326,7 +339,9 @@ NL='
     FN=
     KFN=
     CRLFN=
+    CSRFN=
     CAFN=
+    FORCEPUB=
     SERIAL=
     CERT_DAYS=
     DEFAULT_DAYS=7304
@@ -531,6 +546,12 @@ decode_args() {
 	    KEYCLASS=
 	    ;;
 	-showcsr ) SHOWCSR=yes ;;
+
+	-pubin[=:]* )
+	    FORCEPUB="$(extract_pubkey "${ar#*[=:]}")"
+	    KFN=/dev/null
+	    KEYCLASS=
+	    ;;
 
 	-sign[=:]*.pfx )
 	    SIGNPFX="${ar#*[=:]}"
@@ -781,6 +802,12 @@ add_san() {
 check_args() {
     [[ "$WANTCSR" = yes && "$SINGLEUSECA" = yes ]] && {
 	echo >&2 "Options -csr and -singleuseca conflict"
+	exit 1
+    }
+
+    [[ "$WANTCSR" = yes && "$KFN" = '' ]] && {
+	echo >&2 "ERROR: Use the -keyout= option when you use -csr"
+	echo >&2 "INFO: A CSR and private key should never be put in the same file."
 	exit 1
     }
 
@@ -1054,6 +1081,8 @@ mkreqconf() {
 create_main_cert() {
     if [[ "$CSRFN" != "" ]]
     then SSCERT="$(cat "$CSRFN")"
+    elif [[ "$FORCEPUB" != "" ]]
+    then :
     else
 	[[ "$SHOWCONF" = yes ]] && mkreqconf $MAKECSR $WANTCSR
 
@@ -1152,15 +1181,16 @@ sign_created_csr() {
     }
 
     # Do we have to override the CSR's common name?
-    if [[ "$CSRFN" != "" && "$SUBJTYPE" != "" ]]
+    if [[ "$CSRFN" != "" && "$SUBJTYPE" != "" ]] || [[ "$FORCEPUB" != '' ]]
     then
 	if ! openssl x509 -help 2>&1 | grep -qie -force_pubkey
-	then echo >&2 "ERROR: Cannot override name from csr with $(openssl version)"
+	then echo >&2 "ERROR: Cannot override public key with x509 $(openssl version)"
 	     exit 1
 	fi
 
 	# First extract the public key from the existing CSR.
-	FORCEPUB="$(echo "$SSCERT" | openssl req -pubkey -noout)"
+	[[ "$FORCEPUB" = '' ]] &&
+	    FORCEPUB="$(echo "$SSCERT" | openssl req -pubkey -noout)"
 
 	# Openssl req requires a key, make it something quick.
 	TMPKEY="$(mktmpkey)"
@@ -1172,8 +1202,6 @@ sign_created_csr() {
 	    ${SUBJ:+-subj "$SUBJ"} \
 	    -key <(echo "$TMPKEY") \
 	    -config <(mkreqconf yes no) )"
-    else
-	FORCEPUB=""
     fi
 
     # Very old versions of openssl ...
@@ -1251,7 +1279,7 @@ create_crl_file() {
 create_pfx_file() {
     [[ "$PKCS12FN" = "" ]] && return 0
 
-    [[ "$WANTCSR" = yes ]] && { echo >&2 "PKCS12 files can't hold csr's"; exit 1;}
+    [[ "$WANTCSR" = yes ]] && { echo >&2 "PKCS12 files can't store certificate signing requests."; exit 1;}
 
     [[ "$SSKEY" = '' ]] && {
 	echo 'ERROR: A pfx file needs a private key' >&1
@@ -1307,6 +1335,44 @@ outk() {
 	 echo "$SSKEY" | openssl pkey -pubout
     else echo "$SSKEY"
     fi
+}
+
+extract_pubkey() {
+    local KFNAME KEYFILE PUBKEY ITEM PEMTYPE
+    KFNAME="$1"
+    KEYFILE="$(cat "$KFNAME")"
+
+    for PEMTYPE in x509 req pkey pubkey rsa ec dsa
+    do
+	PUBKEY=
+	if [ "$PEMTYPE" = 'pubkey' ]
+	then ITEM="$(echo "$KEYFILE" | openssl pkey -pubin 2>/dev/null)"
+	elif [[ "$PEMTYPE" = rsa || "$PEMTYPE" = dsa || "$PEMTYPE" = ec ]]
+	then ITEM="$(echo "$KEYFILE" | openssl "$PEMTYPE" -passin pass:0000 2>/dev/null)"
+	else ITEM="$(echo "$KEYFILE" | openssl "$PEMTYPE" 2>/dev/null)"
+	fi
+
+	[ "$ITEM" = "" ] && continue
+
+	case "$PEMTYPE" in
+	x509 ) PUBKEY="$(echo "$ITEM" | openssl x509 -pubkey -noout 2>/dev/null)" ;;
+	req ) PUBKEY="$(echo "$ITEM" | openssl req -pubkey -noout 2>/dev/null)" ;;
+	pkey ) PUBKEY="$(echo "$ITEM" | openssl pkey -pubout "${PW[@]}" 2>/dev/null)" ;;
+	pubkey ) PUBKEY="$(echo "$ITEM" | openssl pkey -pubin 2>/dev/null)" ;;
+
+	rsa|ec|dsa )
+	    PUBKEY="$(echo "$ITEM" | openssl "$PEMTYPE" -pubout "${PW[@]}" 2>/dev/null)" ;;
+	esac
+
+	[ "$PUBKEY" = "" ] || break
+    done
+
+    [ "$PUBKEY" = '' ] && {
+	echo >&2 "Cannot find public key in $KFNAME, it needs to be unencrypted and in PEM format"
+	exit 1
+    }
+
+    echo "$PUBKEY"
 }
 
 test_for_windows() {

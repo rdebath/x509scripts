@@ -41,7 +41,7 @@ possibly empty, pattern file is needed to prefix the client setups.
 mk-cert bash script
 ===================
 
-Usage: ./mk-cert [Common Name] [arguments]
+Usage: mk-cert [Common Name] [arguments]
 
 This script can create most styles of x509 certificate from the command
 line.  All options can be configured from arguments and the standard
@@ -148,11 +148,20 @@ Options:
     -keyfile=FileName
 	Don't generate a key, use the one in FileName
 
-    -csr
-	Create a CSR not a certificate
-
     -csrin=FileName
 	Use the CSR from FileName instead of generating a new key.
+	This cannot be used to create a self-signed certificate.
+
+    -pubin=FileName
+	Use the public key from the item in FileName instead of generating
+	a new key. This works just like -csrin except the certificate
+	request is bypassed and all details except the key are entered
+	as arguments. Note, however, that the contents of the file don't
+	have to be a public key file, just something that contains one.
+
+    -csr
+	Create a certificate signing request not a certificate
+	Must use -keyout= option too.
 
     -showcsr
 	Dump any CSR we use to the output too.
