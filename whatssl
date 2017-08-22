@@ -15,7 +15,7 @@ main() {
 
 	if [ ".$file" != .- ]
 	then XDATA="$(openssl enc -base64 <"$file")"
-	else XDATA="$(openssl enc -base64)"
+	else XDATA="$(cat | openssl enc -base64)"
 	fi
 
 	decode_binary_data "$XDATA" || continue
