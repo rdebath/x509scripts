@@ -233,6 +233,11 @@ Version 3 certificate extensions.
 	as anything except a MIME signing or encryption certificate.
 	NB: Can be combined with -v3server or -v3client to allow those.
 
+    -v3codesign, -codesign
+	Add V3 key usage extensions to prevent the certificate being used
+	as anything except a MIME signing or encryption certificate.
+	NB: Can be combined with -v3server or -v3client to allow those.
+
     -v3timestamp, -timestamp
 	Add V3 key usage extensions for timestamp signing. This can NOT
 	be combined with other key usages.
@@ -359,6 +364,7 @@ NL='
     V3CLIENT=no
     V3SERVER=no
     V3EMAIL=no
+    V3CODESIGN=no
     V3TIMESTAMP=no
     V3CRITICAL=no
     V3NS=no
@@ -589,6 +595,7 @@ decode_args() {
 	-v3server|-server ) V3=yes ; V3SERVER=yes ;;
 	-v3client|-client ) V3=yes ; V3CLIENT=yes ;;
 	-v3email|-email ) V3=yes ; V3EMAIL=yes ;;
+	-v3codesign|-codesign ) V3=yes ; V3CODESIGN=yes ;;
 	-v3timestamp|-timestamp ) V3=yes ; V3TIMESTAMP=yes ; V3CRITICAL=yes ;;
 	-v3crit|-v3critical|-critical )
 	    V3=yes ; V3CRITICAL=yes ; V3CA=${V3CA:-no}
@@ -834,7 +841,7 @@ check_args() {
 	exit 1
     fi
 
-    if [[ "$V3TIMESTAMP" = yes && "$V3CLIENT$V3SERVER$V3EMAIL" != nonono ]]
+    if [[ "$V3TIMESTAMP" = yes && "$V3CLIENT$V3SERVER$V3EMAIL$V3CODESIGN" != nononono ]]
     then
 	echo >&2 "A timestamping certificate can only be for timestamping."
 	exit 1
@@ -873,7 +880,7 @@ build_v3_extensions() {
     V3XKU=; V3EKU=
     [[ "$V3CRITICAL" != yes ]] && CR= || CR=critical,
 
-    if  [[ "$V3SERVER" = yes || "$V3EMAIL" = yes  || "$V3CLIENT" = yes || "$V3TIMESTAMP" = yes ]]
+    if  [[ "$V3SERVER" = yes || "$V3EMAIL" = yes  || "$V3CLIENT" = yes || "$V3CODESIGN" = yes || "$V3TIMESTAMP" = yes ]]
     then
 	if [[ "$SIGNPEM" != "" || "$SINGLEUSECA" = yes ]]
 	then V3CA="${V3CA:-no}"
@@ -889,6 +896,7 @@ build_v3_extensions() {
     [[ "$V3SERVER" = yes ]] && V3EKU=$V3EKU,serverAuth
     [[ "$V3CLIENT" = yes ]] && V3EKU=$V3EKU,clientAuth
     [[ "$V3EMAIL" = yes ]] && V3EKU=$V3EKU,emailProtection
+    [[ "$V3CODESIGN" = yes ]] && V3EKU=$V3EKU,codeSigning,msCodeInd,msCodeCom
     [[ "$V3TIMESTAMP" = yes ]] && V3EKU=$V3EKU,timeStamping
 
     [[ "$V3EKU" != '' ]] &&
@@ -906,6 +914,9 @@ build_v3_extensions() {
     elif [[ "$V3SERVER" = yes && "$V3CA" != yes ]]
     then
 	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}${KEYENCY}${KEYAGR}digitalSignature"
+    elif [[ "$V3CODESIGN" = yes && "$V3CA" != yes ]]
+    then
+	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}${KEYENCY}digitalSignature"
     elif [[ "$V3EMAIL" = yes && "$V3CA" != yes ]]
     then
 	V3OPTS="$V3OPTS${NL}keyUsage = ${CR}${V3XKU}${KEYENCY}digitalSignature"
@@ -943,6 +954,7 @@ build_v3_extensions() {
 	[[ "$V3SERVER" = yes ]] && V3ENS=$V3ENS,server
 	[[ "$V3CLIENT" = yes ]] && V3ENS=$V3ENS,client
 	[[ "$V3EMAIL" = yes ]] && V3ENS=$V3ENS,email
+	[[ "$V3CODESIGN" = yes ]] && V3ENS=$V3ENS,objsign
     fi
 
     [[ "$V3NS" = yes && "$V3ENS" != '' ]] &&
