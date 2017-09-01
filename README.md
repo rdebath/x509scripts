@@ -84,19 +84,20 @@ missing item is the `authorityInformationAccess` extension that would
 need you to provide a website just for that item.
 
 Many of these options can be used when creating a CSR (or "Certificate
-signing request") just choose the options as normal and add `-csr`
-to the end. Note when making a CSR the script will not send them to
-the same output you will need to use the `-keyout=KeyFilename` option.
-This is so that it's much less likely to for the key to be accidentally
-sent over an insecure link.
+signing request") just choose the options as normal and add `-csr` to the
+end. Note when making a CSR the script will not send it and the private
+key to the same output, you will need to use the `-keyout=KeyFilename`
+option.  This is so that it's much less likely to for the key to be
+accidentally sent over an insecure link.
 
 If you want to use a long term CA certificate then `-v3ca` option
 will give it the extensions expected for a certificate and the
 `-sign=ca-file.pem` will use it to sign a certificate. The `-csrin=file`
 can also be added in this case if you need to make a certificate based
 on a CSR rather than creating the key and certificate together. Beware,
-however, that this script can only create an empty CRL, if you ever need
-to create an actually useful CRL you'll have to do it separately.
+however, that this script can only create an empty CRL, if you ever
+need to create an actually useful CRL, that is revoke a certificate,
+you'll have to do it separately.
 
 If you're creating files for Windows you'll need the `-pfx=file.pfx`
 option to create a file that Windows can load the private key from. It's

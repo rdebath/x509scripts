@@ -235,8 +235,7 @@ Version 3 certificate extensions.
 
     -v3codesign, -codesign
 	Add V3 key usage extensions to prevent the certificate being used
-	as anything except a MIME signing or encryption certificate.
-	NB: Can be combined with -v3server or -v3client to allow those.
+	as anything except a code signing certificate.
 
     -v3timestamp, -timestamp
 	Add V3 key usage extensions for timestamp signing. This can NOT
