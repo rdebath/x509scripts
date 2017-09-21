@@ -10,3 +10,4 @@ demoCA
 *.crl
 *.jks
 *.csr
+*.p7b
