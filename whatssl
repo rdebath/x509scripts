@@ -152,6 +152,11 @@ decode_binary_data() {
 		 return 1
 	    fi
 	}
+    elif echo "$XDATA" | openssl enc -base64 -d | openssl enc -base64 -d | openssl asn1parse -inform der >/dev/null 2>&1
+    then
+	decode_binary_data "$(echo "$XDATA" | openssl enc -base64 -d)" yes
+	return
+
     elif [ "$XDATA" = '' ]
     then return 1
     else
