@@ -1,0 +1,194 @@
+One line openssl commands
+=========================
+
+This is a collect of random notes about certificates. First there's
+small collection of openssl command lines that do various useful things
+with certificates and keys.  Many of these need the default OPENSSL_CONF
+setup. Then there's a couple of JAVA "keytool" commands, a couple of SSL
+scanning websites, PEM file format stuff, OpenVPN cert notes and notes
+about the various fields in a certificate.
+
+
+# Create an openssl default CA certificate.
+openssl req -new -x509 -nodes -keyout ca.key -out ca.crt -subj /CN=localhost/
+
+# Create an openssl self signed certificate.
+openssl req -new -x509 -nodes -keyout self.key -out self.crt -extensions usr_cert -subj /CN=localhost/
+
+# Create a V3 certificate using a CSR and CA
+openssl req -new -nodes -keyout svr.key -subj /CN=localhost/  >svr.csr
+openssl x509 -req -out svr.crt -CA ca.crt -CAkey ca.key -CAcreateserial -extfile /usr/lib/ssl/openssl.cnf -extensions usr_cert  <svr.csr
+
+# Create a plain certificate using a CSR and CA
+openssl req -new -nodes -keyout plain.key -subj /CN=localhost/  >plain.csr
+openssl x509 -req -out plain.crt -CA ca.crt -CAkey ca.key -CAcreateserial  <plain.csr
+
+# Create dhparam-2048.pem
+openssl dhparam 2048 > dhparam-2048.pem
+
+# Create a plain self signed certificate.
+openssl req -new -x509 -nodes -keyout plss.key -out plss.crt -subj /CN=localhost/ -newkey rsa:3072 -config <(echo [req];echo distinguished_name=req )
+
+# Create a PFX file
+openssl pkcs12 -export -passout pass: -out svr.pfx -name localhost -inkey svr.key -in svr.crt
+
+# Convert a certificate from DER to PEM
+openssl x509 -in cert.der -inform DER -out cert.pem
+
+# Create SAN certificates
+openssl req -keyout sssan.key -out sssan.crt -new -x509 -nodes -newkey rsa -config <( echo "[req]" ; echo "distinguished_name = rdn" ; echo "prompt = no" ; echo "x509_extensions = x509v3" ; echo "[rdn]" ; echo "CN=$1" ; echo "[x509v3]" ; echo "subjectAltName=DNS:$1$(shift;echo "${*/#/,DNS:}")" )
+
+# Okay ... I think that shows why I wrote the script :-)
+
+One Line JAVA keytool commands
+==============================
+
+# Imports all three items (CA, cert & key) from PFX file. MUST have a 6 character+ password on the pfx.
+keytool -importkeystore -srckeystore pfx1.p12 -srcstoretype PKCS12 -deststoretype JKS -destkeystore javaKeyStore.jks -srcstorepass 123456 -deststorepass 123456
+
+# And back to pkcs12
+keytool -importkeystore -destkeystore pfx2.p12 -deststoretype PKCS12 -srcstoretype JKS -srckeystore javaKeyStore.jks -srcstorepass 123456 -deststorepass 123456
+
+# Import a certificate as a "trusted certificate"
+keytool -importcert -keystore x.jks -file x.ca.pem -storepass 123456 -noprompt
+
+# What's in the file
+keytool -list -keystore javaKeyStore.jks -storepass 123456
+
+
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+SSL Scanners
+============
+
+    https://www.ssllabs.com/ssltest
+
+    http://wiki.cacert.org/SSLScanner
+
+$ nmap --script ssl-enum-ciphers -p 443 example.com
+
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+PEM file order
+==============
+
+    https://www.digicert.com/ssl-support/pem-ssl-creation.htm
+
+    --> Private key
+    --> Matching certificate
+    --> Certificate intermediates
+    --> Certificate root
+
+    openssl pkcs12 -in  certs/testhost.plus-ca.pfx -out x.pem -nodes
+
+    --> Matching certificate
+    --> Other certificates
+    --> Private key
+
+    openssl req -new -x509 -nodes -keyout self.pem -out self.pem -extensions usr_cert -subj /CN=localhost/
+
+    --> Private key
+    --> Matching certificate
+
+Result:
+-------
+
+The location of the key in the file does not matter.
+The primary certificate must be the first certificate in the file.
+Each of the following certificates must sign the one previous to it.
+
+The root CA certificate MAY be in the file, however, ssllabs will give
+you a warning about this and the client is unlikely to use it for anything
+as there's no proof it should be trusted. If the client does use it it'll
+be an optimisation so it can find it's own copy of the key more quickly.
+
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+Other OIDs / ASN.1 Objects
+==========================
+
+2.25.292783505130108047603316099750004376557	UUID OID
+
+2.16.826				Country GB (United Kingdom)
+
+1.2.826.0.1.9999999.any
+    the 9999999 is an England/Wales company number.
+
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+OpenVPN
+=======
+
+    Server can use:
+	Normal CA certificates
+	Self signed V1 certificates
+	Self signed CA:FALSE certificates.
+
+    Client needs a selector on the server certificate to stop it complaining
+	nsCertType = server
+	V3 SSL server limitation
+	Common name selection
+	Other Server subject parts selection
+
+Note:
+    V3 extensions are designed to prevent certificates being used for
+    tasks that have not been paid for.
+
+    A local CA
+    A Client certificate
+    A Server certificate
+
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+Max lengths for subject parts
+=============================
+
+Standard/Normal items for the x509 subject
+Note: openssl doesn't check for duplicates ...
+commonName		CN:64			UTF8			Multi
+countryName		C:2			PrintableString
+localityName		L:128			UTF8			Multi
+stateOrProvinceName	ST:128			UTF8			Multi
+organizationName	O:64			UTF8			Multi
+organizationalUnitName	OU:64			UTF8			Multi
+emailAddress		emailAddress:128	IA5String
+unstructuredName	unstructuredName        UTF8
+challengePassword	challengePassword
+unstructuredAddress	unstructuredAddress
+givenName		GN:32768		UTF8			Multi
+surname			SN:32768					Multi
+title			title						Multi
+initials		initials:32768					Multi
+serialNumber		serialNumber:64		PrintableString
+friendlyName		friendlyName		BMPString
+name			name:32768		On windows 2.5.4.41	Multi
+dnQualifier		dnQualifier		PrintableString
+domainComponen		DC			IA5String		Multi
+Microsoft CSP Name	CSPName			BMPString
+rfc822Mailbox		mail 	Len=256?
+
+NB:
+    BMPString is a string using limited Unicode "UCS-2LE".
+    IA5String is just ASCII
+    PrintableString is mostly identical to ASCII too.
+
+    The dnQualifier is supposed to be used to distinguish names that might
+    otherwise collide.
+
+Some of the many others allowed by openssl ...
+org			ORG
+Domain			domain
+X509			X509
+favouriteDrink		favouriteDrink
+info			info			UTF8
+owner			owner
+subjectAltName		subjectAltName
+userId			UID
+x500UniqueIdentifier	x500UniqueIdentifier	UTF8
+x509Crl			x509Crl
+
+.....
+generationQualifier
+
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
