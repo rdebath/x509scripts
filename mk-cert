@@ -152,7 +152,8 @@ Options:
     -pkcs12=FileName
     -pfx=FileName
 	Create a "pfx" file with the certificate, private key and the
-	CA certificate used to sign the certificate.
+	CA certificate used to sign the certificate. The "-pkcs12" variant
+	saves the file base64 encoded.
 
     -pass:password
     -pass=OpenSSL:pass
@@ -388,6 +389,7 @@ NL='
     SINGLEUSECA=
     V3SUCA=
     PKCS12FN=
+    PKCS12ASCII=
     POLICYTEXT=
     POLICYOID=
     NOPROMPT=
@@ -572,9 +574,15 @@ decode_args() {
 
 	-v3singleuseca|-v3suca ) MAKECSR=yes ; SINGLEUSECA=yes ; V3SUCA=yes ;;
 
-	-pkcs12[=:]*|-pfx[=:]* )
+	-pfx[=:]* )
 	    PKCS12FN="${ar#*[=:]}"
 	    [[ "$FN" = "" ]] && FN=/dev/null
+	    ;;
+
+	-pkcs12[=:]* )
+	    PKCS12FN="${ar#*[=:]}"
+	    [[ "$FN" = "" ]] && FN=/dev/null
+	    PKCS12ASCII=yes
 	    ;;
 
 	-pass[=:]*:* ) KEYPASS="${ar#*[=:]}" ; PFXPASS="$KEYPASS" ;;
@@ -1297,8 +1305,26 @@ create_pfx_file() {
 	exit 1
     }
 
+    if [ "$PKCS12ASCII" != yes ]
+    then do_pfx "$PKCS12FN"
+    else
+	(
+	    umask 077
+	    {
+		echo -----BEGIN PKCS12-----
+		do_pfx '' | openssl base64 -e
+		echo -----END PKCS12-----
+	    } > "$PKCS12FN"
+	)
+    fi
+
+    return 0
+}
+
+do_pfx() {
+
     openssl pkcs12 -export -passout "$PFXPASS" \
-	-out "$PKCS12FN" \
+	${1:+-out "$PKCS12FN"} \
 	-name "$CN til: $(echo "$SSCERT" | openssl x509 -noout -enddate |
 			  sed -n 's/.*= *//p')" \
 	-inkey <(echo "$SSKEY") \
@@ -1308,8 +1334,6 @@ create_pfx_file() {
 		-subject -nameopt multiline | sed -n 's/ *commonName *= //p'
 		) CA til: $(echo "$SIGNPEM" | openssl x509 -noout -enddate |
 		  sed -n 's/.*= *//p' )"}
-
-    return 0
 }
 
 outp() {

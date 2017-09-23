@@ -186,7 +186,8 @@ Options:
     -pkcs12=FileName
     -pfx=FileName
 	Create a "pfx" file with the certificate, private key and the
-	CA certificate used to sign the certificate.
+	CA certificate used to sign the certificate. The "-pkcs12" variant
+	saves the file base64 encoded.
 
     -pass:password
     -pass=OpenSSL:pass
