@@ -380,6 +380,7 @@ NL='
 
     NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
     NOECPARAM="$(openssl no-ecparam >/dev/null 2>&1 && echo yes || echo no)"
+    NOMIXING="$(eval 'x=1;[ "$(set -- ${x:+0 "$x"} 2;echo "$2")" = "1" ]' && echo no || echo yes)"
     NOSETSERIAL=
     KEYPASS=
     PFXPASS="pass:"
@@ -882,6 +883,26 @@ check_args() {
     then REQSUBJECT=-subject
     else REQSUBJECT=-text
     fi
+
+    if [[ "$SERIAL" != '' && "$NOSETSERIAL" = yes ]]
+    then echo >&2 "ERROR: Cannot set the serial with this version of openssl."
+	 exit 1
+    fi
+
+    if [[ "$SERIAL" != '' && "$NOMIXING" = yes ]]
+    then echo >&2 "ERROR: Cannot set the serial with this shell."
+	 exit 1
+    fi
+
+    if [[ "$SUBJ" != '' && "$NOMIXING" = yes ]]
+    then echo >&2 "ERROR: /CN=.../ style option not available with this shell."
+	 exit 1
+    fi
+
+    if [[ "$CASUBJ" != '' && "$NOMIXING" = yes ]]
+    then echo >&2 "ERROR: Cannot set the CA subject using /CN=/ with this shell."
+	 exit 1
+    fi
 }
 
 build_v3_extensions() {
@@ -1185,7 +1206,7 @@ create_suca_pem() {
 	echo '#END'
     }
 
-    [[ "$SERIAL" = "" ]] && SERIAL="$(mk_rand 8)"
+    [[ "$SERIAL" = "" && "$NOSETSERIAL" != yes ]] && SERIAL="$(mk_rand 8)"
     CAKEY="$(mkkey)"
 
     [[ "$NOSETSERIAL" != yes ]] && CASER="$(mk_rand 8)"
@@ -1207,7 +1228,7 @@ sign_created_csr() {
 
     [[ "$SIGNPEM" = "" ]] && return 0
 
-    [[ "$SERIAL" = "" ]] && SERIAL="$(mk_rand 8)"
+    [[ "$SERIAL" = "" && "$NOSETSERIAL" != yes ]] && SERIAL="$(mk_rand 8)"
 
     # Default to days left on CA certificate
     [[ "$CERT_DAYS" = "" ]] && {
