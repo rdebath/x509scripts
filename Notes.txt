@@ -55,7 +55,6 @@ keytool -importcert -keystore x.jks -file x.ca.pem -storepass 123456 -noprompt
 # What's in the file
 keytool -list -keystore javaKeyStore.jks -storepass 123456
 
-
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 SSL Scanners
@@ -190,5 +189,17 @@ x509Crl			x509Crl
 .....
 generationQualifier
 
--=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+#!/bin/bash
+
+D="${1}"
+[ -e "$D".pfx ] || :< "$D".pfx || exit
+# Windows PFX files can be base64 encoded, but openssl doesn't know that.
+{
+    echo -----BEGIN PKCS12-----
+    openssl base64 -e -in "$D".pfx
+    echo -----END PKCS12-----
+} > "$D".b64.pfx
+
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
