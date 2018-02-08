@@ -100,6 +100,10 @@ Options:
     -out=FileName
 	Put the certificate, and any other items in a file.
 
+    -addcert=FileName
+	Filename contans a certificate, put it in the same location as
+	the created certificate. (Used for intermediate CA certificates)
+
     -keyout=FileName
 	Put the private key in a specific file not "-out=" or stdout.
 

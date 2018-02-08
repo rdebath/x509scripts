@@ -66,6 +66,10 @@ Options:
     -out=FileName
 	Put the certificate, and any other items in a file.
 
+    -addcert=FileName
+	Filename contans a certificate, put it in the same location as
+	the created certificate. (Used for intermediate CA certificates)
+
     -keyout=FileName
 	Put the private key in a specific file not "-out=" or stdout.
 
@@ -343,6 +347,7 @@ NL='
     export OPENSSL_CONF=/dev/null
     FN=
     KFN=
+    ADDCERT=
     CRLFN=
     CSRFN=
     CAFN=
@@ -568,6 +573,13 @@ decode_args() {
 	-sign[=:]* )
 	    SIGNPEM="$(cat "${ar#*[=:]}")"
 	    MAKECSR=yes
+	    ;;
+
+	-addcert[=:]* )
+	    [[ "$ADDCERT" != '' ]] && ADDCERT="$ADDCERT$NL"
+	    ADDCERT="$ADDCERT$(
+		openssl x509 -subject -serial -dates -in "${ar#*[=:]}"
+		)"
 	    ;;
 
 	-singleuseca|-suca ) MAKECSR=yes ; SINGLEUSECA=yes ;;
@@ -1357,6 +1369,8 @@ outp() {
 	else echo "$SIGNPEM" | openssl x509 -subject -serial -dates
 	fi
     }
+
+    [[ "$ADDCERT" != '' ]] && echo "$ADDCERT"
 
     [[ "$CSRTEXT" != "" && "$SHOWCSR" = yes ]] &&
 	echo "$CSRTEXT"
