@@ -87,9 +87,9 @@ Options:
 	to be added in any order. If OpenSSL doesn't know a particular
 	oid the numeric value can be used.
 
-	If no subject is specified one will be prompted for by OpenSSL.
-	NOTE: If you are adding a SAN list the common name prompted for
-	by OpenSSL will NOT be in the list unless you add it there too.
+	If no subject is specified one will be prompted for by OpenSSL
+	unless a SAN is requested in which case an error is generated
+	unless "-no-prompt" is used.
 
     -days=7304
 	How many days should the certificate run for?
