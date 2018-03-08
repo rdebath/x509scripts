@@ -437,6 +437,7 @@ NL='
 	mktmpkey() { openssl genrsa 512 2>/dev/null ; }
 	KEYCLASS=rsa
     fi
+    KEYSOURCE=
     # See also:
     # mkkey() { openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) ;}
 
@@ -502,10 +503,12 @@ decode_args() {
 
 	-rsa[=:]* )
 	    KEYCLASS=rsa
+	    KEYSOURCE="$KEYSOURCE:rsa"
 	    eval "mkkey() { openssl genrsa '${ar#*[=:]}' ; }"
 	    ;;
 	-dsa[=:]* )
 	    KEYCLASS=
+	    KEYSOURCE="$KEYSOURCE:dsa"
 	    eval "mkkey() { openssl dsaparam -noout -genkey '${ar#*[=:]}' ; }"
 	    ;;
 	-ec[=:]* ) 
@@ -529,6 +532,7 @@ decode_args() {
 
 		eval "mkkey() { openssl ecparam -name '$curve' ${param:+-param_enc $param} ${noseed:+-no_seed} -genkey -noout ; }"
 		KEYCLASS=ec
+		KEYSOURCE="$KEYSOURCE:ec"
 		;;
 
 	-dsa )
@@ -538,10 +542,20 @@ decode_args() {
 	    DGST="${DGST:--sha1}"
 	    mkkey() { openssl dsaparam -noout -genkey 1024; }
 	    KEYCLASS=
+	    KEYSOURCE="$KEYSOURCE:dsa"
 	    ;;
 
-	-rsa ) mkkey() { openssl genrsa ; } ; KEYCLASS=rsa ;;
-	-ec )  mkkey() { openssl ecparam -name "$EC" -genkey -noout ; } ; KEYCLASS=ec ;;
+	-rsa )
+	    mkkey() { openssl genrsa ; }
+	    KEYCLASS=rsa
+	    KEYSOURCE="$KEYSOURCE:rsa"
+	    ;;
+
+	-ec )
+	    mkkey() { openssl ecparam -name "$EC" -genkey -noout ; }
+	    KEYCLASS=ec
+	    KEYSOURCE="$KEYSOURCE:ec"
+	    ;;
 
 	-list[-_]curves|-show[_-]curves )
 	    openssl ecparam -list_curves ; exit ;;
@@ -550,6 +564,7 @@ decode_args() {
 	    eval "mkkey() { cat < '${ar#*[=:]}' ; }"
 	    [[ "$KFN" = "" ]] && KFN=/dev/null
 	    KEYCLASS=
+	    KEYSOURCE="$KEYSOURCE:keyfile"
 	    ;;
 
 	-csr ) WANTCSR=yes ; MAKECSR=yes ;;
@@ -557,6 +572,7 @@ decode_args() {
 	    CSRFN="${ar#*[=:]}"
 	    KFN=/dev/null
 	    KEYCLASS=
+	    KEYSOURCE="$KEYSOURCE:csr"
 	    ;;
 	-showcsr ) SHOWCSR=yes ;;
 
@@ -564,6 +580,7 @@ decode_args() {
 	    FORCEPUB="$(extract_pubkey "${ar#*[=:]}")"
 	    KFN=/dev/null
 	    KEYCLASS=
+	    KEYSOURCE="$KEYSOURCE:pubkey"
 	    ;;
 
 	-sign[=:]*.pfx )
@@ -903,6 +920,12 @@ check_args() {
     then echo >&2 "ERROR: Cannot set the CA subject using /CN=/ with this shell."
 	 exit 1
     fi
+
+    case "$KEYSOURCE" in
+    :*:* )
+	echo >&2 "ERROR: Duplicate key source locations: '$KEYSOURCE'"
+	exit 1
+    esac
 }
 
 build_v3_extensions() {
