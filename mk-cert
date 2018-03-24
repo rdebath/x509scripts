@@ -303,19 +303,19 @@ main() {
     check_args
 
     [[ "$KFN" != '' && "$KFN" != /dev/null && -s "$KFN" ]] &&
-	{ echo "ERROR: File $KFN already exists" ; exit 1 ; }
+	{ echo >&2 "ERROR: File $KFN already exists" ; exit 1 ; }
 
     [[ "$FN" != '' && -s "$FN" ]] &&
-	{ echo "ERROR: File $FN already exists" ; exit 1 ; }
+	{ echo >&2 "ERROR: File $FN already exists" ; exit 1 ; }
 
     [[ "$CAFN" != '' && -s "$CAFN" ]] &&
-	{ echo "ERROR: File $CAFN already exists" ; exit 1 ; }
+	{ echo >&2 "ERROR: File $CAFN already exists" ; exit 1 ; }
 
     [[ "$PKCS12FN" != '' && -s "$PKCS12FN" ]] &&
-	{ echo "ERROR: File $PKCS12FN already exists" ; exit 1 ; }
+	{ echo >&2 "ERROR: File $PKCS12FN already exists" ; exit 1 ; }
 
     [[ "$CRLFN" != '' && -s "$CRLFN" ]] &&
-	{ echo "ERROR: File $CRLFN already exists" ; exit 1 ; }
+	{ echo >&2 "ERROR: File $CRLFN already exists" ; exit 1 ; }
 
     build_v3_extensions
     apply_options
@@ -1364,7 +1364,7 @@ create_pfx_file() {
     [[ "$WANTCSR" = yes ]] && { echo >&2 "PKCS12 files can't store certificate signing requests."; exit 1;}
 
     [[ "$SSKEY" = '' ]] && {
-	echo 'ERROR: A pfx file needs a private key' >&1
+	echo 'ERROR: A pfx file needs a private key' >&2
 	exit 1
     }
 
