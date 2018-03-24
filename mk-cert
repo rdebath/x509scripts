@@ -1218,12 +1218,13 @@ create_suca_pem() {
 	# org is supposed to be the CA's company name.
 	if [[ "$WANTDVCERT" = yes ]]
 	then echo "C=XX"
-	     echo "O=Private CA"
+	     echo "O=Above reproach CA"
 	     echo "CN=${CN:-CA}"
 	elif [[ "$CN" != "" ]]
-	then echo "OU=Private CA"
+	then echo "O=Above reproach CA"
 	     echo "CN=$CN"
-	else echo "CN=Private CA"
+	else echo "O=Above reproach CA"
+	     echo "CN=Private CA"
 	fi
 
 	echo '#END'
@@ -1254,7 +1255,7 @@ sign_created_csr() {
     [[ "$SERIAL" = "" && "$NOSETSERIAL" != yes ]] && SERIAL="$(mk_rand 8)"
 
     # Default to days left on CA certificate
-    [[ "$CERT_DAYS" = "" ]] && {
+    [[ "$CERT_DAYS" = "" && "$SINGLEUSECA" != yes ]] && {
 	ENDDAY="$(openssl x509 -noout -enddate -in <(echo "$SIGNPEM") )"
 	ENDDAY="$(date +%s --date="$(sed 's/^[^=]*=//' <<< "$ENDDAY")" ||:)"
 	TODAY="$(ft date +%s)"
