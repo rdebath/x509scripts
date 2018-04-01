@@ -5,7 +5,7 @@ PROGRAM="$0"
 
 show_help_text() {
 
-    echo "Usage: $PROGRAM [Common Name] [arguments]"
+    echo "Usage: $(basename "$PROGRAM") [Common Name] [arguments]"
 
 cat <<\!
 
@@ -150,7 +150,11 @@ Options:
     -v3suca
 	Same but always make the CA a V3 certificate with the CA flag.
 
+    -v1suca
+	Same but always make the CA a V1 certificate.
+
     -casubj=...
+    -caname=...
 	Set the subject for the single use CA.
 
     -pkcs12=FileName
@@ -601,7 +605,7 @@ decode_args() {
 	    ;;
 
 	-singleuseca|-suca ) MAKECSR=yes ; SINGLEUSECA=yes ;;
-
+	-v1suca ) MAKECSR=yes ; SINGLEUSECA=yes ; V3SUCA=no ;;
 	-v3singleuseca|-v3suca ) MAKECSR=yes ; SINGLEUSECA=yes ; V3SUCA=yes ;;
 
 	-pfx[=:]* )
@@ -766,7 +770,7 @@ decode_args() {
 	    SUBJ_ID=$((SUBJ_ID+1))
 	    ;;
 
-	-casubj[=:]* )
+	-casubj[=:]*|-caname[=:]* )
 	    V="${ar#*[=:]}"
 	    case "$V" in
 	    /*=* )
@@ -1192,9 +1196,9 @@ create_suca_pem() {
 	echo '[req]'
 	echo 'distinguished_name = req_distinguished_name'
 	echo 'prompt = no'
-	if [[ "$V3" = yes || "$V3SUCA" = yes ]]
+	if [[ "$V3" = yes && "$V3SUCA" != no ]] || [[ "$V3SUCA" = yes ]]
 	then echo "$V3INIT"
-	     if [[ "$V3CA" = no ]]
+	     if [[ "$V3CA" != yes ]]
 	     then
 		[[ "$V3CRITICAL" != yes ]] && CR= || CR=critical,
 		echo "basicConstraints = ${CR}CA:TRUE,pathlen:0"

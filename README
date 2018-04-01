@@ -101,7 +101,7 @@ Options:
 	Put the certificate, and any other items in a file.
 
     -addcert=FileName
-	Filename contans a certificate, put it in the same location as
+	Filename contains a certificate, put it in the same location as
 	the created certificate. (Used for intermediate CA certificates)
 
     -keyout=FileName
@@ -184,7 +184,11 @@ Options:
     -v3suca
 	Same but always make the CA a V3 certificate with the CA flag.
 
+    -v1suca
+	Same but always make the CA a V1 certificate.
+
     -casubj=...
+    -caname=...
 	Set the subject for the single use CA.
 
     -pkcs12=FileName
