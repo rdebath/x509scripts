@@ -123,11 +123,11 @@ Options:
 	This cannot be used to create a self-signed certificate.
 
     -pubin=FileName
-	Use the public key from the item in FileName instead of generating
-	a new key. This works just like -csrin except the certificate
-	request is bypassed and all details except the key are entered
-	as arguments. Note, however, that the contents of the file don't
-	have to be a public key file, just something that contains one.
+	Like -csrin this will use the public key from the item in FileName
+	instead of generating a new key. The file can be any recognised
+	file that contains a public key, not just a CSR. But if it's
+	a CSR or a certificate it's common name will also be used if
+	nothing else is specified.
 
     -csr
 	Create a certificate signing request not a certificate
@@ -304,6 +304,7 @@ main() {
     init_vars
     test_for_windows
     decode_args "$@"
+    default_options
     check_args
 
     [[ "$KFN" != '' && "$KFN" != /dev/null && -s "$KFN" ]] &&
@@ -354,6 +355,7 @@ NL='
     ADDCERT=
     CRLFN=
     CSRFN=
+    PUBKEYFN=
     CAFN=
     FORCEPUB=
     SERIAL=
@@ -405,6 +407,7 @@ NL='
     NOPROMPT=
     NOKEYID=
     WANTDVCERT=
+    DEFAULTCN=
 
     CIPHER=-aes128
     DGST=
@@ -581,7 +584,7 @@ decode_args() {
 	-showcsr ) SHOWCSR=yes ;;
 
 	-pubin[=:]* )
-	    FORCEPUB="$(extract_pubkey "${ar#*[=:]}")"
+	    PUBKEYFN="${ar#*[=:]}"
 	    KFN=/dev/null
 	    KEYCLASS=
 	    KEYSOURCE="$KEYSOURCE:pubkey"
@@ -1083,6 +1086,39 @@ mk_rand() {
     [[ "$RH" = '' ]] &&
 	RH="$(openssl rand "$1" | od -x | sed -n '1{s/^[^ ]*//;s/ //gp;}' )"
     echo "$RH"
+}
+
+default_options() {
+    # If they want San names we need the CN
+    [[ "$CSRFN" != '' && "$V3SAN" = yes  && "$CN" = '' ]] && {
+	PUBKEYFN="$CSRFN"
+	CSRFN=
+    }
+
+    [[ "$PUBKEYFN" != '' ]] && {
+	PUBDATA="$(cat "$PUBKEYFN")"
+	FORCEPUB="$(extract_pubkey <(echo "$PUBDATA"))"
+	DEFAULTCN="$(
+	    {
+		echo "$PUBDATA" |
+		openssl req -subject -noout -nameopt multiline 2>/dev/null
+		echo "$PUBDATA" |
+		openssl x509 -subject -noout -nameopt multiline 2>/dev/null
+	    } | sed -n 's/^  *commonName  *=  *\([^ ]*\) *$/\1/p' |
+	    head -1 )"
+    }
+
+    [[ "$DEFAULTCN" != '' && "$SUBJTYPE" = '' ]] && {
+	SUBJTYPE="conf"
+	SUBJ_ID=$((SUBJ_ID+1))
+	SUBJ_CN="$SUBJ_CN${NL}$SUBJ_ID.commonName=$DEFAULTCN"
+	if [[ "$CN" = '' ]]
+	then CN="$DEFAULTCN"
+	else ! add_good_san "$DEFAULTCN"
+	fi
+    }
+
+    return 0
 }
 
 apply_options() {
