@@ -308,6 +308,11 @@ Version 3 certificate extensions.
 	Add the V3 extension that states a server will send a 'status_request'
 	or 'status_request_v2' response when requested.
 
+    -v3permit=..., -permit=..., -v3exclude..., -exclude...
+	Add the V3 extension for 'Name constraints', they consist of domain
+	names or IP addresses with subnet masks in the form of tagged SAN
+	names.
+
     -v3crluri=..., -crlurl=...
 	Add a "CRL Distribution Point" item to the certificate extensions.
 

@@ -286,6 +286,11 @@ Version 3 certificate extensions.
 	Add the V3 extension that states a server will send a 'status_request'
 	or 'status_request_v2' response when requested.
 
+    -v3permit=..., -permit=..., -v3exclude..., -exclude...
+	Add the V3 extension for 'Name constraints', they consist of domain
+	names or IP addresses with subnet masks in the form of tagged SAN
+	names.
+
     -v3crluri=..., -crlurl=...
 	Add a "CRL Distribution Point" item to the certificate extensions.
 
@@ -396,6 +401,7 @@ NL='
     V3CRITICAL=no
     V3NS=no
     V3ENS=
+    V3NAMECONS=
 
     SANSECT=
     SAN_ID=0
@@ -724,6 +730,13 @@ decode_args() {
 	    TLSFEATURE="$TLSFEATURE${ar#*[=:]}"
 	    ;;
 
+	-v3permit[=:]*|-permit[=:]* )
+		add_name_constraint "${ar#*[=:]}" permitted
+		;;
+	-v3exclude[=:]*|-exclude[=:]* )
+		add_name_constraint "${ar#*[=:]}" excluded
+		;;
+
 	-v3crlur[il][=:]*|-crlur[il][=:]* )
 	    V3=yes
 	    CRLURI_ID=$((CRLURI_ID+1))
@@ -863,6 +876,36 @@ add_good_san() {
     add_san "$san" ${2:+"$2"}
 }
 
+add_name_constraint() {
+    local san=
+
+    if [[ "$1" =~ ^(IP|DNS|email|URI|RID|dirName): ]]
+    then san="$1"
+    elif [[ "$1" =~ ^otherName:.*\;.*: ]]
+    then san="$1"
+    elif [[ "$1" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]
+    then san="IP:$1"
+    elif [[ "$1" =~ ^(\*\.)?([a-zA-Z][-a-zA-Z0-9]*\.)*[a-zA-Z][-a-zA-Z0-9]+$ ]]
+    then san="DNS:$1"
+    fi
+    [[ "$san" = '' ]] && {
+	echo >&2 "Cannot guess '$1', please tag it"
+	exit 1
+    }
+
+    V3=yes ; V3NAMECONS=yes
+
+    if [[ "$NAMESECT" = '' ]]
+    then NAMESECT="${NAMESECT}$2;$san"
+    else NAMESECT="${NAMESECT},$2;$san"
+    fi
+
+    # Hmmm, long form doesn't seem to work.
+    # NAME_ID=$((NAME_ID+1))
+    # NAMESECT="${NAMESECT}${1/:/.$NAME_ID=$2;}${NL}"
+
+    #'
+}
 !
     )"
 else
@@ -875,6 +918,12 @@ add_good_san() {
     esac
     return 1;
 }
+
+add_name_constraint() {
+    echo >&2 "You need to upgrade your version of BASH for 'add_name_constraint'"
+    exit 1
+}
+
 fi
 
 add_san() {
@@ -1052,6 +1101,16 @@ build_v3_extensions() {
 		SUBCRIT=critical,
 	V3OPTS="$V3OPTS${NL}subjectAltName=${SUBCRIT}@san"
 	V3EXTRAS="$V3EXTRAS${NL}[san]${NL}${SANSECT}"
+    }
+
+    [[ "$V3NAMECONS" = yes && "$NAMESECT" != '' ]] && {
+	local NAMECRIT=
+	[[ "$V3CRITICAL" = yes ]] &&
+	    NAMECRIT=critical,
+	V3OPTS="$V3OPTS${NL}nameConstraints=${NAMECRIT}${NAMESECT}"
+
+	# V3OPTS="$V3OPTS${NL}nameConstraints=${NAMECRIT}@namec"
+	# V3EXTRAS="$V3EXTRAS${NL}[namec]${NL}${NAMESECT}"
     }
 
     if [[ "$V3CA" = yes ]]
