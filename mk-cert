@@ -7,6 +7,18 @@ show_help_text() {
 
     echo "Usage: $(basename "$PROGRAM") [Common Name] [arguments]"
 
+    [[ "$BASH3" = yes || "$NOMIXING" = yes || "$BASHREGEX" = no ]] && {
+	echo ""
+	echo "BEWARE: Some features are broken or work poorly on this version"
+	echo "of bash: $BASH_VERSION"
+    }
+
+    [[ "$NOPKEY" = yes || "$NOECPARAM" = yes ]] && {
+	echo ""
+	echo "BEWARE: Some features are broken or work poorly on this version"
+	echo "of openssl: $(openssl version)"
+    }
+
 cat <<\!
 
 This script can create most styles of x509 certificate from the command
@@ -391,6 +403,7 @@ NL='
     NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
     NOECPARAM="$(openssl no-ecparam >/dev/null 2>&1 && echo yes || echo no)"
     NOMIXING="$(eval 'x=1;[ "$(set -- ${x:+0 "$x"} 2;echo "$2")" = "1" ]' && echo no || echo yes)"
+    BASHREGEX=
     NOSETSERIAL=
     KEYPASS=
     PFXPASS="pass:"
@@ -832,6 +845,7 @@ decode_args() {
 if  (eval 'x=1.12.123;[[ "$x" =~ ^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})$ ]]') \
     2>/dev/null
 then
+    BASHREGEX=yes
     eval "$(cat <<\!
 add_good_san() {
     local san=
@@ -852,6 +866,7 @@ add_good_san() {
 !
     )"
 else
+    BASHREGEX=no
 add_good_san() {
     case "$1" in
     DNS:* ) add_san "$1" ${2:+"$2"} ; return 0 ;;
