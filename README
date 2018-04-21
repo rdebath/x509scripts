@@ -304,6 +304,10 @@ Version 3 certificate extensions.
 	The first one of these sets the OID for the '-poltext' option if
 	present. Additional '-policy' arguments add extra policy extensions.
 
+    -tlsfeature=...
+	Add the V3 extension that states a server will send a 'status_request'
+	or 'status_request_v2' response when requested.
+
     -v3crluri=..., -crlurl=...
 	Add a "CRL Distribution Point" item to the certificate extensions.
 

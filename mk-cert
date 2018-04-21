@@ -270,6 +270,10 @@ Version 3 certificate extensions.
 	The first one of these sets the OID for the '-poltext' option if
 	present. Additional '-policy' arguments add extra policy extensions.
 
+    -tlsfeature=...
+	Add the V3 extension that states a server will send a 'status_request'
+	or 'status_request_v2' response when requested.
+
     -v3crluri=..., -crlurl=...
 	Add a "CRL Distribution Point" item to the certificate extensions.
 
@@ -408,6 +412,7 @@ NL='
     NOKEYID=
     WANTDVCERT=
     DEFAULTCN=
+    TLSFEATURE=
 
     CIPHER=-aes128
     DGST=
@@ -696,6 +701,15 @@ decode_args() {
 		;;
 
 	-v3san|-san ) V3=yes ; V3SAN=yes ;;
+
+	-v3tlsfeature[=:]*|-tlsfeature[=:]* )
+	    V3=yes
+	    if [[ "$TLSFEATURE" = '' ]]
+	    then TLSFEATURE='tlsfeature = '
+	    else TLSFEATURE="$TLSFEATURE,"
+	    fi
+	    TLSFEATURE="$TLSFEATURE${ar#*[=:]}"
+	    ;;
 
 	-v3crlur[il][=:]*|-crlur[il][=:]* )
 	    V3=yes
@@ -1076,6 +1090,10 @@ build_v3_extensions() {
 	}
 	V3EXTRAS="$V3EXTRAS${NL}$(build_poltext)$NL"
 	unset build_poltext
+    }
+
+    [[ "$TLSFEATURE" != '' ]] && {
+	V3OPTS="$V3OPTS${NL}${TLSFEATURE}${NL}"
     }
 
     return 0
