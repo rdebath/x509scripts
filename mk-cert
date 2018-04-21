@@ -1095,6 +1095,11 @@ default_options() {
 	CSRFN=
     }
 
+    # Due to Chrome, default -suca to a certificate with SANs
+    [[ "$SINGLEUSECA" = yes && "$V3SUCA" != no && "$CN" != '' ]] && {
+	V3=yes ; V3SAN=yes ; V3SUCA=yes
+    }
+
     [[ "$PUBKEYFN" != '' ]] && {
 	PUBDATA="$(cat "$PUBKEYFN")"
 	FORCEPUB="$(extract_pubkey <(echo "$PUBDATA"))"
