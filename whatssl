@@ -11,7 +11,7 @@ main() {
 
     for file
     do
-	[ "$#" -gt 1 ] && echo -e "Contents of File $file\n"
+	[ "$#" -gt 1 ] && echo "Contents of File $file"
 
 	if [ ".$file" != .- ]
 	then XDATA="$(openssl enc -base64 <"$file")"
