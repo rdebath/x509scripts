@@ -13,10 +13,16 @@ main() {
     do
 	[ "$#" -gt 1 ] && echo "Contents of File $file"
 
-	if [ ".$file" != .- ]
-	then XDATA="$(openssl enc -base64 <"$file")"
-	else XDATA="$(cat | openssl enc -base64)"
-	fi
+	case ".$file" in
+	.- ) XDATA="$(cat | openssl enc -base64)" ;;
+	.https://* )
+	    RHOST="${file##https://}"
+	    XDATA="$(:|
+		openssl s_client -servername "$RHOST" -connect "$RHOST":443 |
+		openssl enc -base64)"
+	    ;;
+	* ) XDATA="$(openssl enc -base64 <"$file")" ;;
+	esac
 
 	decode_binary_data "$XDATA" || continue
 
