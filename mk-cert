@@ -362,7 +362,7 @@ main() {
     create_pfx_file
 
     [[ "$KFN" = '' ]] && umask 077
-    if [[ "$FN" != '' ]] ; then outp > "$FN" ; else outp ; fi
+    if [[ "$FN" != '' ]] ; then outp "$FN" > "$FN" ; else outp ; fi
 
     exit 0
 }
@@ -1578,9 +1578,9 @@ outp() {
     fi
 
     [[ "$SINGLEUSECA" = yes || "$CAFN" != '' ]] && {
-	if [[ "$SIGNPEM" = '' && "$CAFN" != '' ]]
+	if [[ "$SIGNPEM" = '' && "$CAFN" != '' && "$CAFN" != "$1" ]]
 	then echo "$SSCERT" | openssl x509 -subject -serial -dates > "$CAFN"
-	elif [[ "$CAFN" != '' ]]
+	elif [[ "$CAFN" != '' && "$CAFN" != "$1" ]]
 	then echo "$SIGNPEM" | openssl x509 -subject -serial -dates >"$CAFN"
 	else echo "$SIGNPEM" | openssl x509 -subject -serial -dates
 	fi
