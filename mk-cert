@@ -1335,9 +1335,15 @@ create_main_cert() {
 
 	[[ "$SSKEY" = '' ]] &&
 	    SSKEY="$(mkkey)"
+    
+	# openssl complains about unused -days.
+	if [[ "$WANTCSR" != no || "$MAKECSR" = no ]]
+	then CERT_DAYS_OPT="-days ${CERT_DAYS:-$DEFAULT_DAYS}"
+	else CERT_DAYS_OPT=
+	fi
 
 	SSCERT="$(ft openssl req -new $UTF8 $X509 $DGST \
-	    -days "${CERT_DAYS:-$DEFAULT_DAYS}" \
+	    ${CERT_DAYS_OPT} \
 	    ${SERIAL:+-set_serial 0x"$SERIAL"} \
 	    ${SUBJ:+-subj "$SUBJ"} \
 	    -key <(echo "$SSKEY") \
