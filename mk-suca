@@ -137,7 +137,7 @@ make_cert() {
 	    -extfile <(make_cert_conf "$@") -extensions x509v3
 	)"
 
-    unset make_cert_conf
+    unset -f make_cert_conf
 
     echo "$NEWCERT" | openssl x509 -subject -serial -dates
 }

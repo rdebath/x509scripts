@@ -1191,7 +1191,7 @@ build_v3_extensions() {
 	    echo
 	}
 	V3EXTRAS="$V3EXTRAS${NL}$(build_poltext)$NL"
-	unset build_poltext
+	unset -f build_poltext
     }
 
     [[ "$TLSFEATURE" != '' ]] && {
@@ -1416,7 +1416,7 @@ create_suca_pem() {
 	    -config <(mksucareqconf)
 	echo "$CAKEY" )"
 
-    unset mksucareqconf
+    unset -f mksucareqconf
 }
 
 sign_created_csr() {
@@ -1526,7 +1526,7 @@ create_crl_file() {
 
     rm -fr "$TMP"
 
-    unset mkcacrlconf
+    unset -f mkcacrlconf
     return 0
 }
 

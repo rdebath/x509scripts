@@ -14,6 +14,7 @@ make_ss() {
     local CN="$1" SERIAL SSKEY SSCERT
     [ "$CN" = "" ] && CN=localhost
 
+    local -r make_ss_reqconf="$(typeset -f make_ss_reqconf)"
     make_ss_reqconf() {
 	local SANLIST=''
 	SANLIST="$(echo "$*" | xargs)"
@@ -38,7 +39,8 @@ make_ss() {
 	    -set_serial 0x"$SERIAL" \
 	    -key <(echo "$SSKEY") \
 	    -config <(make_ss_reqconf "$@") )"
-    unset make_ss_reqconf
+
+    unset -f make_ss_reqconf ; eval "$make_ss_reqconf"
 
     echo "$SSCERT" | openssl x509 -subject -serial -dates
     echo "$SSKEY"
