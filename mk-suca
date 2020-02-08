@@ -6,6 +6,8 @@
 # This key may be contained in a certificate, certificate request,
 # private key or in a file on it's own.
 #
+# Now also possible using: mk-cert -suca -pubin=keyfile.crt
+#
 # Process:
 #
 # The script then generates a second key to match the type of this

@@ -1,6 +1,9 @@
 #!/bin/sh -
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
-set -e;eval 'f() { local i=$((3+(6)));[[ $i = "$(cat <(echo 9))" ]];};f'
+eval 'f() { local i=$((3+(6)));[[ $i = "$(cat <(echo 9))" ]];};f' \
+2>/dev/null || { echo >&2 "This version of bash is too old";exit 1;}
+
+set -e
 PROGRAM="$0"
 
 show_help_text() {
@@ -371,6 +374,11 @@ init_vars() {
 NL='
 '
     export OPENSSL_CONF=/dev/null
+
+    NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
+    NOECPARAM="$(openssl no-ecparam >/dev/null 2>&1 && echo yes || echo no)"
+    NOMIXING="$(eval 'x=1;[ "$(set -- ${x:+0 "$x"} 2;echo "$2")" = "1" ]' && echo no || echo yes)"
+
     FN=
     KFN=
     ADDCERT=
@@ -381,8 +389,17 @@ NL='
     FORCEPUB=
     SERIAL=
     CERT_DAYS=
-    DEFAULT_DAYS=7304
     EC=prime256v1
+    RSABITS=2048
+
+    if [[ "$NOPKEY" = no ]] || \
+       [[ "$(date +%Y -d @$((2**31)) 2>/dev/null)" = 2038 ]]
+    then DEFAULT_DAYS=7304
+    else
+	# Older versions have a date bug on 32bit machines.
+	END_OF_TIME=$(jdayjdat 6 1 2038)
+	DEFAULT_DAYS=$((END_OF_TIME - $(jdayjdat $(date '+%d %m %Y' ) ) ))
+    fi
 
     V3=no
     V3HEAD=
@@ -406,9 +423,6 @@ NL='
     SANSECT=
     SAN_ID=0
 
-    NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
-    NOECPARAM="$(openssl no-ecparam >/dev/null 2>&1 && echo yes || echo no)"
-    NOMIXING="$(eval 'x=1;[ "$(set -- ${x:+0 "$x"} 2;echo "$2")" = "1" ]' && echo no || echo yes)"
     BASHREGEX=
     NOSETSERIAL=
     KEYPASS=
@@ -459,12 +473,13 @@ NL='
     ft() { "$@" ; }
 
     # This is my default for making a key file.
-    if [[ "$NOECPARAM" = no ]]; then
+    # Versions before "pkey" didn't do EC+SHA256
+    if [[ "$NOECPARAM" = no && "$NOPKEY" = no ]]; then
 	mkkey() { openssl ecparam -name "$EC" -genkey -noout ;}
 	mktmpkey() { openssl ecparam -name "$EC" -genkey -noout ;}
 	KEYCLASS=ec
     else
-	mkkey() { openssl genrsa ; }
+	mkkey() { openssl genrsa $RSABITS ; }
 	mktmpkey() { openssl genrsa 512 2>/dev/null ; }
 	KEYCLASS=rsa
     fi
@@ -556,6 +571,10 @@ decode_args() {
 	    eval "mkkey() { openssl dsaparam -noout -genkey '${ar#*[=:]}' ; }"
 	    ;;
 	-ec[=:]* ) 
+		[[ "$NOECPARAM" = no ]] || {
+		    echo >&2 "Elliptic Curve keys not supported by OpenSSL"
+		    exit 1
+		}
 		ar="${ar#*[=:]}:" ; curve="${ar%%:*}"
 		ar="${ar#*:}:" ; param="${ar%%:*}"
 		ar="${ar#*:}:" ; noseed="${ar%%:*}"
@@ -590,12 +609,16 @@ decode_args() {
 	    ;;
 
 	-rsa )
-	    mkkey() { openssl genrsa ; }
+	    mkkey() { openssl genrsa $RSABITS ; }
 	    KEYCLASS=rsa
 	    KEYSOURCE="$KEYSOURCE:rsa"
 	    ;;
 
 	-ec )
+	    [[ "$NOECPARAM" = no ]] || {
+		echo >&2 "Elliptic Curve keys not supported by OpenSSL"
+		exit 1
+	    }
 	    mkkey() { openssl ecparam -name "$EC" -genkey -noout ; }
 	    KEYCLASS=ec
 	    KEYSOURCE="$KEYSOURCE:ec"
@@ -1039,6 +1062,12 @@ check_args() {
 	echo >&2 "ERROR: Duplicate key source locations: '$KEYSOURCE'"
 	exit 1
     esac
+
+    if ! (echo|openssl dgst "$DGST" >/dev/null 2>&1)
+    then
+	echo >&2 "Digest '$DGST' not supported by openssl"
+	exit 1
+    fi
 }
 
 build_v3_extensions() {
@@ -1243,6 +1272,8 @@ default_options() {
 	fi
     }
 
+    [[ "$DGST" = "" ]] && DGST=-sha256
+
     return 0
 }
 
@@ -1423,13 +1454,13 @@ sign_created_csr() {
 
     [[ "$SIGNPEM" = "" ]] && return 0
 
-    [[ "$SERIAL" = "" && "$NOSETSERIAL" != yes ]] && SERIAL="$(mk_rand 8)"
+    [[ "$SERIAL" = "" ]] && SERIAL="$(mk_rand 8)"
 
     # Default to days left on CA certificate
     [[ "$CERT_DAYS" = "" && "$SINGLEUSECA" != yes ]] && {
-	ENDDAY="$(openssl x509 -noout -enddate -in <(echo "$SIGNPEM") )"
-	ENDDAY="$(sed 's/^[^=]*=//' <<< "$ENDDAY")"
-	ENDDAY=$(jdayjdat $(awk '{print $2,$1,$4;}' <<< "$ENDDAY") )
+	ENDDAY="$(openssl x509 -noout -enddate -in <(echo "$SIGNPEM") |
+		    sed 's/^[^=]*=//' |
+		    jdayjdat $(awk '{print $2,$1,$4;}') )"
 	TODAY=$(jdayjdat $(date '+%d %m %Y' ) )
 	CERT_DAYS=$((ENDDAY - TODAY))
     }
@@ -1459,7 +1490,7 @@ sign_created_csr() {
     fi
 
     # Very old versions of openssl ...
-    if [[ "$NOSETSERIAL" = yes ]]
+    if [[ "$NOSETSERIAL" = yes && "$SERIAL" != '' ]]
     then
 	SERIALFN=/tmp/_$$.tmp
 	echo "$SERIAL" > "$SERIALFN"
@@ -1778,7 +1809,7 @@ test_for_windows() {
     local pgm
 
     if ! openssl no-req 2>&1 | grep -qie ^req
-    then openssl() { echo 2>&1 OpenSSL failed. ; return 1; }
+    then openssl() { echo >&2 "OpenSSL failed to run." ; return 1; }
     elif [ "$(openssl enc -a -in <(echo ok) 2>/dev/null )" != b2sK ]
     then
 	for pgm in $(which -a openssl)
@@ -1790,12 +1821,6 @@ test_for_windows() {
 	    fi
 	done
     fi
-}
-
-(eval '[ "$(cat <(echo ok) )" = ok ]')2>/dev/null||
-{
-    echo 'This shell does not have working process substitution.' >&2
-    exit 250
 }
 
 main "$@"
