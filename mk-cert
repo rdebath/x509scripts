@@ -493,11 +493,24 @@ decode_args() {
 
 	-days[=:]* ) CERT_DAYS="${ar#*[=:]}" ;;
 	-alldays )
+	    # Try to use faketime to set:
+	    # notBefore=Jan  1 12:00:00 1999 GMT
+	    # notAfter=Dec 31 12:00:00 9999 GMT
+	    CERT_DAYS=
 	    if faketime -h 2>/dev/null | grep -qi libfaketime
-	    then ft() { faketime -f '1999-01-01 12:00:00' "$@" ; }
+	    then
+		ft() { TZ=UTC faketime -f '1999-01-01 12:00:00' "$@" ; }
+		if [ "$(ft date +%Y-%m-%d 2>/dev/null)" = '1999-01-01' ]
+		then CERT_DAYS=2922304
+		else ft() { "$@"; }
+		fi
 	    fi
 
-	    CERT_DAYS=$((2932896 - $(ft date +%s)/86400))
+	    # Otherwise just try to hit the right day.
+	    [ "$CERT_DAYS" = '' ] && {
+		END_OF_TIME=$(jdayjdat 31 12 9999)
+		CERT_DAYS=$((END_OF_TIME - $(jdayjdat $(date '+%d %m %Y' ) ) ))
+	    }
 	    ;;
 
 	-out[=:]* ) FN="${ar#*[=:]}" ;;
@@ -985,6 +998,13 @@ check_args() {
     fi
 
     # Problems?
+    if ! openssl no-req 2>&1 | grep -qie ^req
+    then
+	echo >&2 'No suitable OpenSSL command found.'
+	echo >&2 'The -openssl=/path/exe can be used to choose one.'
+	exit 1
+    fi
+
     if ! openssl x509 -help 2>&1 | grep -qie -set_serial
     then NOSETSERIAL=yes
     fi
@@ -1402,10 +1422,10 @@ sign_created_csr() {
     # Default to days left on CA certificate
     [[ "$CERT_DAYS" = "" && "$SINGLEUSECA" != yes ]] && {
 	ENDDAY="$(openssl x509 -noout -enddate -in <(echo "$SIGNPEM") )"
-	ENDDAY="$(date +%s --date="$(sed 's/^[^=]*=//' <<< "$ENDDAY")" ||:)"
-	TODAY="$(ft date +%s)"
-	[[ "$ENDDAY" = "" ]] && ENDDAY=2932896 || ENDDAY=$((ENDDAY/86400))
-	CERT_DAYS=$((ENDDAY - TODAY/86400))
+	ENDDAY="$(sed 's/^[^=]*=//' <<< "$ENDDAY")"
+	ENDDAY=$(jdayjdat $(awk '{print $2,$1,$4;}' <<< "$ENDDAY") )
+	TODAY=$(jdayjdat $(date '+%d %m %Y' ) )
+	CERT_DAYS=$((ENDDAY - TODAY))
     }
 
     # Do we have to override the CSR's common name?
@@ -1621,6 +1641,129 @@ extract_pubkey() {
     echo "$PUBKEY"
 }
 
+jdayjdat() {
+    awk '#!/usr/bin/awk -f
+
+    BEGIN{
+	days[0] = "Sunday";
+	days[1] = "Monday";
+	days[2] = "Tuesday";
+	days[3] = "Wednesday";
+	days[4] = "Thursday";
+	days[5] = "Friday";
+	days[6] = "Saturday";
+
+	months["jan"] = 1;
+	months["feb"] = 2;
+	months["mar"] = 3;
+	months["apr"] = 4;
+	months["may"] = 5;
+	months["jun"] = 6;
+	months["jul"] = 7;
+	months["aug"] = 8;
+	months["sep"] = 9;
+	months["oct"] = 10;
+	months["nov"] = 11;
+	months["dec"] = 12;
+
+	if(ARGC == 2) {
+	    j = ARGV[1]+0;
+	    if (j>0 && j<65536) j += 2400000
+	    split(jdate(j),A);
+	    print A[1];
+	} else if(ARGC >= 4) {
+	    d = ARGV[1]; m = ARGV[2]; y = ARGV[3];
+
+	    if (d+0 > 999 && y < 100) { ms = d; d = y; y = ms; }
+	    ms = tolower(substr(m, 1, 3));
+	    if (ms in months) m = months[ms];
+	    else {
+		ms = tolower(substr(d, 1, 3));
+		if (ms in months) {
+		    d = m;
+		    m = months[ms];
+		}
+	    }
+
+	    if( y>31 && y<70 ) y+=2000;
+	    if( y>31 && y<100) y+=1900;
+	    if( m<1)  {m+=12; y--;}
+	    if( m>12) {m-=12; y++;}
+
+	    jd = jday(d,m,y);
+	    if (ARGC > 4) {
+		printf("Input: %04d-%02d-%02d\n", y, m, d);
+		print jd
+		js = jdate(jd);
+		split(js,A,/[- ]/);
+		print js;
+		print A[1], A[2], A[3], days[A[4]];
+	    } else
+		print jd
+	} else
+	if(ARGC == 1) {
+	    "date +%s" | getline t
+	    t += 43200;
+	    j = int(t / 86400); t -= j * 86400;
+	    j = int(j + 2440587);
+	    print jdate(j), t "s";
+	} else
+	    print "Incorrect arguments"
+    }
+
+    function jdate(j,  y,m,d,dow)
+    {
+	# Julian date converter. Takes a julian date (the number of days since
+	# some distant epoch or other) and returns the broken out date.
+	# d = day of month;
+	# m = month;
+	# y = year (actual year, like 1977, not 77 unless it was  77 a.d.);
+	# dow = day of week (0->Sunday to 6->Saturday)
+	# These are Gregorian.
+	# Copied from Algorithm 199 in Collected algorithms of the CACM
+	# Author: Robert G. Tantzen, Translators: Nat Howard, Robert de Bath
+
+	j = j + 1
+	dow = (j + 1)%7;
+	j -= 1721119;
+	# This should be a Euclidean division. But dates before 0001-01-01 dont
+	# make much sense anyway. Or even Friday, 15 October 1582 when the
+	# Gregorian calendar started.
+	y = int((4 * j - 1)/146097);
+	j = 4 * j - 1 - 146097 * y;
+	d = int(j/4);
+	j = int((4 * d + 3)/1461);
+	d = 4 * d + 3 - 1461 * j;
+	d = int((d + 4)/4);
+	m = int((5 * d - 3)/153);
+	d = 5 * d - 3 - 153 * m;
+	d = int((d + 5) / 5);
+	y = 100 * y + j;
+	if(m < 10) m += 3; else { m -= 9; ++y; }
+
+	return sprintf("%04d-%02d-%02d %d", y, m, d, dow);
+    }
+
+    function jday(d,m,y,  c,ya,j)
+    {
+	# Takes a date, and returns a Julian day. A Julian day is the number of
+	# days since some base date  (in the very distant past).
+	# Handy for getting date of x number of days after a given Julian date
+	# (use jdate to get that from the Gregorian date).
+	# Author: Robert G. Tantzen, translators: Nat Howard, Robert de Bath
+	# Translated from the algol original in Collected Algorithms of CACM
+	# (This and jdate are algorithm 199).
+
+	if(m>2) m -=3; else { m +=9; --y; }
+	c = int(y/100);
+	ya = y - (100*c);
+	j = int(146097*c/4) + int(1461*ya/4) + int((153*m+2)/5) + d + 1721119;
+
+	return j - 1;
+    }
+    ' "$@"
+}
+
 test_for_windows() {
     # MINGW has two copies of openssl, one compiled for Windows and one
     # compiled for Unix. The Windows version cannot be used with process
@@ -1628,7 +1771,9 @@ test_for_windows() {
     # working, if not try to find the other one.
     local pgm
 
-    if [ "$(openssl enc -a -in <(echo ok) 2>/dev/null )" != b2sK ]
+    if ! openssl no-req 2>&1 | grep -qie ^req
+    then openssl() { echo 2>&1 OpenSSL failed. ; return 1; }
+    elif [ "$(openssl enc -a -in <(echo ok) 2>/dev/null )" != b2sK ]
     then
 	for pgm in $(which -a openssl)
 	do
