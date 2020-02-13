@@ -1,10 +1,10 @@
-#!/bin/bash -
-if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
+#!/bin/bash
+if [ -z "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 
 set -e
 umask 077
 export OPENSSL_CONF=/dev/null
-[ "$CERT_DIR" = "" -a "$1" != "" -a -d "$1" ] && CERT_DIR="$1"
+[ "$CERT_DIR" = "" ] && [ "$1" != "" ] && [ -d "$1" ] && CERT_DIR="$1"
 CERT_DIR="${CERT_DIR:-certs}"
 
 CONF_DIR="$CERT_DIR-conf"
@@ -14,10 +14,9 @@ trap 'rm -rf "$TMP"' 0 1 2
 [ -d "$CERT_DIR" ] || { echo >&2 ERROR: Certificate directory missing ; exit 1;}
 
 build_files() {
-
 rm -rf "$TMP"
-mkdir -m 700 "$TMP"
-mkdir -p -m 700 "$CONF_DIR"
+mkdir "$TMP"
+mkdir -p "$CONF_DIR"
 
 SERVERCOUNT=0
 SERVERNAME=
@@ -182,7 +181,7 @@ do
 	    # Stop the deamon whinging.
 	    # This has NO security effect as the CAs are unique.
 	    # (Even if the clients are the same OU)
-	    if [ "$SERVERCOUNT" -eq 1 -a "$SERVERNAME" != "" ]
+	    if [ "$SERVERCOUNT" -eq 1 ] && [ "$SERVERNAME" != "" ]
 	    then
 		# Not on 2.4.1 Windows, ENABLE_X509ALTUSERNAME missing
 		# echo x509-username-field CN
@@ -229,7 +228,7 @@ do
     CN="$(basename "$cert" .crt)"
     [ -f "$TMP"/type.server."$CN".flg ] || continue
 
-    echo Server $CN
+    echo "Server $CN"
     restore_certs "$CN"
     [ -s "$TMP"/client.ca ] || continue
 
@@ -319,7 +318,7 @@ fetch_pems() {
 
     # Check them.
     SUBJ="$(openssl x509 -subject_hash -noout < "$TMP"/client.ca 2>/dev/null ||:)"
-    CASER="$(openssl x509 -serial -noout < "$TMP"/client.ca 2>/dev/null ||:)"
+    # CASER="$(openssl x509 -serial -noout < "$TMP"/client.ca 2>/dev/null ||:)"
 
     if [ "$SUBJ" != "$ISSU" ]
     then echo "ERROR: Skipped $CN, issuer not found"

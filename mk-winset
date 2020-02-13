@@ -19,6 +19,8 @@ mk-cert \
     -cn="$D" \
     "$@"
 
+cat "$D".crt "$D".ca.crt "$D".key > "$D".pem
+
 for i in "$D".crl "$D".key "$D".ca.crt "$D".crt
 do  [ -s "$i" ] && {
 	sed $'s/$/\r/' < "$i" > "$i".tmp && mv "$i".tmp "$i"

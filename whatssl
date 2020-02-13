@@ -1,5 +1,5 @@
 #!/bin/bash
-# shellcheck disable=SC1007
+# shellcheck disable=SC1007 disable=SC2230 disable=SC2236
 
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 

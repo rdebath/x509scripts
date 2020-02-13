@@ -1,4 +1,5 @@
 #!/bin/sh -
+# shellcheck shell=bash disable=SC2230 disable=SC2236
 if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 eval 'f() { local i=$((3+(6)));[[ $i = "$(cat <(echo 9))" ]];};f' \
 2>/dev/null || { echo >&2 "This version of bash is too old";exit 1;}
@@ -365,6 +366,7 @@ main() {
     create_pfx_file
 
     [[ "$KFN" = '' ]] && umask 077
+    # shellcheck disable=SC2094 # ironic.
     if [[ "$FN" != '' ]] ; then outp "$FN" > "$FN" ; else outp ; fi
 
     exit 0
@@ -398,6 +400,7 @@ NL='
     else
 	# Older versions have a date bug on 32bit machines.
 	END_OF_TIME=$(jdayjdat 6 1 2038)
+	# shellcheck disable=SC2046 # I knooow
 	DEFAULT_DAYS=$((END_OF_TIME - $(jdayjdat $(date '+%d %m %Y' ) ) ))
     fi
 
@@ -488,7 +491,7 @@ NL='
     # mkkey() { openssl genpkey -paramfile <(openssl genpkey -genparam -algorithm ec -pkeyopt ec_paramgen_curve:prime256v1) ;}
 
     X509SECT=req_x509
-    V3INIT="x509_extensions=$X509SECT${NL}req_extensions=$X509SECT$NL[$X509SECT]$NL"
+    V3INIT="x509_extensions=$X509SECT${NL}req_extensions=$X509SECT${NL}[$X509SECT]${NL}"
 
     UTF8=
     if [[ "$(locale charmap 2>/dev/null)" = UTF-8 ]]
@@ -522,6 +525,7 @@ decode_args() {
 	    fi
 
 	    # Otherwise just try to hit the right day.
+	    # shellcheck disable=SC2046 # I knooow
 	    [ "$CERT_DAYS" = '' ] && {
 		END_OF_TIME=$(jdayjdat 31 12 9999)
 		CERT_DAYS=$((END_OF_TIME - $(jdayjdat $(date '+%d %m %Y' ) ) ))
@@ -554,7 +558,7 @@ decode_args() {
 		SUBJ_CN="$SUBJ_CN${NL}$SUBJ_ID.commonName=${ar#*[=:]}"
 		if [[ "$CN" = '' ]]
 		then CN="${ar#*[=:]}"
-		else ! add_good_san "${ar#*[=:]}"
+		else add_good_san "${ar#*[=:]}" ||:
 		fi
 		;;
 	    esac
@@ -1268,7 +1272,7 @@ default_options() {
 	SUBJ_CN="$SUBJ_CN${NL}$SUBJ_ID.commonName=$DEFAULTCN"
 	if [[ "$CN" = '' ]]
 	then CN="$DEFAULTCN"
-	else ! add_good_san "$DEFAULTCN"
+	else add_good_san "$DEFAULTCN" ||:
 	fi
     }
 
@@ -1457,6 +1461,7 @@ sign_created_csr() {
     [[ "$SERIAL" = "" ]] && SERIAL="$(mk_rand 8)"
 
     # Default to days left on CA certificate
+    # shellcheck disable=SC2046 # I knooow
     [[ "$CERT_DAYS" = "" && "$SINGLEUSECA" != yes ]] && {
 	ENDDAY="$(openssl x509 -noout -enddate -in <(echo "$SIGNPEM") |
 		    sed 's/^[^=]*=//' |

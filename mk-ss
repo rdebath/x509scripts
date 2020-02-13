@@ -9,6 +9,8 @@
 # into the SAN list additional arguments are set as extra SAN hosts.
 #
 # The certificate and key are 2048 bit RSA and sent out the standard output.
+#
+# This is about the same as: mk-cert -rsa -san -dnq $*
 
 make_ss() {
     local CN="$1" SERIAL SSKEY SSCERT

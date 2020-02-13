@@ -1,4 +1,4 @@
-#!/bin/sh -
+#!/bin/sh
 [ "$#" = 0 ] && { echo >&2 "Usage: $0 CommonName [Options]" ; exit 1; }
 #
 # This script creates certificates for OpenVPN tls setups.
@@ -17,7 +17,7 @@
 
 do_commonname() {
     CN="$1" ; SIGN=-suca
-    mkdir -p -m 700 "$CERT_DIR"
+    ( umask 0077 ; mkdir -p "$CERT_DIR" )
     CRTFILE="$CERT_DIR"/"$CN".crt
 
     [ -s "$CRTFILE" ] && { echo "ERROR: Name '$CN' already exists" ; return ; }
@@ -41,12 +41,14 @@ do_commonname() {
 	 fi
     else
 	if [ "$CERTVER" = v1 ]
-	then CF=''
+	then
+	    mkc -casubj="OpenVPN $CERTTYPE CA" "OpenVPN $CERTTYPE"
 	elif [ "$CERTVER" = v3 ]
-	then CF="-v3critical -v3ns=$CERTTYPE"
-	else CF="-v3critical -$CERTTYPE"
+	then
+	    mkc -casubj="OpenVPN $CERTTYPE CA" "OpenVPN $CERTTYPE" -v3critical -v3ns="$CERTTYPE"
+	else
+	    mkc -casubj="OpenVPN $CERTTYPE CA" "OpenVPN $CERTTYPE" -v3critical "-$CERTTYPE"
 	fi
-	mkc -casubj="OpenVPN $CERTTYPE CA" "OpenVPN $CERTTYPE" $CF
     fi
 }
 
