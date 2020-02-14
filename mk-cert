@@ -4,24 +4,11 @@ if [ ! -n "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 eval 'f() { local i=$((3+(6)));[[ $i = "$(cat <(echo 9))" ]];};f' \
 2>/dev/null || { echo >&2 "This version of bash is too old";exit 1;}
 
-set -e
-PROGRAM="$0"
+set -e ; PROGRAM="$0"
 
 show_help_text() {
-
     echo "Usage: $(basename "$PROGRAM") [Common Name] [arguments]"
-
-    [[ "$BASH3" = yes || "$NOMIXING" = yes || "$BASHREGEX" = no ]] && {
-	echo ""
-	echo "BEWARE: Some features are broken or work poorly on this version"
-	echo "of bash: $BASH_VERSION"
-    }
-
-    [[ "$NOPKEY" = yes || "$NOECPARAM" = yes ]] && {
-	echo ""
-	echo "BEWARE: Some features are broken or work poorly on this version"
-	echo "of openssl: $(openssl version)"
-    }
+    version_warnings
 
 cat <<\!
 
@@ -321,6 +308,23 @@ Version 3 certificate extensions.
 !
 
     exit 0
+}
+
+version_warnings() {
+
+    [[ "$BASH3" = yes || "$NOMIXING" = yes || "$BASHREGEX" = no ]] && {
+	echo ""
+	echo "BEWARE: Some features are broken or work poorly on this version"
+	echo "of bash: $BASH_VERSION"
+    }
+
+    [[ "$NOPKEY" = yes || "$NOECPARAM" = yes ]] && {
+	echo ""
+	echo "BEWARE: Some features are broken or work poorly on this version"
+	echo "of openssl: $(openssl version)"
+    }
+
+    return 0
 }
 
 main() {
