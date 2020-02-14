@@ -517,7 +517,8 @@ decode_args() {
 
 	-showconf ) SHOWCONF=yes ;;
 
-	-days[=:]* ) CERT_DAYS="${ar#*[=:]}" ;;
+	-days ) ft() { "$@"; } ; CERT_DAYS='' ;;
+	-days[=:]* ) ft() { "$@"; } ; CERT_DAYS="${ar#*[=:]}" ;;
 	-alldays )
 	    # Try to use faketime to set:
 	    # notBefore=Jan  1 12:00:00 1999 GMT
