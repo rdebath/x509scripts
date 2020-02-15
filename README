@@ -10,20 +10,6 @@ Note: It will not print any private part of a file, instead it will
 extract the related public key and describe the item as a "private key
 for" the displayed public part.
 
-mk-winset script
-================
-The calls mk-cert with default arguments that create the file types normally
-needed by Windows server applications. Windows applications usually prefer
-CA+server certificate pairs, RSA keys and pfx files. Current web browsers
-like to have a SAN entry even if it only includes the CN.
-
-The first argument is the common name, the second, if it doesn't begin
-with a '-' is a directory to put the files in. The remainder of the
-arguments are passed to mk-cert.
-
-The files created use the common name as the base and have extensions:
-    .crt .ca.crt .pfx .key .crl
-
 mk-ovpn and mk-ovpn2 bash scripts
 =================================
 

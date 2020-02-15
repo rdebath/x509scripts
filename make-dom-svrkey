@@ -1,8 +1,0 @@
-#!/bin/sh
-# working_signed_by_domain
-bash mk-cert -rsa -san -sign=domain-key.pfx \
-    \
-    -v3crluri='http://TVTDC00.tvt.local/CertEnroll/TVision%20Domain.crl' \
-    -v3crluri='ldap:///CN=TVision%20Domain,CN=TVTDC00,CN=CDP,CN=Public%20Key%20Services,CN=Services,CN=Configuration,DC=tvt,DC=local?certificateRevocationList?base?objectClass=cRLDistributionPoint' \
-    \
-    "$@"
