@@ -407,9 +407,12 @@ NL='
     then DEFAULT_DAYS=7304
     else
 	# Older versions have a date bug on 32bit machines.
-	END_OF_TIME=$(jdayjdat 6 1 2038)
+	END_OF_TIME=$(jdayjdat 18 1 2038)
 	# shellcheck disable=SC2046 # I knooow
 	DEFAULT_DAYS=$((END_OF_TIME - $(jdayjdat $(date '+%d %m %Y' ) ) ))
+	# Minimum of 3 years
+	[[ "$DEFAULT_DAYS" -lt 1187 ]] &&
+	    DEFAULT_DAYS=1187
     fi
 
     V3=no
@@ -524,12 +527,15 @@ decode_args() {
 	    # notBefore=Jan  1 12:00:00 1999 GMT
 	    # notAfter=Dec 31 12:00:00 9999 GMT
 	    CERT_DAYS=
-	    if faketime -h 2>/dev/null | grep -qi libfaketime
+	    if [[ "$NOPKEY" = no ]]
 	    then
-		ft() { TZ=UTC faketime -f '1999-01-01 12:00:00' "$@" ; }
-		if [ "$(ft date +%Y-%m-%d 2>/dev/null)" = '1999-01-01' ]
-		then CERT_DAYS=2922304
-		else ft() { "$@"; }
+		if faketime -h 2>/dev/null | grep -qi libfaketime
+		then
+		    ft() { TZ=UTC faketime -f '1999-01-01 12:00:00' "$@" ; }
+		    if [ "$(ft date +%Y-%m-%d 2>/dev/null)" = '1999-01-01' ]
+		    then CERT_DAYS=2922304
+		    else ft() { "$@"; }
+		    fi
 		fi
 	    fi
 
@@ -583,7 +589,7 @@ decode_args() {
 	    KEYSOURCE="$KEYSOURCE:dsa"
 	    eval "mkkey() { openssl dsaparam -noout -genkey '${ar#*[=:]}' ; }"
 	    ;;
-	-ec[=:]* ) 
+	-ec[=:]* )
 		[[ "$NOECPARAM" = no ]] || {
 		    echo >&2 "Elliptic Curve keys not supported by OpenSSL"
 		    exit 1
@@ -1378,11 +1384,13 @@ create_main_cert() {
     elif [[ "$FORCEPUB" != "" ]]
     then :
     else
+	test_enddate
+
 	[[ "$SHOWCONF" = yes ]] && mkreqconf $MAKECSR $WANTCSR
 
 	[[ "$SSKEY" = '' ]] &&
 	    SSKEY="$(mkkey)"
-    
+
 	# openssl complains about unused -days.
 	if [[ "$MAKECSR" != yes ]]
 	then CERT_DAYS_OPT="-days ${CERT_DAYS:-$DEFAULT_DAYS}"
@@ -1474,7 +1482,7 @@ sign_created_csr() {
 
     # Default to days left on CA certificate
     # shellcheck disable=SC2046 # I knooow
-    [[ "$CERT_DAYS" = "" && "$SINGLEUSECA" != yes ]] && {
+    [[ "$CERT_DAYS" = "" ]] && {
 	ENDDAY="$(openssl x509 -noout -enddate -in <(echo "$SIGNPEM") |
 		    sed 's/^[^=]*=//' |
 		    jdayjdat $(awk '{print $2,$1,$4;}') )"
@@ -1505,6 +1513,9 @@ sign_created_csr() {
 	    -key <(echo "$TMPKEY") \
 	    -config <(mkreqconf yes no) )"
     fi
+
+    # Quite old versions of openssl ...
+    test_enddate
 
     # Very old versions of openssl ...
     if [[ "$NOSETSERIAL" = yes && "$SERIAL" != '' ]]
@@ -1816,6 +1827,39 @@ jdayjdat() {
 	return j - 1;
     }
     ' "$@"
+}
+
+test_enddate() {
+    # Before this end dates may be bad.
+    if [[ "$NOPKEY" = yes ]]; then
+	TMPKEY=$(mktmpkey)
+	TESTCRT=$(openssl req -new -x509 -nodes \
+	    -days "${CERT_DAYS:-$DEFAULT_DAYS}" \
+	    -key <(echo "$TMPKEY") \
+	    -config <(
+		echo "[req]" ; echo "distinguished_name = rdn"
+		echo "prompt = no" ; echo "[rdn]" ; echo "CN=localhost"
+	    ) )
+
+	ENDDAY="$(openssl x509 -noout -enddate -in <(echo "$TESTCRT") |
+                    sed 's/^[^=]*=//' |
+                    jdayjdat $(awk '{print $2,$1,$4;}') )"
+        TODAY=$(jdayjdat $(date '+%d %m %Y' ) )
+        TEST_DAYS=$((ENDDAY - TODAY))
+
+	[[ "$TEST_DAYS" -lt 0 ]] && {
+	    echo >&2 Error setting certificate end date, \
+		"${CERT_DAYS:-$DEFAULT_DAYS}" days gives $(jdayjdat $ENDDAY)
+
+	    END_OF_TIME=$(jdayjdat 18 1 2038)
+	    # shellcheck disable=SC2046 # I knooow
+	    echo >&2 "You might try" \
+		"-days=$((END_OF_TIME - $(jdayjdat $(date '+%d %m %Y' ) ) ))" \
+		"or a newer version of openssl"
+	    exit 1
+	}
+    fi
+    return 0
 }
 
 test_for_windows() {
