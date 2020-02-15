@@ -1434,9 +1434,12 @@ create_suca_pem() {
 	fi
 	echo '[ req_distinguished_name ]'
 
-	if [[ "$SERIAL" != '' ]]
-	then echo "dnQualifier=$SERIAL"
-	else echo "dnQualifier=$(mk_rand 8)"
+	if [[ "$WANTDVCERT" != yes || "$ADDDNQ" = yes ]]
+	then
+	    if [[ "$SERIAL" != '' ]]
+	    then echo "dnQualifier=$SERIAL"
+	    else echo "dnQualifier=$(mk_rand 8)"
+	    fi
 	fi
 
 	# DV certificates need the issuer subject to have a country
