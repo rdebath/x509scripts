@@ -107,6 +107,9 @@ Options:
     -keyout=FileName
 	Put the private key in a specific file not "-out=" or stdout.
 
+    -crl
+	Generate an empty CRL using the certificate used to sign.
+
     -crlout=FileName
 	Generate an empty CRL using the certificate used to sign.
 

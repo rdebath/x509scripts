@@ -76,6 +76,9 @@ Options:
     -keyout=FileName
 	Put the private key in a specific file not "-out=" or stdout.
 
+    -crl
+	Generate an empty CRL using the certificate used to sign.
+
     -crlout=FileName
 	Generate an empty CRL using the certificate used to sign.
 
@@ -370,7 +373,10 @@ main() {
     fi
 
     sign_created_csr
-    create_crl_file
+
+    [[ "$MAKECRL" = yes ]] &&
+	CRLPEM=$(create_crl_file)
+
     create_pfx_file
 
     [[ "$KFN" = '' ]] && umask 077
@@ -445,10 +451,12 @@ NL='
     MAKECSR=no
     ADDDNQ=no
     SHOWCSR=no
+    MAKECRL=no
     SHOWCONF=
     CSRTEXT=
     SIGNPFX=
     SIGNPEM=
+    CRLPEM=
     SINGLEUSECA=
     V3SUCA=
     PKCS12FN=
@@ -549,7 +557,8 @@ decode_args() {
 
 	-out[=:]* ) FN="${ar#*[=:]}" ;;
 	-keyout[=:]* ) KFN="${ar#*[=:]}" ;;
-	-crlout[=:]* ) CRLFN="${ar#*[=:]}" ;;
+	-crl ) MAKECRL=yes ;;
+	-crlout[=:]* ) CRLFN="${ar#*[=:]}" ; MAKECRL=yes ;;
 	-caout[=:]* ) CAFN="${ar#*[=:]}" ;;
 
 	-ser[=:]??*|-serial[=:]??* )
@@ -1547,8 +1556,6 @@ sign_created_csr() {
 }
 
 create_crl_file() {
-    [[ "$CRLFN" = "" ]] && return 0
-
     [[ "$WANTCSR" = yes ]] && {
 	echo >&2 "ERROR: Cannot make a CRL for a CSR"
 	exit 1
@@ -1583,8 +1590,7 @@ create_crl_file() {
 	-gencrl \
 	-crldays "${CERT_DAYS:-$DEFAULT_DAYS}" \
 	-keyfile <(echo "$CRLSIGN") \
-	-cert <(echo "$CRLSIGN") \
-	-out "$CRLFN"
+	-cert <(echo "$CRLSIGN")
 
     rm -fr "$TMP"
 
@@ -1660,6 +1666,15 @@ outp() {
 	 outk > "$KFN"
     else outk
     fi
+
+    [[ "$MAKECRL" = yes ]] && {
+	if [[ "$CRLFN" = '' || "$CRLFN" = "$1" || "$CRLFN" = "$KFN" ]]
+	then echo "$CRLPEM" | openssl crl -text
+	else echo "$CRLPEM" | openssl crl -text > "$CRLFN"
+	fi
+    }
+
+    return 0
 }
 
 outk() {
