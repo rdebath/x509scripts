@@ -30,7 +30,12 @@ openssl dhparam 2048 > dhparam-2048.pem
 openssl req -new -x509 -nodes -keyout plss.key -out plss.crt -subj /CN=localhost/ -newkey rsa:3072 -config <(echo [req];echo distinguished_name=req )
 
 # Create a PFX file
-openssl pkcs12 -export -passout pass: -out svr.pfx -name localhost -inkey svr.key -in svr.crt
+openssl pkcs12 -export -passout pass: -out svr.pfx -in svr.pem
+# or
+openssl pkcs12 -export -passout pass:123456 -out svr.pfx -name localhost -inkey svr.key -in svr.crt
+
+# Extract a PFX file
+openssl pkcs12 -out svr.pem -in svr.pfx -info -nodes -passin pass:123456
 
 # Convert a certificate from DER to PEM
 openssl x509 -in cert.der -inform DER -out cert.pem
