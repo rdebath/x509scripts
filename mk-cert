@@ -1261,9 +1261,10 @@ build_v3_extensions() {
 }
 
 mk_rand() {
-    RH="$(openssl rand -hex "$1" 2>/dev/null ||:)"
+    local RH RL=16
+    RH="$(openssl rand -hex "$RL" 2>/dev/null ||:)"
     [[ "$RH" = '' ]] &&
-	RH="$(openssl rand "$1" | od -x | sed -n '1{s/^[^ ]*//;s/ //gp;}' )"
+	RH="$(openssl rand "$RL" | od -x | sed -n '1{s/^[^ ]*//;s/ //gp;}' )"
     echo "$RH"
 }
 
@@ -1324,7 +1325,7 @@ apply_options() {
     fi
 
     [[ "$ADDDNQ" = yes ]] && {
-	[[ "$SERIAL" = "" ]] && DNQ="$(mk_rand 8)" || DNQ="$SERIAL"
+	[[ "$SERIAL" = "" ]] && DNQ="$(mk_rand)" || DNQ="$SERIAL"
 
 	[[ "$SERIAL" = "" && "$NOSETSERIAL" != yes ]] &&
 	    SERIAL="$DNQ"
@@ -1377,7 +1378,7 @@ mkreqconf() {
 	echo "dnQualifier= Additional subject qualifier"
 	if [[ "$SERIAL" != "" ]]
 	then echo "dnQualifier_default=$SERIAL"
-	else echo "dnQualifier_default=$(mk_rand 8)"
+	else echo "dnQualifier_default=$(mk_rand)"
 	fi
 	;;
     esac
@@ -1398,6 +1399,8 @@ create_main_cert() {
 
 	[[ "$SSKEY" = '' ]] &&
 	    SSKEY="$(mkkey)"
+
+	[[ "$SERIAL" = "" && "$NOSETSERIAL" != yes ]] && SERIAL="$(mk_rand)"
 
 	# openssl complains about unused -days.
 	if [[ "$MAKECSR" != yes ]]
@@ -1446,7 +1449,7 @@ create_suca_pem() {
 	then
 	    if [[ "$SERIAL" != '' ]]
 	    then echo "dnQualifier=$SERIAL"
-	    else echo "dnQualifier=$(mk_rand 8)"
+	    else echo "dnQualifier=$(mk_rand)"
 	    fi
 	fi
 
@@ -1467,10 +1470,10 @@ create_suca_pem() {
 	echo '#END'
     }
 
-    [[ "$SERIAL" = "" && "$NOSETSERIAL" != yes ]] && SERIAL="$(mk_rand 8)"
+    [[ "$SERIAL" = "" && "$NOSETSERIAL" != yes ]] && SERIAL="$(mk_rand)"
     CAKEY="$(mkkey)"
 
-    [[ "$NOSETSERIAL" != yes ]] && CASER="$(mk_rand 8)"
+    [[ "$NOSETSERIAL" != yes ]] && CASER="$(mk_rand)"
 
     [[ "$SHOWCONF" = yes ]] && mksucareqconf
 
@@ -1489,7 +1492,7 @@ sign_created_csr() {
 
     [[ "$SIGNPEM" = "" ]] && return 0
 
-    [[ "$SERIAL" = "" ]] && SERIAL="$(mk_rand 8)"
+    [[ "$SERIAL" = "" ]] && SERIAL="$(mk_rand)"
 
     # Default to days left on CA certificate
     # shellcheck disable=SC2046 # I knooow
