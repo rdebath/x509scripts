@@ -446,7 +446,6 @@ NL='
     BASHREGEX=
     NOSETSERIAL=
     KEYPASS=
-    PFXPASS="pass:"
     WANTCSR=no
     MAKECSR=no
     ADDDNQ=no
@@ -710,8 +709,8 @@ decode_args() {
 	    PKCS12ASCII=yes
 	    ;;
 
-	-pass[=:]*:* ) KEYPASS="${ar#*[=:]}" ; PFXPASS="$KEYPASS" ;;
-	-pass[=:]* ) KEYPASS="pass:${ar#*[=:]}" ; PFXPASS="$KEYPASS" ;;
+	-pass[=:]*:* ) KEYPASS="${ar#*[=:]}" ;;
+	-pass[=:]* ) KEYPASS="pass:${ar#*[=:]}" ;;
 
 	-ripemd160|-sha|-sha1|-sha224|-sha256|-sha384|-sha512|-whirlpool)
 	    DGST=$ar ;;
@@ -1626,7 +1625,7 @@ create_pfx_file() {
 
 do_pfx() {
 
-    openssl pkcs12 -export -passout "$PFXPASS" \
+    openssl pkcs12 -export -passout "${KEYPASS:-pass:}" \
 	${1:+-out "$PKCS12FN"} \
 	-name "$CN til: $(echo "$SSCERT" | openssl x509 -noout -enddate |
 			  sed -n 's/.*= *//p')" \
@@ -1678,7 +1677,7 @@ outp() {
 }
 
 outk() {
-    if [[ "$KEYPASS" != "" ]]
+    if [[ "$KEYPASS" != "" && "$KEYPASS" != 'pass:' ]]
     then echo "$SSKEY" | openssl pkey ${KEYPASS:+$CIPHER -passout "$KEYPASS"}
 	 echo 'Public key for above key is:'
 	 echo "$SSKEY" | openssl pkey -pubout
