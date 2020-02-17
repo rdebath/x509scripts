@@ -1,0 +1,11 @@
+# https://travis-ci.org/rdebath/x509scripts/builds
+language: generic
+
+dist: bionic
+
+os:
+  - linux
+  - osx
+
+script:
+    bash testrun.sh
