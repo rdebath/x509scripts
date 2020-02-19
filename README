@@ -115,7 +115,10 @@ Options:
 	organisations.
 
     -dnq=...
-	Add a dnQualifier item to the subject.
+	Add a specific dnQualifier item to the subject.
+
+    -nodnq
+	Do not add a dnQualifier item to any subject; even if told to.
 
     -no-prompt
 	Prevent OpenSSL prompting for any part of the subject.
@@ -123,7 +126,13 @@ Options:
     -ec:prime256v1
     -ec:curve:encoding
     -ec:curve:encoding:no_seed
-	Use OpenSSL ecparam to generate an EC key.
+    -ec:ed25519
+	Use OpenSSL ecparam to generate an EC key. This includes ed25519, ed448
+	and their X25519 and X448 counterparts.
+
+    -ed25519
+    -ed448
+	Generate an ed25519 or ed448 private key.
 
     -rsa
     -rsa=2048

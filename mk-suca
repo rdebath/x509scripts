@@ -15,7 +15,7 @@
 # The output can be a pfx file, but if so the file specified with -key=...
 # must be a private key or the option omitted completely.
 #
-# You can do all this (except the automatic matching) with:
+# You can do all this:
 #   mk-cert -suca -san -pubin=keyfile.crt hostname dnsnames...
 
 if [ -z "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi

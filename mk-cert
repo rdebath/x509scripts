@@ -98,7 +98,10 @@ Options:
 	organisations.
 
     -dnq=...
-	Add a dnQualifier item to the subject.
+	Add a specific dnQualifier item to the subject.
+
+    -nodnq
+	Do not add a dnQualifier item to any subject; even if told to.
 
     -no-prompt
 	Prevent OpenSSL prompting for any part of the subject.
@@ -106,7 +109,13 @@ Options:
     -ec:prime256v1
     -ec:curve:encoding
     -ec:curve:encoding:no_seed
-	Use OpenSSL ecparam to generate an EC key.
+    -ec:ed25519
+	Use OpenSSL ecparam to generate an EC key. This includes ed25519, ed448
+	and their X25519 and X448 counterparts.
+
+    -ed25519
+    -ed448
+	Generate an ed25519 or ed448 private key.
 
     -rsa
     -rsa=2048
@@ -401,6 +410,7 @@ NL='
     CRLFN=
     CSRFN=
     PUBKEYFN=
+    PUBDATA=
     CAFN=
     FORCEPUB=
     SERIAL=
@@ -448,7 +458,7 @@ NL='
     KEYPASS=
     WANTCSR=no
     MAKECSR=no
-    ADDDNQ=no
+    ADDDNQ=
     SHOWCSR=no
     MAKECRL=no
     SHOWCONF=
@@ -565,7 +575,9 @@ decode_args() {
 	    SERIAL="${SERIAL//[-: .,;]/}"
 	    ;;
 
-	-dnq ) ADDDNQ=yes ;;
+	-dnq ) [[ "$ADDDNQ" = no ]] || ADDDNQ=yes ;;
+	-nodnq|-no-dnq ) ADDDNQ=no ;;
+
 	-dnq[=:]*|-cn[=:]* )
 	    SUBJTYPE="${SUBJTYPE:-conf}"
 	    if [[ "$SUBJTYPE" != "conf" ]] ; then
@@ -620,10 +632,36 @@ decode_args() {
 		    ;;
 		esac
 
-		eval "mkkey() { openssl ecparam -name '$curve' ${param:+-param_enc $param} ${noseed:+-no_seed} -genkey -noout ; }"
-		KEYCLASS=ec
-		KEYSOURCE="$KEYSOURCE:ec"
+		case "$curve" in
+		X25519|x25519|X448|x448 )
+		    echo >&2 "WARNING: The ${curve} EC algorithm cannot do signatures, did you mean the ED version?"
+		    KEYCLASS=nosig
+		    KEYSOURCE="$KEYSOURCE:X"
+		    SSKEY=$(openssl genpkey -algorithm "$curve")
+		    PUBDATA=$(echo "$SSKEY" | openssl pkey -pubout)
+		    eval "mkkey() { openssl genpkey -algorithm 'ed${curve#?}' ; }"
+		    ;;
+
+		ED25519|ed25519|ED448|ed448 )
+		    eval "mkkey() { openssl genpkey -algorithm '${curve}' ; }"
+		    KEYCLASS=
+		    KEYSOURCE="$KEYSOURCE:ed"
+		    ;;
+
+		*)
+		    eval "mkkey() { openssl ecparam -name '$curve' ${param:+-param_enc $param} ${noseed:+-no_seed} -genkey -noout ; }"
+		    KEYCLASS=ec
+		    KEYSOURCE="$KEYSOURCE:ec"
+		    ;;
+		esac
+
 		;;
+
+	-ED25519|-ed25519|-ED448|-ed448 )
+	    eval "mkkey() { openssl genpkey -algorithm '${ar#?}' ; }"
+	    KEYCLASS=
+	    KEYSOURCE="$KEYSOURCE:ed"
+	    ;;
 
 	-dsa )
 	    # FIPS used to force 1024, so lots of hardware and protocols did too.
@@ -657,7 +695,7 @@ decode_args() {
 	-keyfile[=:]*|-key[=:]* )
 	    eval "mkkey() { cat < '${ar#*[=:]}' ; }"
 	    [[ "$KFN" = "" ]] && KFN=/dev/null
-	    KEYCLASS=
+	    KEYCLASS=file
 	    KEYSOURCE="$KEYSOURCE:keyfile"
 	    ;;
 
@@ -731,7 +769,7 @@ decode_args() {
 	-v3crit|-v3critical|-critical )
 	    V3=yes ; V3CRITICAL=yes ; V3CA=${V3CA:-no}
 	    ;;
-	-v3nokeyid|-nokeyid) NOKEYID=yes ;;
+	-v3nokeyid|-nokeyid|-no-keyid) NOKEYID=yes ;;
 
 	-v3basicca )
 		V3=yes
@@ -840,7 +878,7 @@ decode_args() {
 	    SUBJTYPE=arg
 	    ;;
 
-	-no-prompt ) NOPROMPT=yes ;;
+	-noprompt|-no-prompt ) NOPROMPT=yes ;;
 
 	-subj[-_]c[=:]*|-subj[-_]st[=:]*|-subj[-_]l[=:]*|-subj[-_]o[=:]*|\
 	-subj[-_]dc[=:]*|-subj[-_]ou[=:]*|-subj[-_]cn[=:]* )
@@ -1027,6 +1065,20 @@ check_args() {
     # Force a CA signed certificate for DV certs
     [[ "$WANTDVCERT" = yes && "$WANTCSR" != yes && "$SIGNPEM" = '' ]] && {
 	MAKECSR=yes ; SINGLEUSECA=yes
+    }
+
+    # If -suca and -sign= don't complain.
+    [[ "$SIGNPEM" != '' && "$SINGLEUSECA" = yes ]] &&
+	SINGLEUSECA=no
+
+    [[ "$KEYCLASS" = nosig && "$SINGLEUSECA" != yes && "$SIGNPEM" = '' ]] && {
+	echo >&2 "WARNING: Turning on -singleuseca mode because the key cannot self-sign"
+	MAKECSR=yes ; SINGLEUSECA=yes
+    }
+
+    # Due to Chrome, default -suca to a certificate with SANs
+    [[ "$SINGLEUSECA" = yes && "$V3SUCA" != no && "$CN" != '' ]] && {
+	V3=yes ; V3SAN=yes ; V3SUCA=yes
     }
 
     # Put the commonName at the start of the san list
@@ -1275,14 +1327,11 @@ default_options() {
 	CSRFN=
     }
 
-    # Due to Chrome, default -suca to a certificate with SANs
-    [[ "$SINGLEUSECA" = yes && "$V3SUCA" != no && "$CN" != '' ]] && {
-	V3=yes ; V3SAN=yes ; V3SUCA=yes
-    }
+    [[ "$PUBKEYFN" != '' && "$PUBDATA" = '' ]] &&
+	PUBDATA="$(cat -v "$PUBKEYFN")"
 
-    [[ "$PUBKEYFN" != '' ]] && {
-	PUBDATA="$(cat "$PUBKEYFN")"
-	FORCEPUB="$(extract_pubkey <(echo "$PUBDATA"))"
+    [[ "$PUBDATA" != '' ]] && {
+	FORCEPUB="$(extract_pubkey <(echo "$PUBDATA") "$PUBKEYFN")"
 	DEFAULTCN="$(
 	    {
 		echo "$PUBDATA" |
@@ -1320,7 +1369,7 @@ apply_options() {
 	    else SUBJTYPE=arg ; SUBJ=/
 	    fi
 	fi
-    elif [[ "$SUBJTYPE" = '' ]]
+    elif [[ "$SUBJTYPE" = '' && "$ADDDNS" != no ]]
     then ADDDNQ=yes
     fi
 
@@ -1362,7 +1411,7 @@ mkreqconf() {
     echo '[ req_distinguished_name ]'
     case "$SUBJTYPE" in
     conf )
-	echo "$SUBJ_DNQ"
+	[[ "$ADDDNQ" = no ]] || echo "$SUBJ_DNQ"
 	echo "$SUBJ_C"
 	echo "$SUBJ_ST"
 	echo "$SUBJ_L"
@@ -1399,6 +1448,14 @@ create_main_cert() {
 
 	[[ "$SSKEY" = '' ]] &&
 	    SSKEY="$(mkkey)"
+
+	[[ "$KEYCLASS" = file ]] && {
+	    # Decrypt if necesary.
+	    [[ "$NOPKEY" = no ]] &&
+		SSKEY=$(echo "$SSKEY" | openssl pkey)
+
+	    clone_key_type "$SSKEY"
+	}
 
 	[[ "$SERIAL" = "" && "$NOSETSERIAL" != yes ]] && SERIAL="$(mk_rand)"
 
@@ -1447,9 +1504,12 @@ create_suca_pem() {
 
 	if [[ "$WANTDVCERT" != yes || "$ADDDNQ" = yes ]]
 	then
-	    if [[ "$SERIAL" != '' ]]
-	    then echo "dnQualifier=$SERIAL"
-	    else echo "dnQualifier=$(mk_rand)"
+	    if [[ "$ADDDNQ" != no ]]
+	    then
+		if [[ "$SERIAL" != '' ]]
+		then echo "dnQualifier=$SERIAL"
+		else echo "dnQualifier=$(mk_rand)"
+		fi
 	    fi
 	fi
 
@@ -1698,7 +1758,7 @@ extract_pubkey() {
 	PUBKEY=
 	if [ "$PEMTYPE" = 'pubkey' ]
 	then ITEM="$(echo "$KEYFILE" | openssl pkey -pubin 2>/dev/null)"
-	elif [[ "$PEMTYPE" = rsa || "$PEMTYPE" = dsa || "$PEMTYPE" = ec ]]
+	elif [[ "$PEMTYPE" = rsa || "$PEMTYPE" = dsa || "$PEMTYPE" = ec || "$PEMTYPE" = pkey ]]
 	then ITEM="$(echo "$KEYFILE" | openssl "$PEMTYPE" -passin pass:0000 2>/dev/null)"
 	else ITEM="$(echo "$KEYFILE" | openssl "$PEMTYPE" 2>/dev/null)"
 	fi
@@ -1708,22 +1768,69 @@ extract_pubkey() {
 	case "$PEMTYPE" in
 	x509 ) PUBKEY="$(echo "$ITEM" | openssl x509 -pubkey -noout 2>/dev/null)" ;;
 	req ) PUBKEY="$(echo "$ITEM" | openssl req -pubkey -noout 2>/dev/null)" ;;
-	pkey ) PUBKEY="$(echo "$ITEM" | openssl pkey -pubout "${PW[@]}" 2>/dev/null)" ;;
+	pkey ) PUBKEY="$(echo "$ITEM" | openssl pkey -pubout 2>/dev/null)" ;;
 	pubkey ) PUBKEY="$(echo "$ITEM" | openssl pkey -pubin 2>/dev/null)" ;;
 
 	rsa|ec|dsa )
-	    PUBKEY="$(echo "$ITEM" | openssl "$PEMTYPE" -pubout "${PW[@]}" 2>/dev/null)" ;;
+	    PUBKEY="$(echo "$ITEM" | openssl "$PEMTYPE" -pubout 2>/dev/null)" ;;
 	esac
 
 	[ "$PUBKEY" = "" ] || break
     done
 
     [ "$PUBKEY" = '' ] && {
-	echo >&2 "Cannot find public key in $KFNAME, it needs to be unencrypted and in PEM format"
+	echo >&2 "Cannot find public key in ${2:-the file}, it needs to be unencrypted and in PEM format"
 	exit 1
     }
 
     echo "$PUBKEY"
+}
+
+clone_key_type() {
+    local INKEY="$1" ECTYPE RSABITS DSALEN DSABITS
+
+    # Match a named EC curve using an ASN1 OID.
+    # Recommend:
+    #   secp256r1, secp384r1, secp521r1  Supported by browsers.
+
+    ECTYPE=$(echo "$INKEY" | openssl ec -noout -text 2>&1 |
+	awk '/^ASN1 OID:/ {print $3;}')
+
+    # Do we have an EC curve name ?
+    [ "$ECTYPE" != "" ] && {
+	eval "mkkey() { openssl ecparam -name '$ECTYPE' -genkey -noout ; }"
+	return
+    }
+
+    # Match the RSA bitsize of the key
+    RSABITS=$(echo "$INKEY" | openssl rsa -text -noout 2>&1 |
+	awk '/Key: .*bit/{sub("bit.*","",$0);gsub("[^0-9]","",$0); print $0;}')
+
+    # Do we have an RSA bit size ?
+    [ "$RSABITS" != "" ] && {
+	eval "mkkey() { openssl genrsa '$RSABITS' ; }"
+	return
+    }
+
+    # Match the DSA bitsize of the key
+    DSABITS=$(echo "$INKEY" | openssl dsa -text -noout 2>&1 |
+	awk '/Key: .*bit/{sub("bit.*","",$0);gsub("[^0-9]","",$0); print $0;}')
+
+    DSALEN=$(echo "$INKEY" |
+        openssl dsa -modulus -noout 2>/dev/null |
+        sed -n 's/.*=//p' | wc -c)
+    [ "$DSALEN" -gt 0 ] && DSABITS="$((DSALEN*4/8*8))"
+
+    # Do we have a DSA bit size ?
+    [ "$DSABITS" != "" ] && {
+	eval "mkkey() { openssl dsaparam -noout -genkey '$DSABITS' ; }"
+	return
+    }
+
+    # Humm, dunno what we had, hopefully this will do.
+    mkkey() { openssl ecparam -name prime256v1 -genkey -noout ; }
+
+    return 0
 }
 
 jdayjdat() {
