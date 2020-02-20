@@ -124,15 +124,21 @@ Options:
 	Prevent OpenSSL prompting for any part of the subject.
 
     -ec:prime256v1
+    -ec:256
     -ec:curve:encoding
     -ec:curve:encoding:no_seed
     -ec:ed25519
 	Use OpenSSL ecparam to generate an EC key. This includes ed25519, ed448
-	and their X25519 and X448 counterparts.
+	and their X25519 and X448 counterparts. The numbers 256,384 and 521 are
+	shorthands for the curves prime256v1, secp384r1 and secp521r1.
 
     -ed25519
     -ed448
 	Generate an ed25519 or ed448 private key.
+
+    -list-curves
+    -show-curves
+	List the EC curves that OpenSSL supports.
 
     -rsa
     -rsa=2048
@@ -143,12 +149,10 @@ Options:
 	Generate DSA private keys.
 	NB: This also makes the default digest SHA1.
 
-    -list-curves
-    -show-curves
-	List the EC curves that OpenSSL supports.
-
     -keyfile=FileName
-	Don't generate a key, use the one in FileName
+	Don't generate a key, use the one in FileName. If you're generating
+	a "single use ca" the second throwaway key will be generated to be
+	the same type as the key in this file if possible.
 
     -csrin=FileName
 	Use the CSR from FileName instead of generating a new key.
@@ -199,12 +203,12 @@ Options:
     -pass=OpenSSL:pass
 	Set a password on the key.
 
+    -cipher=name
+	Select the cipher used for encrypting the key with a password.
+
     -dgst=sha1
     -ripemd160, -sha, -sha1, -sha224, -sha256, -sha384, -sha512, -whirlpool
 	Select the digest used for signing.
-
-    -cipher=name
-	Select the cipher used for encrypting.
 
     -openssl=/path/to/executable/openssl
 	Use the specified copy of openssl, not the one in the PATH.
