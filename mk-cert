@@ -174,7 +174,8 @@ Options:
 
     -casubj=...
     -caname=...
-	Set the subject for the single use CA.
+	Set the subject name for the single use CA, first is a CN or
+	organisation, the rest are OU items.
 
     -pkcs12=FileName
     -pfx=FileName
@@ -924,12 +925,10 @@ decode_args() {
 	-casubj[=:]*|-caname[=:]* )
 	    V="${ar#*[=:]}"
 	    case "$V" in
-	    /*=* )
-		CASUBJ="${CASUBJ%/}${V%/}/"
-		;;
+	    *\ * ) CASUBJ="${CASUBJ}O=$V${NL}" ;;
 	    * ) if [[ "$CASUBJ" = '' ]]
-		then CASUBJ="/CN=$V/"
-		else CASUBJ="/OU=$V$CASUBJ"
+		then CASUBJ="CN=$V${NL}"
+		else CASUBJ="${CASUBJ}OU=$V${NL}"
 		fi
 		;;
 	    esac
@@ -1373,7 +1372,7 @@ apply_options() {
 	    else SUBJTYPE=arg ; SUBJ=/
 	    fi
 	fi
-    elif [[ "$SUBJTYPE" = '' && "$ADDDNS" != no ]]
+    elif [[ "$SUBJTYPE" = '' && "$ADDDNQ" != no ]]
     then ADDDNQ=yes
     fi
 
@@ -1506,29 +1505,41 @@ create_suca_pem() {
 	fi
 	echo '[ req_distinguished_name ]'
 
-	if [[ "$WANTDVCERT" != yes || "$ADDDNQ" = yes ]]
+	if [[ "$CASUBJ" != '' ]]
 	then
-	    if [[ "$ADDDNQ" != no ]]
+	    echo "$CASUBJ"
+	    if [[ "$ADDDNQ" = yes ]]
 	    then
 		if [[ "$SERIAL" != '' ]]
 		then echo "dnQualifier=$SERIAL"
 		else echo "dnQualifier=$(mk_rand)"
 		fi
 	    fi
-	fi
+	else
+	    if [[ "$WANTDVCERT" != yes || "$ADDDNQ" = yes ]]
+	    then
+		if [[ "$ADDDNQ" != no ]]
+		then
+		    if [[ "$SERIAL" != '' ]]
+		    then echo "dnQualifier=$SERIAL"
+		    else echo "dnQualifier=$(mk_rand)"
+		    fi
+		fi
+	    fi
 
-	# DV certificates need the issuer subject to have a country
-	# code and organisation. The XX code is valid for a CA, the
-	# org is supposed to be the CA's company name.
-	if [[ "$WANTDVCERT" = yes ]]
-	then echo "C=XX"
-	     echo "O=Above reproach CA"
-	     echo "CN=${CN:-CA}"
-	elif [[ "$CN" != "" ]]
-	then echo "O=Above reproach CA"
-	     echo "CN=$CN"
-	else echo "O=Above reproach CA"
-	     echo "CN=Private CA"
+	    # DV certificates need the issuer subject to have a country
+	    # code and organisation. The XX code is valid for a CA, the
+	    # org is supposed to be the CA's company name.
+	    if [[ "$WANTDVCERT" = yes ]]
+	    then echo "C=XX"
+		 echo "O=Above reproach CA"
+		 echo "CN=${CN:-CA}"
+	    elif [[ "$CN" != "" ]]
+	    then echo "O=Above reproach CA"
+		 echo "CN=$CN"
+	    else echo "O=Above reproach CA"
+		 echo "CN=Private CA"
+	    fi
 	fi
 
 	echo '#END'
@@ -1544,7 +1555,6 @@ create_suca_pem() {
     SIGNPEM="$(ft openssl req -new $UTF8 -x509 $DGST \
 	    -days "${CERT_DAYS:-$DEFAULT_DAYS}" \
 	    ${CASER:+-set_serial 0x"$CASER"} \
-	    ${CASUBJ:+-subj "$CASUBJ"} \
 	    -key <(echo "$CAKEY") \
 	    -config <(mksucareqconf)
 	echo "$CAKEY" )"

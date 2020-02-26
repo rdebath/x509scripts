@@ -191,7 +191,8 @@ Options:
 
     -casubj=...
     -caname=...
-	Set the subject for the single use CA.
+	Set the subject name for the single use CA, first is a CN or
+	organisation, the rest are OU items.
 
     -pkcs12=FileName
     -pfx=FileName
