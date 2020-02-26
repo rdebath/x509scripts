@@ -80,6 +80,9 @@ Options:
     -days=7304
 	How many days should the certificate run for?
 
+    -days=2038-01-18
+	What day should the certificate expire on?
+
     -alldays
 	Make the certificate run until 9999-12-31
 

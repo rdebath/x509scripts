@@ -63,6 +63,9 @@ Options:
     -days=7304
 	How many days should the certificate run for?
 
+    -days=2038-01-18
+	What day should the certificate expire on?
+
     -alldays
 	Make the certificate run until 9999-12-31
 
@@ -431,9 +434,9 @@ NL='
 	END_OF_TIME=$(jdayjdat 18 1 2038)
 	# shellcheck disable=SC2046 # I knooow
 	DEFAULT_DAYS=$((END_OF_TIME - $(jdayjdat $(date '+%d %m %Y' ) ) ))
-	# Minimum of 3 years
-	[[ "$DEFAULT_DAYS" -lt 1187 ]] &&
-	    DEFAULT_DAYS=1187
+	# Minimum of 10 years
+	[[ "$DEFAULT_DAYS" -lt 3652 ]] &&
+	    DEFAULT_DAYS=3652
     fi
 
     V3=no
@@ -542,32 +545,9 @@ decode_args() {
 
 	-showconf ) SHOWCONF=yes ;;
 
-	-days ) ft() { "$@"; } ; CERT_DAYS='' ;;
-	-days[=:]* ) ft() { "$@"; } ; CERT_DAYS="${ar#*[=:]}" ;;
-	-alldays )
-	    # Try to use faketime to set:
-	    # notBefore=Jan  1 12:00:00 1999 GMT
-	    # notAfter=Dec 31 12:00:00 9999 GMT
-	    CERT_DAYS=
-	    if [[ "$NOPKEY" = no ]]
-	    then
-		if faketime -h 2>/dev/null | grep -qi libfaketime
-		then
-		    ft() { TZ=UTC faketime -f '1999-01-01 12:00:00' "$@" ; }
-		    if [ "$(ft date +%Y-%m-%d 2>/dev/null)" = '1999-01-01' ]
-		    then CERT_DAYS=2922304
-		    else ft() { "$@"; }
-		    fi
-		fi
-	    fi
-
-	    # Otherwise just try to hit the right day.
-	    # shellcheck disable=SC2046 # I knooow
-	    [ "$CERT_DAYS" = '' ] && {
-		END_OF_TIME=$(jdayjdat 31 12 9999)
-		CERT_DAYS=$((END_OF_TIME - $(jdayjdat $(date '+%d %m %Y' ) ) ))
-	    }
-	    ;;
+	-days ) CERT_DAYS='' ;;
+	-alldays ) CERT_DAYS=all ;;
+	-days[=:]* ) CERT_DAYS="${ar#*[=:]}" ;;
 
 	-out[=:]* ) FN="${ar#*[=:]}" ;;
 	-keyout[=:]* ) KFN="${ar#*[=:]}" ;;
@@ -1357,6 +1337,45 @@ default_options() {
 
     [[ "$DGST" = "" ]] && DGST=-sha256
 
+    case "$CERT_DAYS" in
+
+    all )
+	# Try to use faketime to set:
+	# notBefore=Jan  1 12:00:00 1999 GMT
+	# notAfter=Dec 31 12:00:00 9999 GMT
+	CERT_DAYS=
+	if [[ "$NOPKEY" = no ]]
+	then
+	    if faketime -h 2>/dev/null | grep -qi libfaketime
+	    then
+		ft() { TZ=UTC faketime -f '1999-01-01 12:00:00' "$@" ; }
+		if [ "$(ft date +%Y-%m-%d 2>/dev/null)" = '1999-01-01' ]
+		then CERT_DAYS=2922304
+		else ft() { "$@"; }
+		fi
+	    fi
+	fi
+
+	# Otherwise just try to hit the right day.
+	# shellcheck disable=SC2046 # I knooow
+	[ "$CERT_DAYS" = '' ] && {
+	    END_OF_TIME=$(jdayjdat 31 12 9999)
+	    CERT_DAYS=$((END_OF_TIME - $(jdayjdat $(date '+%d %m %Y' ) ) ))
+	}
+	;;
+
+    *-*-* )
+	# YYYY-MM-DD
+	Y="${CERT_DAYS%%-*}"
+	M="${CERT_DAYS#*-}"
+	M="${M%-*}"
+	D="${CERT_DAYS##*-}"
+	END_DATE=$(jdayjdat $D $M $Y)
+	# shellcheck disable=SC2046 # I knooow
+	CERT_DAYS=$((END_DATE - $(jdayjdat $(date '+%d %m %Y' ) ) ))
+	;;
+    esac
+
     return 0
 }
 
@@ -1992,11 +2011,8 @@ test_enddate() {
 	    echo >&2 Error setting certificate end date, \
 		"${CERT_DAYS:-$DEFAULT_DAYS}" days gives $(jdayjdat $ENDDAY)
 
-	    END_OF_TIME=$(jdayjdat 18 1 2038)
-	    # shellcheck disable=SC2046 # I knooow
-	    echo >&2 "You might try" \
-		"-days=$((END_OF_TIME - $(jdayjdat $(date '+%d %m %Y' ) ) ))" \
-		"or a newer version of openssl"
+	    echo >&2 \
+		"You might try -days=2038-01-18 or a newer version of openssl"
 	    exit 1
 	}
     fi
