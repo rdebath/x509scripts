@@ -1,3 +1,15 @@
+Installing
+==========
+
+The scripts do not need to be installed, but do prefer recent versions
+of Bash (4.1.0 or later) and OpenSSL (1.0.1 or later). You will get
+reduced functionality and/or unusable defaults on earlier versions.
+
+Tested and working on Linux, FreeBSD, NetBSD, MacOSX and Windows.
+
+To install on Windows you need MSYS2 or Cygwin. The portion of this used in
+Git for Windows is sufficient. Other Unix/Linux emulators may work too.
+
 whatssl bash script
 ===================
 
