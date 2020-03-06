@@ -280,9 +280,17 @@ decode_data() {
 
 	    ISSU="$(echo "$ITEM" | openssl x509 -issuer_hash -noout 2>/dev/null)"
 
+	    if openssl verify -help 2>&1 | grep -q -e -no-CApath
+	    then NOCAPATH=-no-CApath
+	    else NOCAPATH='-CApath /dev/null'
+	    fi
+
 	    if [ "$SUBJ" = "$ISSU" ]
 	    then
-		if openssl verify -CAfile <(echo "$ITEM") <(echo "$ITEM") 2>&1 | grep -iq ^error
+		# shellcheck disable=SC2086
+		if ( openssl verify $NOCAPATH \
+			-CAfile <(echo "$ITEM") <(echo "$ITEM") 2>&1 ||
+			echo error ) | grep -iq ^error
 		then
 		    if echo "$ITEM" | openssl x509 -checkend 0 >/dev/null 2>&1
 		    then echo "    This self signed certificate fails validation"
@@ -302,12 +310,12 @@ decode_data() {
 			    tested="$tested $purpose"
 			    [ "$purpose" = '' ] && tested="${tested}unspecified"
 
-			    if ! openssl verify $STRICT ${STRICT:+-check_ss_sig} \
+			    if ! ( openssl verify $STRICT ${STRICT:+-check_ss_sig} \
 					${purpose:+-purpose $purpose} \
-					-CApath /dev/null \
+					$NOCAPATH \
 					-CAfile <(echo "$ITEM") \
 					${CHAIN:+-untrusted <(echo "$CHAIN")} \
-					<(echo "$DATA") 2>&1 |
+					<(echo "$DATA") 2>&1 || echo error ) |
 				    grep -iq ^error
 			    then success="$success $purpose"
 				 [ "$purpose" = '' ] &&
@@ -332,7 +340,7 @@ decode_data() {
 
 		    elif ! openssl verify -check_ss_sig \
 				    -CAfile <(echo "$ITEM") \
-				    -CApath /dev/null \
+				    $NOCAPATH \
 				    ${CHAIN:+-untrusted <(echo "$CHAIN")} \
 				    <(echo "$DATA") 2>&1 | grep -iq ^error
 		    then
