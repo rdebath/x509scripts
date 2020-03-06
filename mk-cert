@@ -571,13 +571,18 @@ decode_args() {
 		echo >&2 "Duplicate subject name definition at '$ar'"; exit 1
 	    fi
 
-	    SUBJ_ID=$((SUBJ_ID+1))
 	    case "$ar" in
 	    -dnq* )
+		SUBJ_ID=$((SUBJ_ID+1))
 		SUBJ_DNQ="$SUBJ_DNQ${NL}$SUBJ_ID.dnQualifier=${ar#*[=:]}"
 		;;
 	    -cn* )
-		SUBJ_CN="$SUBJ_CN${NL}$SUBJ_ID.commonName=${ar#*[=:]}"
+		if [[ "${ar#*[=:]}" != '' ]]
+		then SUBJ_ID=$((SUBJ_ID+1))
+		     SUBJ_CN="$SUBJ_CN${NL}$SUBJ_ID.commonName=${ar#*[=:]}"
+		else SUBJ_CN="$SUBJ_CN${NL}"
+		fi
+		NOPROMPT=yes
 		if [[ "$CN" = '' ]]
 		then CN="${ar#*[=:]}"
 		else add_good_san "${ar#*[=:]}" ||:
