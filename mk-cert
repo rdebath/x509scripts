@@ -619,6 +619,21 @@ decode_args() {
 	    esac
 	    ;;
 
+	-name[=:]* )
+	    DOMAIN="${ar#*[=:]}"
+	    DOMAIN="${DOMAIN#www.}"
+	    HOSTNAME="${DOMAIN%%.*}"
+	    [[ "$CN" = '' ]] && {
+		SUBJTYPE="${SUBJTYPE:-conf}"
+		SUBJ_ID=$((SUBJ_ID+1))
+		CN="${HOSTNAME}"
+		SUBJ_CN="$SUBJ_CN${NL}$SUBJ_ID.commonName=${CN}"
+	    }
+	    add_good_san "$HOSTNAME"
+	    add_good_san "$DOMAIN"
+	    add_good_san localhost
+	    ;;
+
 	-rsa[=:]* )
 	    KEYCLASS=rsa
 	    KEYSOURCE="$KEYSOURCE:rsa"
