@@ -487,6 +487,7 @@ NL='
     WANTDVCERT=
     DEFAULTCN=
     TLSFEATURE=
+    NOSUCAEKU=
 
     CIPHER=-aes128
     DGST=
@@ -727,16 +728,27 @@ decode_args() {
 	-singleuseca|-suca ) MAKECSR=yes ; SINGLEUSECA=yes ;;
 	-v1suca ) MAKECSR=yes ; SINGLEUSECA=yes ; V3SUCA=no ;;
 	-v3singleuseca|-v3suca ) MAKECSR=yes ; SINGLEUSECA=yes ; V3SUCA=yes ;;
+	-nocaeku ) NOSUCAEKU=yes ;;
 
 	-pfx[=:]* )
 	    PKCS12FN="${ar#*[=:]}"
 	    [[ "$FN" = "" ]] && FN=/dev/null
+	    # Default PFX files to RSA
+	    [ "$KEYSOURCE" = '' ] && {
+		mkkey() { openssl genrsa $RSABITS ; }
+		KEYCLASS=rsa
+	    }
 	    ;;
 
 	-pkcs12[=:]* )
 	    PKCS12FN="${ar#*[=:]}"
 	    [[ "$FN" = "" ]] && FN=/dev/null
 	    PKCS12ASCII=yes
+	    # Default PFX files to RSA
+	    [ "$KEYSOURCE" = '' ] && {
+		mkkey() { openssl genrsa $RSABITS ; }
+		KEYCLASS=rsa
+	    }
 	    ;;
 
 	-pass[=:]*:* ) KEYPASS="${ar#*[=:]}" ;;
@@ -1533,6 +1545,18 @@ create_suca_pem() {
 		    echo "subjectKeyIdentifier=hash"
 		    echo "authorityKeyIdentifier=keyid,issuer"
 		fi
+
+		# Simple EKU to match the certificate.
+		if [ "$NOSUCAEKU" != yes ]
+		then
+		    [[ "$V3CODESIGN" = yes ]] &&
+			[[ "$V3SERVER" != yes ]] &&
+			[[ "$V3CLIENT" != yes ]] &&
+			[[ "$V3EMAIL" != yes ]] &&
+			[[ "$V3TIMESTAMP" != yes ]] &&
+			    echo extendedKeyUsage = codeSigning,msCodeInd,msCodeCom
+		fi
+
 	     else echo "basicConstraints = CA:TRUE"
 	     fi
 	fi
