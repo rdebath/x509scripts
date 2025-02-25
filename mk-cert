@@ -1288,7 +1288,7 @@ build_v3_extensions() {
 	[[ "$POLICYOID" = '' ]] && POLICYOID=2.5.29.32.0
 
 	POLICYOID1="${POLICYOID%%,*}"
-	POLICYOIDX="${POLICYOID#$POLICYOID1}"
+	POLICYOIDX="${POLICYOID#"$POLICYOID1"}"
 
 	V3OPTS="$V3OPTS${NL}certificatePolicies=@x509_pol${POLICYOIDX}${NL}"
 
@@ -1398,7 +1398,7 @@ default_options() {
 	M="${CERT_DAYS#*-}"
 	M="${M%-*}"
 	D="${CERT_DAYS##*-}"
-	END_DATE=$(jdayjdat $D $M $Y)
+	END_DATE=$(jdayjdat "$D" "$M" "$Y")
 	CERT_DAYS=$((END_DATE - JTODAY))
 	;;
     esac
@@ -1611,7 +1611,7 @@ create_suca_pem() {
 
     [[ "$SHOWCONF" = yes ]] && mksucareqconf
 
-    SIGNPEM="$(ft openssl req -new $UTF8 -x509 $DGST \
+    SIGNPEM="$(ft openssl req -new $UTF8 -x509 "$DGST" \
 	    -days "${CERT_DAYS:-$DEFAULT_DAYS}" \
 	    ${CASER:+-set_serial 0x"$CASER"} \
 	    -key <(echo "$CAKEY") \
@@ -1674,7 +1674,7 @@ sign_created_csr() {
 
     [[ "$SHOWCONF" = yes && "$V3HEAD" != "" ]] && mkreqconf
 
-    SSCERT="$(ft openssl x509 -req $DGST \
+    SSCERT="$(ft openssl x509 -req "$DGST" \
 	    -days "${CERT_DAYS:-$DEFAULT_DAYS}" \
 	    ${SERIAL:+-set_serial 0x"$SERIAL"} \
 	    ${SERIALFN:+-CAserial "$SERIALFN"} \
