@@ -147,6 +147,10 @@ Options:
     -no-prompt
 	Prevent OpenSSL prompting for any part of the subject.
 
+    -ed25519
+    -ed448
+	Generate an ed25519 or ed448 private key.
+
     -ec:prime256v1
     -ec:256
     -ec:curve:encoding
@@ -155,10 +159,6 @@ Options:
 	Use OpenSSL ecparam to generate an EC key. This includes ed25519, ed448
 	and their X25519 and X448 counterparts. The numbers 256,384 and 521 are
 	shorthands for the curves prime256v1, secp384r1 and secp521r1.
-
-    -ed25519
-    -ed448
-	Generate an ed25519 or ed448 private key.
 
     -list-curves
     -show-curves
@@ -174,9 +174,15 @@ Options:
 	NB: This also makes the default digest SHA1.
 
     -keyfile=FileName
-	Don't generate a key, use the one in FileName. If you're generating
-	a "single use ca" the second throwaway key will be generated to be
-	the same type as the key in this file if possible.
+	Don't generate a key, use the one in FileName. If you're
+	generating a "single use ca" the second throwaway key (for the
+	CA) will be generated to be the same type as the key in this
+	file, if possible.
+	Note that if it's a PFX file it must have a ".pfx" extension.
+
+    -sign=FileName
+	Use the key and certificate in FileName to sign the certificate.
+	Note that if it's a PFX file it must have a ".pfx" extension.
 
     -csrin=FileName
 	Use the CSR from FileName instead of generating a new key.
@@ -195,10 +201,6 @@ Options:
 
     -showcsr
 	Dump any CSR we use to the output too.
-
-    -sign=FileName
-	Use the key and certificate in FileName to sign the certificate,
-	note if it's a PFX file it must have a ".pfx" extension.
 
     -singleuseca
     -suca
