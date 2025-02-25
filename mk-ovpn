@@ -27,6 +27,7 @@ do_commonname() {
 	    ${CERT_DAYS:+-days="$CERT_DAYS"} \
 	    "$SIGN" \
 	    "$CN" \
+	    -ed25519 \
 	    -casubj="$CN" \
 	    "$@" > "$CRTFILE"
     }
