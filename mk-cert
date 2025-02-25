@@ -22,9 +22,9 @@ Options:
 
     -cn=String
     -subj-cn=String
+    -subj-o=String
     -subj-ou=String
     -subj-dc=String
-    -subj-o=String
     -subj-l=String
     -subj-st=String
     -subj-c=String
@@ -34,12 +34,21 @@ Options:
 	DC, OU and CN are allowed to be duplicated. OpenSSL will accept
 	duplicates for any item.
 
-	The OU is the most likely to be accepted as a place to store
-	any unusual part of a name you may wish to include.
+	The long names are:
+	    "CN"   Common name, put the domainname here.
+	    "O"    Organization Name
+	    "OU"   Organizational Unit Name
+	    "DC"   Domain Component
+	    "L"    Locality Name: American for "City", "Town", etc
+	    "ST"   State or Province: "County" for rest of world.
+	    "C"    ISO two alpha Country code or "XX"
 
 	The "-cn=" option is taken as both a common name, a SAN and the
 	official common name for generic use. The "-subj-cn=" option
 	string will only be used in the subject.
+
+	The OU is the most likely to be accepted as a place to store
+	any unusual part of a name you may wish to include.
 
 	Any arguments without a "-" to make them an option are assumed
 	to be names too, the first one is a common name, like the "-cn"
