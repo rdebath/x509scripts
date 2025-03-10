@@ -1,3 +1,5 @@
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Frdebath%2Fx509scripts.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Frdebath%2Fx509scripts?ref=badge_shield)
+
 The mk-cert program
 ===================
 
@@ -107,3 +109,7 @@ to change this.
 
 There are other options; use the `-help` option for details.
 
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Frdebath%2Fx509scripts.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Frdebath%2Fx509scripts?ref=badge_large)
