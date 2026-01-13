@@ -63,7 +63,7 @@ do
 	* ) touch "$TMP"/type.client."$CN".flg ;;
 	esac
 	;;
-    yesno ) touch "$TMP"/type.client."$CN".flg ;;
+    yesno|nono ) touch "$TMP"/type.client."$CN".flg ;;
     noyes ) touch "$TMP"/type.server."$CN".flg ;;
     * )
 	 openssl verify -check_ss_sig -purpose sslserver \
@@ -142,7 +142,7 @@ done
 
 # Protect the TLS handshake from s-kiddies.
 [ -f "$CERT_DIR"/tls-crypt.pvk ] ||
-    openvpn --genkey --secret "$CERT_DIR"/tls-crypt.pvk
+    openvpn --genkey secret "$CERT_DIR"/tls-crypt.pvk
 
 # For all the client CA certificates
 for cert in "$CERT_DIR"/*.crt
@@ -158,12 +158,15 @@ do
     CLIENTNAME="$(openssl x509 -noout -in "$TMP"/client.crt \
 	-subject -nameopt multiline | sed -n 's/ *commonName *= //p')"
 
+    CANAME="$(openssl x509 -noout -in "$TMP"/client.ca \
+	-subject -nameopt multiline | sed -n 's/ *commonName *= //p')"
+
     [ "$CLIENTNAME" != "$CN" ] &&
-	echo "WARNING: Certificate common name is '$CLIENTNAME'"
+	echo "WARNING: Certificate common name is '$CLIENTNAME' not '$CN'"
 
     ISSU="$(openssl x509 -issuer_hash -noout < "$TMP"/client.crt 2>/dev/null)"
     [ -f "$TMP/dup.server.$ISSU.flg" ] &&
-	echo WARNING: This client has the same CA as a server.
+	echo WARNING: This client has the same CA name as a server.
 
     for file in "$CERT_DIR"/*pattern*.ovpn
     do
@@ -176,10 +179,10 @@ do
 	{
 	    echo "# Name: $CN"
 	    cat "$file"
-	    echo
+	    echo "# Authentication"
 
 	    # Stop the deamon whinging.
-	    # This has NO security effect as the CAs are unique.
+	    # This has NO security effect if the CAs are unique.
 	    # (Even if the clients are the same OU)
 	    if [ "$SERVERCOUNT" -eq 1 ] && [ "$SERVERNAME" != "" ]
 	    then
@@ -191,7 +194,15 @@ do
 		echo x509-username-field OU
 		echo "verify-x509-name '$SERVEROU' name"
 	    fi
-	    echo
+
+	    if [ ! -s "$TMP"/client.key ]
+	    then
+		CANAME2="$(echo "$CANAME" | sed "s~ *${CLIENTNAME}~~i")"
+		if [ "$CANAME2" != "" ]
+		then echo "cryptoapicert \"ISSUER:$CANAME2\""
+		else echo "cryptoapicert \"ISSUER:$CANAME\""
+		fi
+	    fi
 
 	    [ -s "$CERT_DIR"/tls-crypt.pvk ] && {
 		if ! grep -q tls-auth "$file"
@@ -202,13 +213,19 @@ do
 		fi
 	    }
 
-	    echo '<cert>'
-	    openssl x509 -subject -serial -dates -in "$TMP"/client.crt
-	    echo '</cert>'
+	    if [ -s "$TMP"/client.key ]
+	    then
+		echo '<cert>'
+		openssl x509 -subject -serial -dates -in "$TMP"/client.crt
+		echo '</cert>'
 
-	    echo '<key>'
-	    openssl pkey -in "$TMP"/client.key
-	    echo '</key>'
+		echo '<key>'
+		if [ -f "encrypt/$(basename "$cert" .crt)" ]
+		then openssl pkey -in "$TMP"/client.key "${PW[@]}" "${SETPW[@]}"
+		else openssl pkey -in "$TMP"/client.key "${PW[@]}"
+		fi
+		echo '</key>'
+	    fi
 
 	    echo '<ca>'
 	    cat "$TMP"/servers.CA-list.pem
@@ -234,7 +251,7 @@ do
 
     ISSU="$(openssl x509 -issuer_hash -noout < "$TMP"/client.crt 2>/dev/null)"
     [ -f "$TMP/dup.client.$ISSU.flg" ] &&
-	echo WARNING: This server has the same CA as a client.
+	echo WARNING: This server has the same CA name as a client.
 
     openssl x509 -subject -serial -dates -in "$TMP"/client.crt > "$TMP"/"$CN".crt
     openssl pkey -in "$TMP"/client.key > "$TMP"/"$CN".key
@@ -291,7 +308,7 @@ fetch_pems() {
     fi
 
     PKEYPUB="$(openssl pkey -pubout -in "$TMP"/client.key 2>/dev/null ||:)"
-    if [ "$CERTPUB" != "$PKEYPUB" ]
+    if [[ "$CERTPUB" != "$PKEYPUB" && "$PKEYPUB" != '' ]]
     then echo "ERROR: Skipped $CN, public keys don't match"
 	 rm -f "$TMP"/client.pfx "$TMP"/client.pem "$TMP"/client.ca.pem
 	 rm -f "$TMP"/client.crt "$TMP"/client.ca "$TMP"/client.key
