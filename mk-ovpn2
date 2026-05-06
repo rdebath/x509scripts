@@ -13,6 +13,10 @@ trap 'rm -rf "$TMP"' 0 1 2
 
 [ -d "$CERT_DIR" ] || { echo >&2 ERROR: Certificate directory missing ; exit 1;}
 
+CERT_DIR2=/
+
+[ "$2" != "" ] && CERT_DIR2="$2"
+
 build_files() {
 
 rm -rf "$TMP"
@@ -28,8 +32,10 @@ SETPW=(-aes128 -passout pass:"tvt1812rugbytime")
 rm -f "$TMP"/clients.CA-list.pem "$TMP"/servers.CA-list.pem ||:
 
 # Add all the server CA certificates.
-for cert in "$CERT_DIR"/*.crt
+for cert in "$CERT_DIR"/*.crt "$CERT_DIR2"/*.crt
 do
+    [ -f "$cert" ] || continue # Skip /.../*.crt
+
     CN="$(basename "$cert" .crt)"
     echo >&2 Checking "$CN"
     fetch_pems "$CN" >&2
@@ -148,7 +154,7 @@ done
     openvpn --genkey secret "$CERT_DIR"/tls-crypt.pvk
 
 # For all the client CA certificates
-for cert in "$CERT_DIR"/*.crt
+for cert in "$CERT_DIR"/*.crt "$CERT_DIR2"/*.crt
 do
     CN="$(basename "$cert" .crt)"
     [ "$CN" = "*" ] && continue
@@ -180,7 +186,8 @@ do
 	fi
 
 	{
-	    echo "# Name: $CN"
+	    [ -s "$TMP"/client.key ] &&
+		echo "# Name: $CN"
 	    cat "$file"
 	    echo "# Authentication"
 
@@ -284,7 +291,11 @@ fetch_pems() {
 	"$TMP"/client.pfx "$TMP"/client.pem "$TMP"/client.ca.pem
 
     touch "$TMP"/client.crt "$TMP"/client.key
-    for i in "$CERT_DIR"/"$CN".key "$CERT_DIR"/"$CN".crt "$CERT_DIR"/"$CN".pem "$CERT_DIR"/"$CN".ca.crt "$CERT_DIR"/"$CN".ca.cer
+    for i in \
+	"$CERT_DIR"/"$CN".key "$CERT_DIR"/"$CN".crt "$CERT_DIR"/"$CN".pem \
+	"$CERT_DIR"/"$CN".ca.crt "$CERT_DIR"/"$CN".ca.cer \
+	"$CERT_DIR2"/"$CN".key "$CERT_DIR2"/"$CN".crt "$CERT_DIR2"/"$CN".pem \
+	"$CERT_DIR2"/"$CN".ca.crt "$CERT_DIR2"/"$CN".ca.cer
     do
 	[ -s "$i" ] || continue
 	[ -s "$TMP"/client.crt ] || {
