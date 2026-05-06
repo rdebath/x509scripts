@@ -23,11 +23,10 @@ do_commonname() {
     [ -s "$CRTFILE" ] && { echo "ERROR: Name '$CN' already exists" ; return ; }
 
     mkc() {
-	./mk-cert \
+	$MKCERT \
 	    ${CERT_DAYS:+-days="$CERT_DAYS"} \
 	    "$SIGN" \
 	    "$CN" \
-	    -ed25519 \
 	    -casubj="$CN" \
 	    "$@" > "$CRTFILE"
     }
@@ -53,6 +52,10 @@ do_commonname() {
 
 CERT_DIR="${CERT_DIR:-certs}"
 CERTVER=v1 ; CERTTYPE=
+if [ -x mk-cert ]
+then MKCERT=./mk-cert
+else MKCERT=mk-cert
+fi
 
 for e in n y
 do
@@ -66,6 +69,16 @@ do
 
 	-days=[1-9]*[0-9] ) CERT_DAYS="${v#*=}" ;;
 	-dir=* )            CERT_DIR="${v#*=}" ;;
+
+	-ca ) [ "$e" = y ] && {
+		[ -f "$CERT_DIR/client-ca.pem" ] || {
+		    mkdir -p -m 700 "$CERT_DIR"
+		    $MKCERT ${CERT_DAYS:+-days="$CERT_DAYS"} \
+			"OpenVPN Private CA" \
+			> "$CERT_DIR/client-ca.pem"
+		}
+	    }
+	    ;;
 
 	-* ) echo >&2 "Option $v not recognised"; exit 1;;
 

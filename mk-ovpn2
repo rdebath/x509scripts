@@ -124,8 +124,7 @@ do
 done
 
 [ -s "$TMP"/servers.CA-list.pem ] || {
-    echo >&2 ERROR: No servers have been defined.
-    exit 1
+    echo >&2 WARNING: No servers have been defined, will use clients only.
 }
 
 [ -s "$TMP"/clients.CA-list.pem ] || {
@@ -145,8 +144,8 @@ do
 done
 
 [ "$FLG" = 0 ] || {
-    echo >&2 ERROR: No ovpn pattern files defined.
-    exit 1
+    echo >&2 WARNING: No ovpn pattern files defined, using /dev/null
+    touch "$CERT_DIR/Null-pattern.ovpn"
 }
 
 # Protect the TLS handshake from s-kiddies.
@@ -217,7 +216,7 @@ do
 	    if [ -s "$TMP"/client.key ]
 	    then
 		echo '<cert>'
-		openssl x509 -subject -serial -dates -in "$TMP"/client.crt
+		openssl x509 -subject -fingerprint -serial -dates -in "$TMP"/client.crt
 		echo '</cert>'
 
 		echo '<key>'
@@ -247,7 +246,11 @@ do
 	    echo
 
 	    echo '<ca>'
-	    cat "$TMP"/servers.CA-list.pem
+	    if [ -s "$TMP"/servers.CA-list.pem ]
+	    then cat "$TMP"/servers.CA-list.pem
+	    else echo "# CA for client list"
+		 cat "$TMP"/clients.CA-list.pem ||:
+	    fi
 	    echo '</ca>'
 
 	} | sed 's/$//' > "$TMP"/"$tfile"
