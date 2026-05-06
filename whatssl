@@ -37,7 +37,7 @@ init_vars() {
 NL='
 '
     MYPASS="$PASSWORD"
-    DICTIONARY=(${MYPASS:+"$MYPASS"} 0000 1234 12345 123456 12345678 password qwerty)
+    DICTIONARY=(${MYPASS:+"$MYPASS"} 0000 000000 1234 12345 123456 12345678 password qwerty)
     MYPASS="${MYPASS:-slartibartfast}"
     NOPKEY="$(openssl no-pkey >/dev/null 2>&1 && echo yes || echo no)"
     PW=(-passin pass:"$MYPASS")
@@ -128,21 +128,35 @@ decode_binary_data() {
 	DATA=''
 	for cmd in x509 req pkey crl
 	do  [ "$DATA" != "" ] && break
-	    DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl $cmd -inform DER 2>/dev/null)"
+	    # OpenSSL has started prompting without permission; lets try to force a FOAD.
+	    DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl $cmd -inform DER -passin file:/dev/null 2>/dev/null )"
 	done
 
 	[ "$DATA" = "" ] &&
 	    DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs8 -inform DER "${PW[@]}" 2>/dev/null)"
 	[ "$DATA" = "" ] &&
 	    DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs12 -nodes -passin pass: 2>/dev/null)"
+	[ "$DATA" = "" ] &&
+	    DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs12 -nodes -passin pass: -legacy 2>/dev/null)"
 
 	[ "$DATA" = "" ] &&
 	    for PASS in "${DICTIONARY[@]}"
 	    do
 		[ "$DATA" = "" ] &&
-		    DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs8 -inform DER ${PASS:+-passin pass:"$PASS"} 2>/dev/null)"
+		    DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs8 -inform DER -passin pass:"$PASS" 2>/dev/null)"
 		[ "$DATA" = "" ] &&
-		    DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs12 -nodes ${PASS:+-passin pass:"$PASS"} 2>/dev/null)"
+		    DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs12 -nodes -passin pass:"$PASS" 2>/dev/null)"
+
+		# OpenSSL has screwed old files; now need to add "-legacy" to access them.
+		[ "$DATA" = "" ] &&
+		    DATA="$(echo "$XDATA" | openssl pkcs8 -inform DER -passin pass:"$PASS" -legacy 2>/dev/null)"
+		[ "$DATA" = "" ] &&
+		    DATA="$(echo "$XDATA" | openssl pkcs12 -nodes -passin pass:"$PASS" -legacy 2>/dev/null)"
+		[ "$DATA" = "" ] &&
+		    DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs8 -inform DER -passin pass:"$PASS" -legacy 2>/dev/null)"
+		[ "$DATA" = "" ] &&
+		    DATA="$(echo "$XDATA" | openssl enc -base64 -d | openssl pkcs12 -nodes -passin pass:"$PASS" -legacy 2>/dev/null)"
+
 		[ "$DATA" != '' ] && {
 		    [[ "$PASS" != "$PASSWORD" ]] &&
 			echo "NOTE: Data encrypted with trivial password '$PASS'"
