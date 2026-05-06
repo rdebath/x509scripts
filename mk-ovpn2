@@ -188,8 +188,48 @@ do
 	{
 	    [ -s "$TMP"/client.key ] &&
 		echo "# Name: $CN"
+
 	    cat "$file"
-	    echo "# Authentication"
+
+	    [ -s "$CERT_DIR"/tls-crypt.pvk ] && {
+		if ! grep -q 'tls-\(auth\|crypt\)' "$file"
+		then
+		    echo
+		    echo "# Network authentication"
+		    echo '<tls-crypt>'
+		    cat "$CERT_DIR"/tls-crypt.pvk
+		    echo '</tls-crypt>'
+		fi
+	    }
+
+	    echo
+	    echo "# Local authentication"
+
+	    if [ ! -s "$TMP"/client.key ]
+	    then
+		CANAME2="$(echo "$CANAME" | sed "s~ *${CLIENTNAME}~~i")"
+		if [ "$CANAME2" != "" ]
+		then echo "cryptoapicert \"ISSUER:$CANAME2\""
+		else echo "cryptoapicert \"ISSUER:$CANAME\""
+		fi
+	    fi
+
+	    if [ -s "$TMP"/client.key ]
+	    then
+		echo '<cert>'
+		openssl x509 -subject -serial -dates -in "$TMP"/client.crt
+		echo '</cert>'
+
+		echo '<key>'
+		if [ -f "encrypt/$(basename "$cert" .crt)" ]
+		then openssl pkey -in "$TMP"/client.key "${PW[@]}" "${SETPW[@]}"
+		else openssl pkey -in "$TMP"/client.key "${PW[@]}"
+		fi
+		echo '</key>'
+	    fi
+
+	    echo
+	    echo "# Remote authentication"
 
 	    # Stop the deamon whinging.
 	    # This has NO security effect if the CAs are unique.
@@ -205,38 +245,6 @@ do
 		echo "verify-x509-name '$SERVEROU' name"
 	    fi
 	    echo
-
-	    if [ ! -s "$TMP"/client.key ]
-	    then
-		CANAME2="$(echo "$CANAME" | sed "s~ *${CLIENTNAME}~~i")"
-		if [ "$CANAME2" != "" ]
-		then echo "cryptoapicert \"ISSUER:$CANAME2\""
-		else echo "cryptoapicert \"ISSUER:$CANAME\""
-		fi
-	    fi
-
-	    [ -s "$CERT_DIR"/tls-crypt.pvk ] && {
-		if ! grep -q tls-auth "$file"
-		then
-		    echo '<tls-crypt>'
-		    cat "$CERT_DIR"/tls-crypt.pvk
-		    echo '</tls-crypt>'
-		fi
-	    }
-
-	    if [ -s "$TMP"/client.key ]
-	    then
-		echo '<cert>'
-		openssl x509 -subject -serial -dates -in "$TMP"/client.crt
-		echo '</cert>'
-
-		echo '<key>'
-		if [ -f "encrypt/$(basename "$cert" .crt)" ]
-		then openssl pkey -in "$TMP"/client.key "${PW[@]}" "${SETPW[@]}"
-		else openssl pkey -in "$TMP"/client.key "${PW[@]}"
-		fi
-		echo '</key>'
-	    fi
 
 	    echo '<ca>'
 	    cat "$TMP"/servers.CA-list.pem
