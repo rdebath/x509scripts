@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -
 if [ -z "$BASH_VERSION" ];then exec bash "$0" "$@";else set +o posix;fi
 
 set -e
@@ -14,13 +14,16 @@ trap 'rm -rf "$TMP"' 0 1 2
 [ -d "$CERT_DIR" ] || { echo >&2 ERROR: Certificate directory missing ; exit 1;}
 
 build_files() {
+
 rm -rf "$TMP"
-mkdir "$TMP"
-mkdir -p "$CONF_DIR"
+mkdir -m 700 "$TMP"
+mkdir -p -m 700 "$CONF_DIR"
 
 SERVERCOUNT=0
 SERVERNAME=
 SERVEROU=
+PW=(-passin pass:"tvt1812rugbytime")
+SETPW=(-aes128 -passout pass:"tvt1812rugbytime")
 
 rm -f "$TMP"/clients.CA-list.pem "$TMP"/servers.CA-list.pem ||:
 
@@ -63,7 +66,7 @@ do
 	* ) touch "$TMP"/type.client."$CN".flg ;;
 	esac
 	;;
-    yesno|nono ) touch "$TMP"/type.client."$CN".flg ;;
+    yesno ) touch "$TMP"/type.client."$CN".flg ;;
     noyes ) touch "$TMP"/type.server."$CN".flg ;;
     * )
 	 openssl verify -check_ss_sig -purpose sslserver \
@@ -159,7 +162,7 @@ do
 	-subject -nameopt multiline | sed -n 's/ *commonName *= //p')"
 
     CANAME="$(openssl x509 -noout -in "$TMP"/client.ca \
-	-subject -nameopt multiline | sed -n 's/ *commonName *= //p')"
+       -subject -nameopt multiline | sed -n 's/ *commonName *= //p')"
 
     [ "$CLIENTNAME" != "$CN" ] &&
 	echo "WARNING: Certificate common name is '$CLIENTNAME' not '$CN'"
@@ -194,6 +197,7 @@ do
 		echo x509-username-field OU
 		echo "verify-x509-name '$SERVEROU' name"
 	    fi
+	    echo
 
 	    if [ ! -s "$TMP"/client.key ]
 	    then
@@ -254,7 +258,7 @@ do
 	echo WARNING: This server has the same CA name as a client.
 
     openssl x509 -subject -serial -dates -in "$TMP"/client.crt > "$TMP"/"$CN".crt
-    openssl pkey -in "$TMP"/client.key > "$TMP"/"$CN".key
+    openssl pkey -in "$TMP"/client.key "${PW[@]}" > "$TMP"/"$CN".key
 
     cp -p "$TMP"/clients.CA-list.pem "$TMP"/"$CN".ca-list.pem
 
@@ -287,7 +291,7 @@ fetch_pems() {
 	    openssl x509 -in "$i" > "$TMP"/client.crt 2>/dev/null ||:
 	}
 	[ -s "$TMP"/client.key ] || {
-	    openssl pkey -in "$i" > "$TMP"/client.key 2>/dev/null ||:
+	    openssl pkey -in "$i" "${PW[@]}" > "$TMP"/client.key 2>/dev/null ||:
 	}
 
 	cat "$i" >> "$TMP"/client.ca.pem
@@ -307,7 +311,7 @@ fetch_pems() {
          return
     fi
 
-    PKEYPUB="$(openssl pkey -pubout -in "$TMP"/client.key 2>/dev/null ||:)"
+    PKEYPUB="$(openssl pkey -pubout "${PW[@]}" -in "$TMP"/client.key 2>/dev/null ||:)"
     if [[ "$CERTPUB" != "$PKEYPUB" && "$PKEYPUB" != '' ]]
     then echo "ERROR: Skipped $CN, public keys don't match"
 	 rm -f "$TMP"/client.pfx "$TMP"/client.pem "$TMP"/client.ca.pem
