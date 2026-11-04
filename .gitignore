@@ -1,5 +1,3 @@
-certs
-demoCA
 
 # You don't need to see my identification.
 *.pem
@@ -11,3 +9,5 @@ demoCA
 *.jks
 *.csr
 *.p7b
+*.pvk
+*.ovpn
