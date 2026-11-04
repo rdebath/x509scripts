@@ -728,7 +728,7 @@ decode_args() {
 	    openssl ecparam -list_curves ; exit ;;
 
 	-keyfile[=:]*|-key[=:]*.pfx )
-	    eval "mkkey() { openssl pkcs12 -nodes -out - -in '${ar#*[=:]}' | openssl pkey; }"
+	    eval "mkkey() { openssl pkcs12 -legacy -nodes -out - -in '${ar#*[=:]}' | openssl pkey; }"
 	    [[ "$KFN" = "" ]] && KFN=/dev/null
 	    KEYCLASS='file'
 	    KEYSOURCE="$KEYSOURCE:keyfile"
@@ -1111,7 +1111,7 @@ check_args() {
     }
 
     # Extract a (passworded) pfx file.
-    [[ "$SIGNPFX" != '' ]] && SIGNPEM="$(openssl pkcs12 -nodes -in "$SIGNPFX")"
+    [[ "$SIGNPFX" != '' ]] && SIGNPEM="$(openssl pkcs12 -legacy -nodes -in "$SIGNPFX")"
 
     # Force a CA signed certificate for DV certs
     [[ "$WANTDVCERT" = yes && "$WANTCSR" != yes && "$SIGNPEM" = '' ]] && {

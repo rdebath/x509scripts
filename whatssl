@@ -459,6 +459,11 @@ test_for_windows() {
     # compiled for Unix. The Windows version cannot be used with process
     # substitution ( the <(...) stuff ). Check to see if the default is
     # working, if not try to find the other one.
+
+    # With OpenSSL 3.5 ish, openssl has started attaching to /dev/tty if
+    # it sees anything encrypted like. It is impossible to stop it doing
+    # this, so the only thing that can be done is to detach it from the
+    # terminal with setsid ... if it exists. It does not exist on Windows.
     local pgm
 
     if [ "$(openssl enc -a -in <(echo ok) 2>/dev/null )" != b2sK ]
@@ -471,6 +476,8 @@ test_for_windows() {
 	    then break
 	    fi
 	done
+    elif [ -x "$(command -v setsid)" ]
+    then eval "openssl() { setsid \"$(command -v openssl)\" \"\$@\"; }"
     fi
 }
 
